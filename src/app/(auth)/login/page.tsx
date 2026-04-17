@@ -12,6 +12,14 @@ import { useSearchParams } from 'next/navigation'
 import Image from 'next/image'
 
 export default function LoginPage() {
+  return (
+    <React.Suspense fallback={<div className="min-h-screen bg-white" />}>
+      <LoginContent />
+    </React.Suspense>
+  )
+}
+
+function LoginContent() {
   const searchParams = useSearchParams()
   const error = searchParams.get('error')
   const message = searchParams.get('message')

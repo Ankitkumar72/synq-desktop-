@@ -1,5 +1,8 @@
 "use client"
 
+export const dynamic = 'force-dynamic'
+
+import * as React from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card'
@@ -7,6 +10,14 @@ import { buttonVariants } from '@/components/ui/button'
 import { AlertCircle } from 'lucide-react'
 
 export default function AuthCodeErrorPage() {
+  return (
+    <React.Suspense fallback={<div className="min-h-screen bg-background" />}>
+      <AuthCodeErrorContent />
+    </React.Suspense>
+  )
+}
+
+function AuthCodeErrorContent() {
   const searchParams = useSearchParams()
   const error = searchParams.get('error')
 

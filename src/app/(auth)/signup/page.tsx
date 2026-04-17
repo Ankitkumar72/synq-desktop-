@@ -12,6 +12,14 @@ import { useSearchParams } from 'next/navigation'
 import Image from 'next/image'
 
 export default function SignupPage() {
+  return (
+    <React.Suspense fallback={<div className="min-h-screen bg-white" />}>
+      <SignupContent />
+    </React.Suspense>
+  )
+}
+
+function SignupContent() {
   const searchParams = useSearchParams()
   const error = searchParams.get('error')
 
