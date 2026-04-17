@@ -1,5 +1,6 @@
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
+import { createGhostClient } from './ghost'
 
 export async function createClient() {
   const cookieStore = await cookies()
@@ -8,14 +9,9 @@ export async function createClient() {
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
   // During build time on Vercel, these might be missing.
-  // Return a dummy client to avoid crashing the build.
+  // Return a Ghost client to avoid crashing the build or runtime if keys are missing.
   if (!url || !key) {
-    return createServerClient('https://placeholder.supabase.co', 'placeholder', {
-      cookies: {
-        getAll() { return [] },
-        setAll() { }
-      }
-    })
+    return createGhostClient<ReturnType<typeof createServerClient>>()
   }
 
   return createServerClient(
