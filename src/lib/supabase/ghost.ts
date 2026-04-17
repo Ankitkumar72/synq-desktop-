@@ -8,7 +8,8 @@
 export function createGhostClient<T = unknown>(): T {
   const noop = () => ghost;
   
-  const ghost = new Proxy(noop, {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const ghost: any = new Proxy(noop, {
     get: (_target, prop) => {
       // Handle thenable for async/await support on method calls
       if (prop === 'then') return undefined;
