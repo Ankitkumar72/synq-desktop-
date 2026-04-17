@@ -11,6 +11,7 @@ interface EventState {
   deleteEvent: (id: string) => Promise<void>
   restoreEvent: (id: string) => Promise<void>
   permanentlyDeleteEvent: (id: string) => Promise<void>
+  fetchEvents: (includeDeleted?: boolean) => Promise<void>
 }
 
 export const useEventStore = create<EventState>()(
@@ -20,8 +21,12 @@ export const useEventStore = create<EventState>()(
       setEvents: (events) => set({ events }),
       addEvent: async (e) => {
         if (!supabase) return console.warn('Supabase not configured')
-        const { error } = await supabase.from('events').insert([e])
-        if (error) console.error('Error adding event:', error)
+        const { data, error } = await supabase.from('events').insert([e]).select()
+        if (error) {
+          console.error('Error adding event:', error)
+        } else if (data) {
+          set(state => ({ events: [...state.events, data[0]] }))
+        }
       },
       updateEvent: async (id, updates) => {
         if (!supabase) return console.warn('Supabase not configured')
@@ -68,6 +73,26 @@ export const useEventStore = create<EventState>()(
 
         const { error } = await supabase.from('events').delete().eq('id', id)
         if (error) console.error('Error permanently deleting event:', error)
+      },
+      fetchEvents: async (includeDeleted = false) => {
+        if (!supabase) return
+        
+        let query = supabase
+          .from('events')
+          .select('*')
+        
+        if (!includeDeleted) {
+          query = query.is('deleted_at', null)
+        }
+        
+        const { data, error } = await query
+          .order('start_date', { ascending: true })
+        
+        if (error) {
+          console.error('Error fetching events:', error)
+        } else {
+          set({ events: data || [] })
+        }
       },
     }),
     { name: 'synq-events' }

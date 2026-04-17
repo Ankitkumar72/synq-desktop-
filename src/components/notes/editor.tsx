@@ -36,9 +36,9 @@ const MenuBar = ({ editor }: { editor: Editor | null }) => {
   ]
 
   return (
-    <div className="flex items-center gap-0.5 p-1.5 rounded-2xl bg-white border border-stone-100 shadow-xl shadow-black/5 px-2 backdrop-blur-xl group-hover:scale-105 transition-all">
+    <div className="flex items-center gap-0.5 transition-all duration-200">
       {items.map((item, idx) => {
-        if (item.type === 'separator') return <Separator key={idx} orientation="vertical" className="h-4 mx-1.5 bg-stone-100" />
+        if (item.type === 'separator') return <Separator key={idx} orientation="vertical" className="h-4 mx-2 bg-white/[0.03]" />
         
         const Icon = item.icon!
         return (
@@ -48,12 +48,12 @@ const MenuBar = ({ editor }: { editor: Editor | null }) => {
             size="sm"
             onClick={item.action}
             className={cn(
-              "h-8 w-8 p-0 rounded-full transition-all hover:bg-stone-50",
-              editor.isActive(item.active as string, item.activeOptions) ? "text-black bg-stone-100" : "text-stone-400"
+              "h-8 w-8 p-0 rounded-md transition-all duration-200 hover:bg-white/[0.03]",
+              editor.isActive(item.active as string, item.activeOptions) ? "text-[#4B7BFF]" : "text-[#A1A3A7]/40 hover:text-[#E1E2E4]"
             )}
             title={item.label}
           >
-            <Icon className="w-4 h-4" />
+            <Icon className="w-3.5 h-3.5" />
           </Button>
         )
       })}
@@ -89,7 +89,7 @@ export function NoteEditor({
     },
     editorProps: {
       attributes: {
-        class: 'prose prose-stone max-w-none focus:outline-none min-h-[calc(100vh-250px)] px-1 pt-0 pb-8 text-stone-800 leading-[1.6] [&>*:first-child]:mt-0 font-sans selection:bg-[#6366f1]/10 selection:text-[#6366f1]',
+        class: 'prose prose-invert max-w-none focus:outline-none min-h-[calc(100vh-300px)] pt-0 pb-32 text-[#E1E2E4] text-[15px] leading-[1.6] [&>*:first-child]:mt-0 font-sans selection:bg-[#4B7BFF]/30 selection:text-white prose-headings:font-semibold prose-headings:tracking-tight prose-headings:text-white prose-p:text-[#A1A3A7] prose-strong:text-white prose-blockquote:border-[#4B7BFF]/40 prose-blockquote:text-[#A1A3A7] prose-code:text-[#4B7BFF] prose-code:bg-[#4B7BFF]/5 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded-md prose-code:before:content-none prose-code:after:content-none',
       },
     },
   })
@@ -106,9 +106,9 @@ export function NoteEditor({
   }, [content, editor])
 
   return (
-    <div className="flex flex-col h-full bg-white max-w-4xl mx-auto w-full group">
+    <div className="flex flex-col h-full bg-transparent max-w-4xl mx-auto w-full group">
       <div className="flex items-center justify-center sticky top-4 py-2 z-20 pointer-events-none">
-        <div className="pointer-events-auto opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-all duration-500 transform translate-y-2 group-hover:translate-y-0">
+        <div className="pointer-events-auto opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-all duration-300 transform translate-y-2 group-hover:translate-y-0">
           <MenuBar editor={editor} />
         </div>
       </div>

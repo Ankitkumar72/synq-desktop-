@@ -1,41 +1,57 @@
 "use client"
 
-import { Bell, Search } from "lucide-react"
-import { Button } from "@/components/ui/button"
+import { useEffect, useRef } from "react"
+import { Search, Command } from "lucide-react"
 import { Input } from "@/components/ui/input"
-import { QuickCreateModal } from "./quick-create"
-
 import { usePathname } from "next/navigation"
+import { motion } from "framer-motion"
+import { cn } from "@/lib/utils"
 
 export function Navbar() {
   const pathname = usePathname()
+  const searchInputRef = useRef<HTMLInputElement>(null)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault()
+        searchInputRef.current?.focus()
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown)
+    return () => window.removeEventListener("keydown", handleKeyDown)
+  }, [])
 
   if (pathname.startsWith("/notes")) return null
 
   return (
-    <div className="h-16 border-b border-stone-100 bg-white/80 backdrop-blur-md sticky top-0 z-30 px-8 flex items-center justify-between">
+    <motion.div 
+      initial={{ y: -20, opacity: 0 }}
+      animate={{ y: 0, opacity: 1 }}
+      className="h-16 border-b border-white/5 bg-background/50 backdrop-blur-xl sticky top-0 z-30 px-8 flex items-center justify-between transition-colors duration-300"
+    >
       <div className="flex items-center gap-4 flex-1">
-        <div className="relative w-full max-w-xl">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
+        <div className="relative w-full max-w-xl group">
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-500 group-focus-within:text-blue-500 transition-colors" />
           <Input 
+            ref={searchInputRef}
             placeholder="Search tasks, projects, notes..." 
-            className="pl-10 bg-stone-50/50 border-transparent focus-visible:bg-white focus-visible:border-stone-200 transition-all h-9 text-sm"
+            className={cn(
+              "pl-11 pr-16 bg-white/[0.03] border-white/5 focus-visible:ring-1 focus-visible:ring-blue-500/30",
+              "focus-visible:bg-white/[0.07] focus-visible:border-blue-500/20 transition-all h-10",
+              "text-[13px] text-stone-100 placeholder:text-stone-600 rounded-xl"
+            )}
           />
+          <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1 px-2 py-1 rounded-md bg-white/5 border border-white/5 pointer-events-none opacity-40 group-focus-within:opacity-0 transition-opacity">
+            <Command className="w-2.5 h-2.5" />
+            <span className="text-[9px] font-black tracking-tighter">K</span>
+          </div>
         </div>
       </div>
 
       <div className="flex items-center gap-4">
-        <div className="mr-2 text-stone-400 text-xs font-medium">
-          6 members
-        </div>
-        
-        <Button variant="ghost" size="icon" className="relative text-stone-500 hover:text-black">
-          <Bell className="w-5 h-5" />
-          <span className="absolute top-2 right-2.5 w-2 h-2 bg-red-500 rounded-full border-2 border-white" />
-        </Button>
-
-        <QuickCreateModal />
+        {/* Navbar buttons removed as requested */}
       </div>
-    </div>
+    </motion.div>
   )
 }

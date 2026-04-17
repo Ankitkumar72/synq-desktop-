@@ -43,17 +43,17 @@ const MenuItem = ({
       onClick()
     }}
     className={cn(
-      "w-full flex items-center justify-between px-3 py-2 text-[13px] font-medium transition-all rounded-md group text-left",
+      "w-full flex items-center justify-between px-3 py-1.5 text-[12px] font-medium transition-all rounded-lg group text-left",
       variant === "danger" 
-        ? "text-rose-500 hover:bg-rose-50" 
-        : "text-stone-700 hover:bg-stone-100/80 hover:text-black"
+        ? "text-rose-400 hover:bg-rose-500/10 hover:text-rose-500" 
+        : "text-[#E1E2E4] hover:bg-white/5 hover:text-white"
     )}
   >
     <div className="flex items-center gap-2.5">
-      <Icon className={cn("w-4 h-4", variant === "danger" ? "text-rose-500/70" : "text-stone-400 group-hover:text-stone-900")} />
+      <Icon className={cn("w-3.5 h-3.5 transition-colors", variant === "danger" ? "text-rose-400 group-hover:text-rose-500" : "text-[#A1A3A7] group-hover:text-[#4B7BFF]")} />
       {label}
     </div>
-    {shortcut && <span className="text-[10px] text-stone-400 font-mono tracking-tighter group-hover:text-stone-500">{shortcut}</span>}
+    {shortcut && <span className="text-[9px] text-[#A1A3A7] font-medium uppercase tracking-widest group-hover:text-white transition-colors">{shortcut}</span>}
   </button>
 )
 
@@ -119,10 +119,10 @@ export function NoteContextMenu({ note, children, onAction }: NoteContextMenuPro
               left: position.x,
               zIndex: 9999 
             }}
-            className="w-[260px] bg-white border border-stone-200 rounded-xl shadow-[0_10px_40px_-10px_rgba(0,0,0,0.1)] p-1.5 backdrop-blur-xl"
+            className="w-[240px] bg-[#18181B] border border-white/5 rounded-xl shadow-2xl p-1.5"
           >
-            <div className="px-3 py-1.5 mb-1.5 flex flex-col gap-0.5 border-b border-stone-100 pb-2">
-               <span className="text-[10px] font-black uppercase tracking-[0.2em] text-stone-400">Page</span>
+            <div className="px-3 py-1.5 mb-1 flex flex-col gap-0.5 border-b border-white/5 pb-2">
+               <span className="text-[10px] font-bold uppercase tracking-widest text-[#A1A3A7]">Actions</span>
             </div>
             
             <div className="space-y-0.5">
@@ -162,25 +162,25 @@ export function NoteContextMenu({ note, children, onAction }: NoteContextMenuPro
               />
             </div>
             
-            <div className="my-1.5 border-t border-stone-100" />
+            <div className="my-1 border-t border-white/5" />
             
             <div className="space-y-0.5">
               <MenuItem 
                 icon={RefreshCw} 
-                label="Turn into wiki" 
+                label="Turn into Wiki" 
                 onClick={() => performAction("wiki")} 
               />
               <MenuItem 
                 icon={ExternalLink} 
-                label="Open in new tab" 
-                shortcut="Ctrl+Shift+↵"
+                label="Open in New Tab" 
+                shortcut="CMD+ENTER"
                 onClick={() => performAction("open-new")} 
               />
             </div>
             
-            <div className="mt-2 pt-2 border-t border-stone-100 px-3">
-              <p className="text-[10px] text-stone-400 font-medium whitespace-nowrap overflow-hidden text-ellipsis">Last edited by Ankit Kumar</p>
-              <p className="text-[10px] text-stone-500 uppercase tracking-tighter">{formatRelativeDate(note.updated_at)}</p>
+            <div className="mt-2 pt-2 border-t border-white/5 px-3 pb-1.5">
+              <p className="text-[10px] text-[#A1A3A7] font-medium whitespace-nowrap overflow-hidden text-ellipsis">Ankit Kumar</p>
+              <p className="text-[10px] text-[#A1A3A7]/40 font-medium">{formatRelativeDate(note.updated_at)}</p>
             </div>
           </motion.div>
         )}

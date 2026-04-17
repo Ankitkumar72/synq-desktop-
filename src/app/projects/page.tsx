@@ -4,11 +4,11 @@ import { useState } from "react"
 import { 
   FolderKanban, 
   MoreHorizontal, 
-  Plus, 
   Search,
   LayoutGrid,
   List,
-  ArrowRight
+  ArrowRight,
+  Filter
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -21,68 +21,137 @@ import {
 } from "@/components/ui/card"
 import { Progress, ProgressIndicator, ProgressTrack } from "@/components/ui/progress"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { Badge } from "@/components/ui/badge"
 import { useProjectStore } from "@/lib/store/use-project-store"
+import { 
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu"
 import { AnimatePage } from "@/components/layout/animate-page"
 
 export default function ProjectsPage() {
   const { projects, deleteProject } = useProjectStore()
   const [searchQuery, setSearchQuery] = useState("")
+  const [selectedStatus, setSelectedStatus] = useState<string[]>([])
 
-  const filteredProjects = projects.filter(p => 
-    p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (p.description?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false)
-  )
+  const toggleStatus = (status: string) => {
+    setSelectedStatus(prev => 
+      prev.includes(status) 
+        ? prev.filter(s => s !== status) 
+        : [...prev, status]
+    )
+  }
+
+  const filteredProjects = projects.filter((project) => {
+    const matchesSearch = project.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                         project.description?.toLowerCase().includes(searchQuery.toLowerCase())
+    const matchesStatus = selectedStatus.length === 0 || selectedStatus.includes(project.status)
+    return matchesSearch && matchesStatus
+  })
   return (
     <AnimatePage>
       <div className="p-8 space-y-6 max-w-7xl mx-auto">
       <div className="flex items-center justify-between">
         <div className="flex flex-col gap-1">
-          <h1 className="text-2xl font-bold tracking-tight text-stone-900">Folders</h1>
-          <p className="text-stone-500 text-sm">Track and manage your team folders and initiatives.</p>
+          <h1 className="text-2xl font-bold tracking-tight text-white font-display">Folders</h1>
+          <p className="text-stone-400 text-sm font-medium">Track and manage your team folders and initiatives.</p>
         </div>
         <div className="flex items-center gap-4">
-          <div className="bg-stone-100 p-1 rounded-md flex items-center">
-            <Button variant="outline" size="sm" className="h-7 px-2 rounded-sm text-xs bg-white shadow-sm font-bold text-black">
-              <LayoutGrid className="w-3 h-3 mr-1.5" />
+          <div className="bg-white/5 p-1 rounded-xl flex items-center border border-white/5">
+            <Button variant="ghost" size="sm" className="h-8 px-3 rounded-lg text-xs bg-white/10 shadow-sm font-bold text-white border border-white/10">
+              <LayoutGrid className="w-3.5 h-3.5 mr-1.5" />
               Grid
             </Button>
-            <Button variant="ghost" size="sm" className="h-7 px-2 rounded-sm text-xs text-stone-500">
-              <List className="w-3 h-3 mr-1.5" />
+            <Button variant="ghost" size="sm" className="h-8 px-3 rounded-lg text-xs text-stone-500 hover:text-stone-300">
+              <List className="w-3.5 h-3.5 mr-1.5" />
               List
             </Button>
           </div>
-          <Button className="bg-black text-white hover:bg-stone-800 h-9 rounded-full px-4 gap-2 font-medium">
-            <Plus className="w-4 h-4" />
-            New Project
+          <Button className="bg-white text-black hover:bg-stone-200 h-10 rounded-full px-5 gap-2 font-bold shadow-lg shadow-white/5 transition-all active:scale-95">
+            <FolderKanban className="w-4 h-4" />
+            New Folder
           </Button>
         </div>
       </div>
 
-      <div className="flex items-center gap-3 py-2 border-y border-stone-100 mb-4">
+      <div className="flex items-center justify-between pt-4 pb-2">
         <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-stone-400" />
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-500" />
           <Input 
-            placeholder="Search projects..." 
+            placeholder="Search folders..." 
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9 h-9 border-none bg-stone-50/50 focus-visible:bg-white focus-visible:ring-1 focus-visible:ring-stone-200 text-sm"
+            className="pl-10 h-11 border-white/5 bg-white/5 focus-visible:bg-white/10 focus-visible:ring-1 focus-visible:ring-white/10 text-sm rounded-xl text-white placeholder:text-stone-500"
           />
         </div>
-        <div className="flex items-center gap-2">
-          <span className="text-[10px] uppercase font-bold text-stone-400 tracking-wider">Status Filter:</span>
-          <Badge variant="secondary" className="bg-emerald-50 text-emerald-600 border-none hover:bg-emerald-100 transition-colors cursor-pointer text-[10px] font-bold tracking-widest uppercase px-2 py-1">On Track</Badge>
-          <Badge variant="secondary" className="bg-amber-50 text-amber-600 border-none hover:bg-amber-100 transition-colors cursor-pointer text-[10px] font-bold tracking-widest uppercase px-2 py-1">At Risk</Badge>
-          <Badge variant="secondary" className="bg-rose-50 text-rose-600 border-none hover:bg-rose-100 transition-colors cursor-pointer text-[10px] font-bold tracking-widest uppercase px-2 py-1">Overdue</Badge>
+        <div className="flex items-center gap-3">
+          <DropdownMenu>
+            <DropdownMenuTrigger render={
+              <Button variant="ghost" className="h-11 px-4 text-stone-400 hover:text-white hover:bg-white/5 border border-white/5 rounded-xl gap-2 font-bold transition-all outline-none ring-0">
+                <Filter className="w-4 h-4" />
+                Filters
+                {selectedStatus.length > 0 && (
+                  <div className="flex items-center justify-center bg-white/10 text-stone-300 text-[10px] w-4 h-4 rounded-full ml-1 font-black">
+                    {selectedStatus.length}
+                  </div>
+                )}
+              </Button>
+            } />
+            <DropdownMenuContent align="end" className="bg-[#141414] border border-white/5 text-white rounded-xl shadow-2xl p-2 min-w-[180px]">
+              <div className="px-2 py-1.5 text-[10px] font-black uppercase tracking-widest text-stone-600">Filters</div>
+              <DropdownMenuItem 
+                onClick={() => toggleStatus('on-track')}
+                className={cn(
+                  "rounded-lg px-2 py-2 flex items-center justify-between group transition-colors",
+                  selectedStatus.includes('on-track') ? "bg-white/5 text-white" : "text-stone-500 hover:text-white hover:bg-white/[0.02]"
+                )}
+              >
+                <span className="text-xs font-bold uppercase tracking-tight">On Track</span>
+                {selectedStatus.includes('on-track') && <div className="w-1.5 h-1.5 rounded-full bg-white shadow-[0_0_8px_rgba(255,255,255,0.3)]" />}
+              </DropdownMenuItem>
+              <DropdownMenuItem 
+                onClick={() => toggleStatus('at-risk')}
+                className={cn(
+                  "rounded-lg px-2 py-2 flex items-center justify-between group transition-colors",
+                  selectedStatus.includes('at-risk') ? "bg-white/5 text-white" : "text-stone-500 hover:text-white hover:bg-white/[0.02]"
+                )}
+              >
+                <span className="text-xs font-bold uppercase tracking-tight">At Risk</span>
+                {selectedStatus.includes('at-risk') && <div className="w-1.5 h-1.5 rounded-full bg-white shadow-[0_0_8px_rgba(255,255,255,0.3)]" />}
+              </DropdownMenuItem>
+              <DropdownMenuItem 
+                onClick={() => toggleStatus('overdue')}
+                className={cn(
+                  "rounded-lg px-2 py-2 flex items-center justify-between group transition-colors",
+                  selectedStatus.includes('overdue') ? "bg-white/5 text-white" : "text-stone-500 hover:text-white hover:bg-white/[0.02]"
+                )}
+              >
+                <span className="text-xs font-bold uppercase tracking-tight">Overdue</span>
+                {selectedStatus.includes('overdue') && <div className="w-1.5 h-1.5 rounded-full bg-white shadow-[0_0_8px_rgba(255,255,255,0.3)]" />}
+              </DropdownMenuItem>
+              {selectedStatus.length > 0 && (
+                <>
+                  <div className="h-px bg-white/5 my-1 mx-2" />
+                  <DropdownMenuItem 
+                    onClick={() => setSelectedStatus([])}
+                    className="rounded-lg px-2 py-2 text-[10px] font-black text-stone-500 hover:text-white transition-colors text-center block w-full uppercase tracking-[0.2em]"
+                  >
+                    Reset filters
+                  </DropdownMenuItem>
+                </>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
         {filteredProjects.map((project) => (
-          <UICard key={project.id} className="border-stone-100 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all group cursor-pointer bg-white rounded-2xl overflow-hidden">
-            <UICardHeader className="p-6">
+          <UICard key={project.id} className="border-white/5 shadow-2xl hover:shadow-blue-500/5 hover:-translate-y-1 transition-all group cursor-pointer bg-[#141414] rounded-3xl overflow-hidden border-none outline-none">
+            <UICardHeader className="p-8">
               <div className="flex items-start justify-between">
-                <div className={cn("w-12 h-12 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-black/10 transition-transform group-hover:scale-110", project.color)}>
+                <div className={cn("w-12 h-12 rounded-2xl flex items-center justify-center text-stone-400 border border-white/10 bg-white/5 shadow-lg shadow-black/10 transition-transform group-hover:scale-110")}>
                   <FolderKanban className="w-6 h-6" />
                 </div>
                 <Button 
@@ -97,57 +166,50 @@ export default function ProjectsPage() {
                   <MoreHorizontal className="w-5 h-5" />
                 </Button>
               </div>
-              <UICardTitle className="mt-6 text-xl font-black text-stone-900 flex items-center gap-3">
+              <UICardTitle className="mt-8 text-2xl font-black text-white flex items-center gap-3 tracking-tight">
                 {project.name}
-                <ArrowRight className="w-5 h-5 opacity-0 -translate-x-4 group-hover:opacity-100 group-hover:translate-x-0 transition-all text-stone-400" />
+                <ArrowRight className="w-5 h-5 opacity-0 -translate-x-4 group-hover:opacity-100 group-hover:translate-x-0 transition-all text-blue-500" />
               </UICardTitle>
-              <p className="text-sm font-medium text-stone-400 mt-2 line-clamp-2 leading-relaxed">
+              <p className="text-sm font-medium text-stone-400 mt-3 line-clamp-2 leading-relaxed">
                 {project.description}
               </p>
             </UICardHeader>
-            <UICardContent className="p-6 pt-0 space-y-6">
-              <div className="space-y-3">
-                <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-[0.2em] text-stone-300">
+            <UICardContent className="p-8 pt-0 space-y-8">
+              <div className="space-y-4">
+                <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-[0.25em] text-stone-500">
                   <span>Development Progress</span>
-                  <span className="text-stone-900">{project.progress}%</span>
+                  <span className="text-white">{project.progress}%</span>
                 </div>
                 <Progress value={project.progress}>
-                  <ProgressTrack className="h-2 bg-stone-50 rounded-full overflow-hidden">
-                    <ProgressIndicator className={cn("h-full transition-all duration-500", project.color)} />
+                  <ProgressTrack className="h-1 bg-white/5 rounded-full overflow-hidden">
+                    <ProgressIndicator className="h-full bg-white/20 transition-all duration-700 ease-out" />
                   </ProgressTrack>
                 </Progress>
               </div>
 
-              <div className="flex items-center justify-between pt-6 border-t border-stone-100">
-                <div className="flex -space-x-2">
+              <div className="flex items-center justify-between pt-6 border-t border-white/5">
+                <div className="flex -space-x-2.5">
                   {["AD", "SC"].map((member, i) => (
-                    <Avatar key={i} className="w-8 h-8 border-2 border-white shadow-sm ring-1 ring-stone-100">
-                      <AvatarFallback className="text-[9px] font-black bg-stone-100 text-stone-500">{member}</AvatarFallback>
+                    <Avatar key={i} className="w-8 h-8 border-2 border-[#141414] shadow-xl">
+                      <AvatarFallback className="text-[10px] font-black bg-zinc-800 text-stone-500">{member}</AvatarFallback>
                     </Avatar>
                   ))}
-                  <div className="w-8 h-8 rounded-full bg-stone-50 border-2 border-white flex items-center justify-center text-[9px] font-black text-stone-400 shadow-sm">
+                  <div className="w-8 h-8 rounded-full bg-zinc-900 border-2 border-[#141414] flex items-center justify-center text-[10px] font-black text-stone-600 shadow-xl">
                     +3
                   </div>
                 </div>
-                <Badge variant="outline" className={cn(
-                  "text-[10px] font-black uppercase tracking-widest border-none px-3 py-1.5 rounded-full shadow-sm",
-                  project.status === 'on-track' ? "bg-emerald-50 text-emerald-600" : 
-                  project.status === 'at-risk' ? "bg-amber-50 text-amber-600" : "bg-rose-50 text-rose-600"
-                )}>
-                  {project.status.replace('-', ' ')}
-                </Badge>
+                <div className="flex items-center gap-2.5 px-3 py-1.5 rounded-full bg-white/5 border border-white/5">
+                  <div className={cn(
+                    "w-1.5 h-1.5 rounded-full",
+                    project.status === 'on-track' ? 'bg-stone-400' : project.status === 'at-risk' ? 'bg-stone-500' : 'bg-white'
+                  )} />
+                  <span className="text-[10px] font-black uppercase tracking-widest text-stone-400">{project.status.replace('-', ' ')}</span>
+                </div>
               </div>
             </UICardContent>
           </UICard>
         ))}
         
-        <UICard className="border-2 border-dashed border-stone-100 shadow-none hover:border-stone-300 hover:bg-stone-50/50 transition-all flex flex-col items-center justify-center p-8 cursor-pointer group min-h-[280px]">
-          <div className="w-12 h-12 rounded-full bg-white shadow-sm border border-stone-100 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-            <Plus className="w-6 h-6 text-stone-400 group-hover:text-black transition-colors" />
-          </div>
-          <span className="text-sm font-bold text-stone-400 group-hover:text-black transition-colors">Create New Project</span>
-          <p className="text-[10px] text-stone-400 mt-2 text-center max-w-[160px]">Launch a new initiative and start tracking your progress.</p>
-        </UICard>
       </div>
     </div>
     </AnimatePage>

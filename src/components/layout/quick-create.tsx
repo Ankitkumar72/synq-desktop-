@@ -2,38 +2,42 @@
 
 import { useState } from "react"
 import { 
-  Plus, 
-  CheckSquare, 
-  FolderKanban, 
-  StickyNote, 
-  Calendar
+  Plus,
+  Calendar as CalendarIcon,
+  Clock,
+  AlignLeft,
+  Target,
+  MoreVertical
 } from "lucide-react"
 import { 
   Dialog, 
   DialogContent, 
-  DialogHeader, 
-  DialogTitle, 
   DialogTrigger 
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
 import { useTaskStore } from "@/lib/store/use-task-store"
 import { useProjectStore } from "@/lib/store/use-project-store"
 import { useNotesStore } from "@/lib/store/use-notes-store"
+import { useEventStore } from "@/lib/store/use-event-store"
+import { AnimatePresence } from "framer-motion"
+import { RecurrenceModal } from "./recurrence-modal"
 
-export function QuickCreateModal({ trigger }: { trigger?: React.ReactElement }) {
+export function QuickCreateModal({ trigger, defaultType = 'task' }: { trigger?: React.ReactElement, defaultType?: 'task' | 'project' | 'note' | 'event' }) {
   const [open, setOpen] = useState(false)
-  const [type, setType] = useState<'task' | 'project' | 'note'>('task')
+  const [type, setType] = useState<'task' | 'project' | 'note' | 'event'>(defaultType)
   const [title, setTitle] = useState("")
   const [description, setDescription] = useState("")
   const [priority, setPriority] = useState("Medium")
-  const [due, setDue] = useState("Today")
+  const [dueDate, setDueDate] = useState<Date>(new Date())
+  const [recurrence, setRecurrence] = useState("Does not repeat")
+  const [recurrenceModalOpen, setRecurrenceModalOpen] = useState(false)
+  const [selectedProjectId, setSelectedProjectId] = useState<string | undefined>(undefined)
 
   const { addTask } = useTaskStore()
-  const { addProject } = useProjectStore()
+  const { addProject, projects } = useProjectStore()
   const { addNote } = useNotesStore()
+  const { addEvent } = useEventStore()
 
   const handleCreate = () => {
     if (!title) return
@@ -43,8 +47,8 @@ export function QuickCreateModal({ trigger }: { trigger?: React.ReactElement }) 
         title,
         status: 'todo',
         priority: priority.toLowerCase() as "low" | "medium" | "high",
-        project_id: undefined,
-        due_date: due,
+        project_id: selectedProjectId,
+        due_date: dueDate.toISOString(),
         assignee_id: undefined,
       })
     } else if (type === 'project') {
@@ -62,23 +66,35 @@ export function QuickCreateModal({ trigger }: { trigger?: React.ReactElement }) 
         tags: ["quick"],
         pinned: false,
       })
+    } else if (type === 'event') {
+      addEvent({
+        title,
+        description,
+        start_date: dueDate.toISOString(),
+        end_date: new Date(dueDate.getTime() + 3600000).toISOString(),
+        color: 'rgb(59, 130, 246)',
+      })
     }
 
     setOpen(false)
     setTitle("")
     setDescription("")
     setPriority("Medium")
-    setDue("Today")
+    setDueDate(new Date())
+    setSelectedProjectId(undefined)
   }
 
   const types = [
-    { id: 'task', label: 'Task', icon: CheckSquare, color: 'text-blue-500', bg: 'bg-blue-50' },
-    { id: 'project', label: 'Project', icon: FolderKanban, color: 'text-emerald-500', bg: 'bg-emerald-50' },
-    { id: 'note', label: 'Note', icon: StickyNote, color: 'text-amber-500', bg: 'bg-amber-50' },
+    { id: 'event', label: 'Event' },
+    { id: 'task', label: 'Task' },
+    { id: 'appointment', label: 'Appointment schedule', new: true },
   ]
 
   const defaultTrigger = (
-    <Button size="sm" className="bg-black text-white hover:bg-stone-800 gap-2 h-9 px-4 rounded-full font-medium">
+    <Button 
+      size="sm" 
+      className="bg-blue-600 text-white hover:bg-blue-500 gap-2 h-9 px-5 rounded-full font-black text-[10px] uppercase tracking-widest shadow-[0_8px_16px_rgba(37,99,235,0.2)] hover:shadow-[0_8px_20px_rgba(37,99,235,0.3)] active:scale-95 transition-all duration-300"
+    >
       <Plus className="w-4 h-4" />
       Quick Create
     </Button>
@@ -86,98 +102,169 @@ export function QuickCreateModal({ trigger }: { trigger?: React.ReactElement }) 
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={trigger || defaultTrigger} />
+      <DialogTrigger
+        render={trigger || defaultTrigger}
+      />
       
-      <DialogContent className="sm:max-w-[500px] p-0 overflow-hidden border-stone-100 shadow-2xl rounded-2xl">
-        <DialogHeader className="p-8 pb-0">
-          <DialogTitle className="text-xl font-black tracking-tight text-black">Quick Create</DialogTitle>
-        </DialogHeader>
-        
-        <div className="p-8 space-y-6">
-          <div className="flex gap-3">
-            {types.map((t) => (
-              <button
-                key={t.id}
-                onClick={() => setType(t.id as 'task' | 'project' | 'note')}
-                className={cn(
-                  "flex-1 flex flex-col items-center gap-2 p-4 rounded-2xl border-2 transition-all cursor-pointer",
-                  type === t.id 
-                    ? "border-black bg-stone-50" 
-                    : "border-stone-50 bg-white hover:bg-stone-50"
-                )}
-              >
-                <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center transition-transform group-hover:scale-110", t.bg, t.color)}>
-                  <t.icon className="w-5 h-5" />
+      <AnimatePresence>
+        {open && (
+          <DialogContent 
+            className="sm:max-w-[500px] p-0 border-none bg-[#1f1f1f] shadow-[0_24px_38px_3px_rgba(0,0,0,0.14),0_9px_46px_8px_rgba(0,0,0,0.12),0_11px_15px_-7px_rgba(0,0,0,0.2)] rounded-[32px] outline-none overflow-hidden"
+          >
+            <div className="flex flex-col h-full bg-[#1f1f1f] text-[#e3e3e3] font-sans">
+              {/* Header / Title Row */}
+              <div className="flex items-center justify-between p-2 pl-8 pt-4 pr-12">
+                <div className="flex-1">
+                  <input
+                    autoFocus
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    placeholder="Add title"
+                    className="w-full bg-transparent border-b-2 border-transparent focus:border-blue-500 py-3 text-3xl font-normal placeholder:text-[#8e918f] focus:outline-none transition-colors"
+                  />
                 </div>
-                <span className="text-[10px] font-black uppercase tracking-widest leading-none">{t.label}</span>
-              </button>
-            ))}
-          </div>
+              </div>
 
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <label className="text-[10px] font-black uppercase tracking-[0.2em] text-stone-300">Title</label>
-              <Input 
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder={`Enter ${type} title...`} 
-                className="h-12 border-stone-100 focus-visible:ring-black bg-stone-50/50 rounded-xl font-bold placeholder:text-stone-300 transition-all focus-visible:bg-white"
-              />
-            </div>
-
-            {type === 'task' && (
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase tracking-[0.2em] text-stone-300">Priority</label>
-                  <select 
-                    value={priority}
-                    onChange={(e) => setPriority(e.target.value)}
-                    className="flex h-12 w-full rounded-xl border border-stone-100 bg-stone-50/50 px-4 py-2 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-black/5 focus:border-black transition-all"
+              {/* Type Switcher */}
+              <div className="px-8 pb-4 flex gap-2">
+                {types.map((t) => (
+                  <button
+                    key={t.id}
+                    onClick={() => {
+                      if (t.id !== 'appointment') setType(t.id as 'task' | 'project' | 'note' | 'event')
+                    }}
+                    className={cn(
+                      "px-4 py-2 rounded-full text-sm font-medium transition-all flex items-center gap-2",
+                      type === t.id 
+                        ? "bg-[#0b57d0] text-white" 
+                        : "hover:bg-white/10 text-[#c4c7c5]"
+                    )}
                   >
-                    <option>Low</option>
-                    <option>Medium</option>
-                    <option>High</option>
-                  </select>
+                    {t.label}
+                    {t.new && (
+                      <span className="text-[10px] bg-[#d3e3fd] text-[#041e49] px-1.5 py-0.5 rounded-md font-bold uppercase">New</span>
+                    )}
+                  </button>
+                ))}
+              </div>
+
+              <div className="px-8 pb-8 space-y-6">
+                {/* Row: Date/Time */}
+                <div className="flex gap-6 items-start group">
+                  <div className="pt-2 text-[#c4c7c5]">
+                    <Clock className="w-5 h-5" />
+                  </div>
+                  <div className="flex-1 space-y-1">
+                    <div className="flex items-center gap-4 text-sm font-medium hover:bg-white/5 p-2 -ml-2 rounded-lg cursor-pointer transition-colors">
+                      <span className="text-[#e3e3e3]">
+                        {dueDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+                      </span>
+                      <span className="text-[#e3e3e3]">
+                        {dueDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }).toLowerCase()} — {new Date(dueDate.getTime() + 3600000).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }).toLowerCase()}
+                      </span>
+                    </div>
+                    <button 
+                      onClick={() => setRecurrenceModalOpen(true)}
+                      className="text-xs font-medium text-[#c4c7c5] hover:bg-white/5 px-2 py-1 -ml-1 rounded-md transition-colors"
+                    >
+                      {recurrence}
+                    </button>
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase tracking-[0.2em] text-stone-300">Due Date</label>
-                  <div className="relative">
-                    <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-300" />
-                    <Input 
-                      value={due}
-                      onChange={(e) => setDue(e.target.value)}
-                      className="pl-12 h-12 border-stone-100 focus-visible:ring-black bg-stone-50/50 rounded-xl font-bold text-stone-900 focus-visible:bg-white" 
-                      placeholder="Today" 
+
+                {/* Row: Target/Deadline (Tasks Only) */}
+                {type === 'task' && (
+                  <div className="flex gap-6 items-center group">
+                    <div className="text-[#c4c7c5]">
+                      <Target className="w-5 h-5" />
+                    </div>
+                    <div className="flex-1">
+                      <button className="text-sm font-medium text-[#c4c7c5] hover:bg-white/5 p-2 -ml-2 w-full text-left rounded-lg transition-colors">
+                        Add deadline
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Row: Description */}
+                <div className="flex gap-6 items-start group">
+                  <div className="pt-2 text-[#c4c7c5]">
+                    <AlignLeft className="w-5 h-5" />
+                  </div>
+                  <div className="flex-1">
+                    <textarea
+                      value={description}
+                      onChange={(e) => setDescription(e.target.value)}
+                      placeholder="Add description"
+                      className="w-full bg-[#1a1c1e] hover:bg-[#25282a] focus:bg-[#323537] rounded-xl border-none p-4 text-sm min-h-[120px] placeholder:text-[#8e918f] focus:outline-none transition-all resize-none"
                     />
                   </div>
                 </div>
+
+                {/* Row: Project/Calendar Selection */}
+                <div className="flex gap-6 items-center group">
+                  <div className="text-[#c4c7c5]">
+                    <MoreVertical className="w-5 h-5" />
+                  </div>
+                  <div className="flex-1">
+                    <select
+                      value={selectedProjectId}
+                      onChange={(e) => setSelectedProjectId(e.target.value)}
+                      className="bg-[#323537] hover:bg-[#3c3f41] rounded-lg h-10 px-4 text-sm font-medium focus:outline-none transition-colors appearance-none cursor-pointer pr-10 relative"
+                      style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%238e918f'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center', backgroundSize: '16px' }}
+                    >
+                      <option value="">Select Project</option>
+                      {projects.map(p => (
+                        <option key={p.id} value={p.id}>{p.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {/* Row: Profile/Visibility */}
+                <div className="flex gap-6 items-center group">
+                  <div className="text-[#c4c7c5]">
+                    <CalendarIcon className="w-5 h-5" />
+                  </div>
+                  <div className="flex-1 text-sm">
+                    <div className="flex items-center gap-2 font-medium text-[#e3e3e3]">
+                      <span>Guest User</span>
+                      <span className="w-3 h-3 rounded-full bg-[#4285f4]" />
+                    </div>
+                    <div className="text-xs text-[#8e918f]">Personal • Private</div>
+                  </div>
+                </div>
               </div>
-            )}
 
-            <div className="space-y-2">
-              <label className="text-[10px] font-black uppercase tracking-[0.2em] text-stone-300">Description / Content</label>
-              <Textarea 
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                className="min-h-[120px] rounded-xl border-stone-100 focus-visible:ring-black resize-none bg-stone-50/50 font-medium p-4 focus-visible:bg-white transition-all overflow-hidden"
-                placeholder="Add some more context..."
-              />
+              {/* Footer */}
+              <div className="p-6 bg-transparent flex items-center justify-end">
+                <button
+                  onClick={handleCreate}
+                  disabled={!title}
+                  className={cn(
+                    "h-10 px-8 rounded-full font-bold text-sm shadow-sm transition-all",
+                    title 
+                      ? "bg-[#a8c7fa] text-[#041e49] hover:bg-[#b0d1ff]" 
+                      : "bg-[#3c4043] text-[#70757a] cursor-not-allowed"
+                  )}
+                >
+                  Save
+                </button>
+              </div>
             </div>
-          </div>
-        </div>
-
-        <div className="p-8 bg-stone-50 flex items-center justify-end gap-3 border-t border-stone-100">
-          <Button variant="ghost" onClick={() => setOpen(false)} className="text-stone-400 font-black text-[10px] uppercase tracking-widest h-11 px-8 rounded-xl hover:text-black">
-            Dismiss
-          </Button>
-          <Button 
-            onClick={handleCreate}
-            className="bg-black text-white hover:bg-stone-800 h-11 px-10 rounded-xl font-black text-[10px] uppercase tracking-[0.2em] shadow-xl shadow-black/20 active:scale-95 transition-all"
-          >
-            Create {type}
-          </Button>
-        </div>
-      </DialogContent>
+          </DialogContent>
+        )}
+      </AnimatePresence>
+      <RecurrenceModal 
+        open={recurrenceModalOpen}
+        onOpenChange={setRecurrenceModalOpen}
+        baseDate={dueDate}
+        onSave={(config) => {
+          // Format recurrence string
+          const dayNames = config.days.map(d => d.split('-')[0]).join(', ')
+          setRecurrence(`Weekly on ${dayNames}`)
+        }}
+      />
     </Dialog>
   )
 }

@@ -108,41 +108,41 @@ export default function NotesPage() {
 
   return (
     <AnimatePage>
-      <div className="flex h-screen bg-white">
-        {/* Search and List Side Column */}
-        <div className="w-[360px] border-r border-[#eee] flex flex-col bg-[#F7F7F8]">
+      <div className="flex h-screen bg-[#09090B] text-[#E1E2E4] font-sans selection:bg-[#4B7BFF]/30">
+        {/* Sidebar Organization Area */}
+        <div className="w-[260px] flex flex-col bg-[#09090B] border-r border-white/5 transition-all duration-300">
           <div className={cn(
-            "p-6 space-y-4 transition-all duration-300",
+            "p-6 space-y-5 transition-all duration-300",
             !isSidebarOpen && "pl-16"
           )}>
             <div className="flex items-center justify-between">
-              <h1 className="text-xl font-bold tracking-tight text-stone-900">Notes</h1>
+              <h1 className="text-xl font-semibold tracking-tight text-[#E1E2E4]">Notes</h1>
               <Button 
                 variant="ghost" 
                 size="icon" 
                 onClick={handleAddNote}
-                className="h-8 w-8 text-stone-400 hover:text-black hover:bg-stone-100 rounded-full transition-all"
+                className="h-8 w-8 text-[#A1A3A7] hover:text-white hover:bg-white/5 rounded-lg transition-all duration-200"
               >
                 <Plus className="w-5 h-5" />
               </Button>
             </div>
-            <div className="relative group">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400 group-focus-within:text-[#6366f1] transition-colors" />
+            <div className="relative">
+              <Search className="absolute left-0 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#A1A3A7]/20" />
               <Input 
                 placeholder="Search notes..." 
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10 h-10 border-none bg-white shadow-sm hover:shadow-md focus:shadow-md text-sm focus-visible:ring-1 focus-visible:ring-stone-100 rounded-xl transition-all"
+                className="pl-7 h-8 border-none bg-transparent text-[#E1E2E4] placeholder:text-[#A1A3A7]/10 text-[13px] focus-visible:ring-0 focus-visible:ring-offset-0 rounded-none transition-all duration-200"
               />
             </div>
           </div>
 
-          <ScrollArea className="flex-1">
-            <div className="divide-y divide-stone-50">
+          <div className="flex-1 overflow-y-auto">
+            <div className="flex flex-col">
               {filteredNotes.length === 0 ? (
-                <div className="p-12 text-center space-y-2">
-                  <p className="text-sm font-medium text-stone-400">No notes found</p>
-                  <Button variant="link" size="sm" onClick={() => setSearchQuery("")} className="text-xs text-stone-400">Clear search</Button>
+                <div className="p-12 text-center space-y-3">
+                  <p className="text-sm font-medium text-[#A1A3A7]">No notes found</p>
+                  <Button variant="link" size="sm" onClick={() => setSearchQuery("")} className="text-xs text-[#4B7BFF] hover:text-[#3B6BEF]">Clear search</Button>
                 </div>
               ) : (
                 filteredNotes.map((note) => (
@@ -153,94 +153,92 @@ export default function NotesPage() {
                   >
                     <div 
                       className={cn(
-                        "mx-3 my-1 p-4 cursor-pointer transition-all hover:bg-white/80 group relative rounded-xl border-l-[3px]",
-                        selectedNoteId === note.id ? "bg-[#eef2ff] border-l-[#6366f1] shadow-sm" : "border-l-transparent hover:bg-stone-100/50"
+                        "px-6 py-2.5 cursor-pointer transition-all duration-200 group relative",
+                        selectedNoteId === note.id 
+                          ? "text-white" 
+                          : "text-[#A1A3A7] hover:text-[#E1E2E4]"
                       )}
                       onClick={() => setSelectedNoteId(note.id)}
                     >
+                      {selectedNoteId === note.id && (
+                        <div className="absolute left-0 top-1 bottom-1 w-[1.5px] bg-[#4B7BFF]" />
+                      )}
                       <div className="flex items-start justify-between mb-1">
-                        <h3 className={cn(
-                          "text-[14px] font-semibold truncate pr-4 leading-tight py-0.5",
-                          selectedNoteId === note.id ? "text-[#6366f1]" : "text-stone-700"
-                        )}>
-                          {note.title}
+                        <h3 className="text-[13.5px] font-medium truncate pr-4 leading-tight py-0.5">
+                          {note.title || "Untitled"}
                         </h3>
-                        {note.pinned && <Pin className="w-3.5 h-3.5 text-amber-500 fill-amber-300 shrink-0 mt-0.5" />}
+                        {note.pinned && <Pin className="w-3 h-3 text-[#4B7BFF] fill-[#4B7BFF]/20 shrink-0 mt-1" />}
                       </div>
-                      <div className="flex items-center justify-between mt-1">
-                        <p className="text-[12px] text-stone-400 font-medium">
+                      <div className="flex items-center justify-between">
+                        <p className="text-[11px] text-[#A1A3A7] font-medium">
                           {formatRelativeDate(note.updated_at)}
                         </p>
-                        <div className="flex items-center gap-1.5">
-                          {note.tags.slice(0, 1).map(tag => (
-                            <span key={tag} className="text-[10px] font-semibold text-stone-400 bg-stone-200/50 px-1.5 py-0.5 rounded-md">#{tag}</span>
-                          ))}
-                        </div>
                       </div>
                     </div>
                   </NoteContextMenu>
                 ))
               )}
             </div>
-          </ScrollArea>
+          </div>
         </div>
 
-        {/* Editor Main Area */}
-        <div className="flex-1 flex flex-col bg-white overflow-hidden">
+        {/* Editor Main Area - Production Workspace */}
+        <div className="flex-1 flex flex-col bg-[#09090B] overflow-hidden">
           {!selectedNote ? (
-            <div className="flex-1 flex items-center justify-center bg-white">
+            <div className="flex-1 flex items-center justify-center">
               <div className="text-center space-y-6 max-w-sm">
-                <div className="w-24 h-24 rounded-3xl bg-stone-50 flex items-center justify-center mx-auto border border-stone-100 shadow-sm relative overflow-hidden group">
-                  <Plus className="w-12 h-12 text-stone-200 group-hover:scale-110 transition-transform" />
-                  <div className="absolute inset-0 bg-gradient-to-tr from-[#6366f1]/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                <div className="w-20 h-20 rounded-2xl bg-white/5 flex items-center justify-center mx-auto border border-white/5 shadow-sm relative overflow-hidden group">
+                  <Plus className="w-8 h-8 text-white/20 group-hover:scale-105 transition-transform duration-300" />
+                  <div className="absolute inset-0 bg-gradient-to-tr from-[#4B7BFF]/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                 </div>
                 <div className="space-y-2">
-                  <h3 className="text-xl font-semibold text-stone-900">Start writing your thoughts…</h3>
-                  <p className="text-sm text-stone-500 leading-relaxed">Capture ideas, create checklists, and organize your workspace with ease.</p>
+                  <h3 className="text-xl font-semibold text-white">Capture thoughts</h3>
+                  <p className="text-[#A1A3A7] text-sm leading-relaxed">Organize your ideas and workflows in a high-precision workspace.</p>
                 </div>
-                <Button onClick={handleAddNote} className="bg-[#6366f1] text-white hover:bg-[#5558e3] rounded-xl px-8 h-12 text-sm font-medium shadow-xl shadow-[#6366f1]/10 hover:shadow-[#6366f1]/20 active:scale-95 transition-all">
-                  Create New Note
+                <Button onClick={handleAddNote} className="bg-[#4B7BFF] text-white hover:bg-[#3B6BEF] rounded-xl px-8 h-12 text-sm font-medium shadow-lg shadow-[#4B7BFF]/10 active:scale-95 transition-all duration-200">
+                  New Note
                 </Button>
               </div>
             </div>
           ) : (
-            <>
-              <div className="h-16 flex items-center justify-between px-8 border-b border-[#f1f1f1] bg-white/80 backdrop-blur-md z-30 sticky top-0 shadow-[0_1px_2px_rgba(0,0,0,0.02)]">
+            <div className="flex-1 flex flex-col overflow-hidden relative group/editor">
+              {/* Toolbar - Header Integrated */}
+              <div className="h-14 flex items-center justify-between px-10 bg-transparent z-30">
                 <div className="flex items-center gap-4">
-                  <div className="flex items-center gap-1.5 text-stone-300 text-[10px] font-bold uppercase tracking-widest bg-stone-50 px-2 py-1 rounded-full">
-                    <Clock className="w-3 h-3" />
-                    Edited {formatRelativeDate(selectedNote.updated_at)}
+                  <div className="flex items-center gap-2 text-[#A1A3A7]/40 text-[11px] font-medium tracking-tight px-0">
+                    <Clock className="w-3.5 h-3.5" />
+                    Edited {selectedNote.updated_at ? formatRelativeDate(selectedNote.updated_at) : "just now"}
                   </div>
                 </div>
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-2">
                   <Button 
                     variant="ghost" 
                     size="icon" 
                     onClick={() => pinNote(selectedNote.id, !selectedNote.pinned)}
-                    className={cn("h-9 w-9 rounded-full transition-all", selectedNote.pinned ? "text-amber-500 bg-amber-50" : "text-stone-300 hover:text-stone-900 hover:bg-stone-50")}
+                    className={cn("h-8 w-8 rounded-lg transition-all duration-200", selectedNote.pinned ? "text-[#4B7BFF] bg-[#4B7BFF]/10" : "text-[#A1A3A7] hover:text-white hover:bg-white/5")}
                   >
-                    <Pin className={cn("w-4 h-4", selectedNote.pinned && "fill-amber-500")} />
+                    <Pin className={cn("w-4 h-4", selectedNote.pinned && "fill-[#4B7BFF]")} />
                   </Button>
                   
-                  <Separator orientation="vertical" className="h-4 mx-2 bg-stone-100" />
+                  <Separator orientation="vertical" className="h-4 mx-1 bg-white/10" />
                   
-                  <Button variant="ghost" className="h-9 px-4 text-[10px] font-bold uppercase tracking-widest text-stone-400 hover:text-stone-900 hover:bg-stone-50 gap-2 rounded-full">
+                  <Button variant="ghost" className="h-8 px-3 text-[11px] font-medium text-[#A1A3A7] hover:text-white hover:bg-white/5 gap-2 rounded-lg transition-all duration-200">
                     <Share2 className="w-3.5 h-3.5" /> Share
                   </Button>
                   
                   <DropdownMenu>
                     <DropdownMenuTrigger render={
-                      <Button variant="ghost" size="icon" className="h-9 w-9 text-stone-300 hover:text-stone-900 hover:bg-stone-50 rounded-full transition-all">
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-[#A1A3A7] hover:text-white hover:bg-white/5 rounded-lg transition-all duration-200">
                         <MoreHorizontal className="w-5 h-5" />
                       </Button>
                     } />
-                    <DropdownMenuContent align="end" className="w-48 p-2 rounded-2xl border-stone-100 shadow-2xl bg-white/95 backdrop-blur-xl">
-                      <DropdownMenuItem className="rounded-xl text-[10px] font-bold uppercase tracking-widest py-3 text-stone-500 gap-3 cursor-pointer focus:bg-stone-50 focus:text-stone-900">
+                    <DropdownMenuContent align="end" className="w-48 p-2 rounded-xl border-white/10 shadow-2xl bg-[#1A1A1E] text-[#E1E2E4]">
+                      <DropdownMenuItem className="rounded-lg text-[12px] font-medium py-2 gap-2.5 cursor-pointer focus:bg-white/5 focus:text-white">
                         <Archive className="w-3.5 h-3.5" /> Archive
                       </DropdownMenuItem>
                       <DropdownMenuItem 
                         onClick={() => deleteNote(selectedNote.id)}
-                        className="rounded-xl text-[10px] font-bold uppercase tracking-widest py-3 text-rose-500 hover:text-rose-600 focus:bg-rose-50/50 gap-3 cursor-pointer"
+                        className="rounded-lg text-[12px] font-medium py-2 text-rose-400 hover:text-rose-500 focus:bg-rose-500/10 gap-2.5 cursor-pointer"
                       >
                         <Trash2 className="w-3.5 h-3.5" /> Delete
                       </DropdownMenuItem>
@@ -249,33 +247,29 @@ export default function NotesPage() {
                 </div>
               </div>
 
-              <ScrollArea className="flex-1 bg-white">
-                <div className="max-w-4xl mx-auto w-full px-8 pt-8 pb-32">
-                    <input
-                      type="text"
-                      value={selectedNote.title}
-                      onChange={(e) => {
-                        updateNoteLocal(selectedNote.id, { title: e.target.value })
-                        debouncedUpdate(selectedNote.id, { title: e.target.value })
-                      }}
-                      className="w-full text-[40px] font-semibold tracking-tight border-none focus-visible:outline-none mb-2 placeholder:text-stone-100 font-heading text-stone-900"
-                      placeholder="Note Title"
-                    />
-                    <div className="flex items-center gap-4 text-stone-400 text-sm mb-12">
-                      <div className="flex items-center gap-1.5 hover:text-stone-600 transition-colors cursor-default">
-                        <Clock className="w-4 h-4" />
-                        <span>Last edited {formatRelativeDate(selectedNote.updated_at)}</span>
-                      </div>
-                      <span className="text-stone-200">•</span>
-                      <div className="flex items-center gap-1.5 hover:text-stone-600 transition-colors cursor-default">
-                        <Share2 className="w-4 h-4" />
-                        <span>Private Workspace</span>
-                      </div>
-                      <span className="text-stone-200">•</span>
-                      <div className="flex items-center gap-1.5 text-stone-300">
-                        <span>❤️</span>
-                      </div>
+              <ScrollArea className="flex-1">
+                <div className="max-w-4xl mx-auto w-full px-12 pt-12 pb-40">
+                  <input
+                    type="text"
+                    value={selectedNote.title}
+                    onChange={(e) => {
+                      updateNoteLocal(selectedNote.id, { title: e.target.value })
+                      debouncedUpdate(selectedNote.id, { title: e.target.value })
+                    }}
+                    className="w-full text-4xl font-semibold tracking-tight border-none bg-transparent focus-visible:outline-none mb-3 placeholder:text-white/10 text-white"
+                    placeholder="Note Title"
+                  />
+                  <div className="flex items-center gap-4 text-[#A1A3A7] text-[13px] mb-12 px-1">
+                    <div className="flex items-center gap-2 hover:text-white transition-colors cursor-default group/stat">
+                      <Clock className="w-4 h-4 group-hover:text-[#4B7BFF] transition-colors" />
+                      <span className="font-medium">Edited {formatRelativeDate(selectedNote.updated_at)}</span>
                     </div>
+                    <span className="text-white/10">•</span>
+                    <div className="flex items-center gap-2 hover:text-white transition-colors cursor-default group/stat">
+                      <Share2 className="w-4 h-4 group-hover:text-[#4B7BFF] transition-colors" />
+                      <span className="font-medium">Personal Workspace</span>
+                    </div>
+                  </div>
                   <NoteEditor 
                     content={selectedNote.content} 
                     onChange={(val) => {
@@ -295,7 +289,7 @@ export default function NotesPage() {
                   />
                 </div>
               </ScrollArea>
-            </>
+            </div>
           )}
         </div>
       </div>

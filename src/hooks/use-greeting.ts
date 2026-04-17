@@ -2,7 +2,7 @@ import { useEffect, useState } from "react"
 
 export function getGreeting(name: string): string {
   const hour = new Date().getHours()
-  const firstName = name.split(' ')[0]
+  const firstName = (name || 'Friend').split(' ')[0]
   
   if (hour >= 5 && hour < 12) return `Good morning, ${firstName}`
   if (hour >= 12 && hour < 18) return `Good afternoon, ${firstName}`

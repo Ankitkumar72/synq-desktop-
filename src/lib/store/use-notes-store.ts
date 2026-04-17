@@ -13,13 +13,14 @@ interface NotesState {
   deleteNote: (id: string) => Promise<void>
   restoreNote: (id: string) => Promise<void>
   permanentlyDeleteNote: (id: string) => Promise<void>
+  fetchNotes: (includeDeleted?: boolean) => Promise<void>
   setSelectedNoteId: (id: string | null) => void
   pinNote: (id: string, isPinned: boolean) => Promise<void>
 }
 
 export const useNotesStore = create<NotesState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       notes: [],
       selectedNoteId: null,
       setNotes: (notes) => set((state) => ({ 
@@ -80,6 +81,9 @@ export const useNotesStore = create<NotesState>()(
           set(state => ({
             notes: state.notes.map(n => n.id === id ? { ...n, deleted_at: new Date().toISOString() } : n)
           }))
+        } else {
+          // Re-fetch to ensure sync
+          get().fetchNotes(false)
         }
       },
       permanentlyDeleteNote: async (id) => {
@@ -94,6 +98,26 @@ export const useNotesStore = create<NotesState>()(
         if (error) console.error('Error permanently deleting note:', error)
       },
       setSelectedNoteId: (id) => set({ selectedNoteId: id }),
+      fetchNotes: async (includeDeleted = false) => {
+        if (!supabase) return
+        
+        let query = supabase
+          .from('notes')
+          .select('*')
+        
+        if (!includeDeleted) {
+          query = query.is('deleted_at', null)
+        }
+        
+        const { data, error } = await query
+          .order('updated_at', { ascending: false })
+        
+        if (error) {
+          console.error('Error fetching notes:', error)
+        } else if (data) {
+          set({ notes: data })
+        }
+      },
       pinNote: async (id, isPinned) => {
         set((state) => ({
           notes: state.notes.map((n) => (n.id === id ? { ...n, pinned: isPinned } : n))
