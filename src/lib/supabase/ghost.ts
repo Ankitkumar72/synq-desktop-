@@ -12,12 +12,22 @@ export function createGhostClient<T = unknown>(): T {
     get: (_target, prop) => {
       // Handle thenable for async/await support on method calls
       if (prop === 'then') return undefined;
+      // Handle the case where someone checks for the presence of a target or data
+      if (prop === 'data' || prop === 'error') return ghost;
       return ghost;
     },
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     apply: async (_target, _thisArg, _argumentsList) => {
-      // Default response for Supabase methods like .select(), .getUser(), etc.
-      return { data: null, error: null, count: 0 };
+      // Return an object that is itself a ghost for its data properties
+      // This allows const { data: { session } } = await supabase.auth.getSession() to not crash
+      return { 
+        data: ghost, 
+        error: null, 
+        count: 0,
+        // Also support session-specific destructuring
+        session: ghost,
+        user: ghost
+      };
     }
   });
 

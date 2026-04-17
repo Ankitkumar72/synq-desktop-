@@ -12,6 +12,10 @@ export const supabase = new Proxy({} as unknown as SupabaseClient, {
       _supabase = createClient();
     }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return (_supabase as any)[prop];
+    const value = (_supabase as any)[prop];
+    if (typeof value === 'function') {
+      return value.bind(_supabase);
+    }
+    return value;
   }
 });

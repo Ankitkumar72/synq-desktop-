@@ -55,7 +55,7 @@ function checkProxyRateLimit(identifier: string): {
  * 1. IP-level rate limiting (first line of defense)
  * 2. Supabase session refreshing and route protection
  */
-export async function proxy(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   // Get client IP — use forwarded header in production, fall back to a default
   const clientIp =
     request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ??
