@@ -1,5 +1,5 @@
+import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
-import { createClient } from './server'
 
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
@@ -8,7 +8,42 @@ export async function updateSession(request: NextRequest) {
     },
   })
 
-  const supabase = await createClient()
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+  /**
+   * IMPORTANT: We cannot use the shared `createClient` from `./server` here
+   * because it calls `cookies()` from `next/headers`, which is NOT supported
+   * in Middleware/Edge Runtime and triggers a 500 Internal Server Error.
+   */
+  if (!url || !key) {
+    // Return early if keys are missing to prevent crash during build/prerender
+    // Return a Ghost client for type compatibility if needed, but here we just pass through
+    return supabaseResponse
+  }
+
+  const supabase = createServerClient(
+    url,
+    key,
+    {
+      cookies: {
+        getAll() {
+          return request.cookies.getAll()
+        },
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value))
+          supabaseResponse = NextResponse.next({
+            request: {
+              headers: request.headers,
+            },
+          })
+          cookiesToSet.forEach(({ name, value, options }) =>
+            supabaseResponse.cookies.set(name, value, options)
+          )
+        },
+      },
+    }
+  )
 
   const {
     data: { user },
