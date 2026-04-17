@@ -1,13 +1,40 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import { Note } from '@/types'
+import { TABLES, COLUMNS } from '@/lib/constants'
+import { hlc } from '@/lib/hlc'
+import { Note, SubTask } from '@/types'
 import { supabase } from '@/lib/supabase.client'
+import { useUserStore } from './use-user-store'
+
+export function sanitizeNote(note: Partial<Note>): Note {
+  return {
+    ...note,
+    title: note.title ?? '',
+    content: note.content || null,
+    body: note.body || null,
+    excerpt: note.excerpt || null,
+    tags: Array.isArray(note.tags) ? note.tags : [],
+    category: note.category ?? 'personal',
+    priority: note.priority ?? 'none',
+    is_task: note.is_task ?? false,
+    is_completed: note.is_completed ?? false,
+    is_all_day: note.is_all_day ?? false,
+    is_recurring_instance: note.is_recurring_instance ?? false,
+    subtasks: Array.isArray(note.subtasks) ? note.subtasks : [],
+    hlc_timestamp: note.hlc_timestamp || hlc.now(),
+    is_deleted: note.is_deleted ?? false,
+    pinned: note.pinned ?? false,
+    updated_at: note.updated_at ?? new Date().toISOString(),
+    created_at: note.created_at ?? new Date().toISOString(),
+    field_versions: note.field_versions || {}
+  } as Note;
+}
 
 interface NotesState {
   notes: Note[]
   selectedNoteId: string | null
   setNotes: (notes: Note[]) => void
-  addNote: (note: Omit<Note, 'id' | 'created_at' | 'updated_at'>) => Promise<string | undefined>
+  addNote: (note: Partial<Note> & { title: string }) => Promise<string | undefined>
   updateNote: (id: string, updates: Partial<Note>) => Promise<void>
   updateNoteLocal: (id: string, updates: Partial<Note>) => void
   deleteNote: (id: string) => Promise<void>
@@ -16,7 +43,12 @@ interface NotesState {
   fetchNotes: (includeDeleted?: boolean) => Promise<void>
   setSelectedNoteId: (id: string | null) => void
   pinNote: (id: string, isPinned: boolean) => Promise<void>
+  addSubtask: (noteId: string, title: string) => Promise<void>
+  updateSubtask: (noteId: string, subtaskId: string, updates: Partial<SubTask>) => Promise<void>
+  deleteSubtask: (noteId: string, subtaskId: string) => Promise<void>
 }
+
+// User state is now managed centrally in useUserStore
 
 export const useNotesStore = create<NotesState>()(
   persist(
@@ -28,20 +60,107 @@ export const useNotesStore = create<NotesState>()(
         selectedNoteId: state.selectedNoteId || (notes.length > 0 ? notes[0].id : null)
       })),
       addNote: async (note) => {
-        if (!supabase) return undefined
-        const { data, error } = await supabase.from('notes').insert([note]).select()
-        if (error) {
-          console.error('Error adding note:', error)
-          return undefined
+        console.log('[NotesStore] Attempting to add note:', note.title);
+        if (!supabase) {
+          console.error('[NotesStore] Supabase client not initialized');
+          return undefined;
         }
-        const newNote = data[0]
-        set((state) => ({ notes: [newNote, ...state.notes] }))
-        return newNote.id
+
+        try {
+          let userId = useUserStore.getState().user?.id
+          if (!userId) {
+            const { data: { user } } = await supabase.auth.getUser()
+            userId = user?.id
+          }
+
+          if (!userId) {
+            console.error('[NotesStore] No authenticated user found');
+            return undefined;
+          }
+
+          const timestamp = hlc.increment()
+          const now = new Date().toISOString()
+          // Robust UUID generation
+          const noteId = (typeof crypto !== 'undefined' && crypto.randomUUID) 
+            ? crypto.randomUUID() 
+            : `local-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+          
+          const newFieldVersions: Record<string, string> = {}
+          const defaultFields = ['title', 'content', 'body', 'excerpt', 'is_task', 'is_completed', 'pinned', 'category', 'priority', 'updated_at', 'created_at']
+          
+          defaultFields.forEach(key => {
+            newFieldVersions[key] = timestamp
+          })
+
+          const fullNote = sanitizeNote({
+            ...note,
+            id: noteId,
+            user_id: userId,
+            hlc_timestamp: timestamp,
+            field_versions: newFieldVersions,
+            updated_at: now,
+            created_at: now,
+            is_task: note.is_task ?? false,
+            is_completed: note.is_completed ?? false,
+            category: note.category || 'personal',
+            priority: note.priority || 'none'
+          })
+
+          console.log('[NotesStore] Inserting note into database:', noteId);
+          const { data, error } = await supabase
+            .from(TABLES.NOTES)
+            .insert([fullNote])
+            .select()
+
+          if (error) {
+            console.error('[NotesStore] Database error:', error.message, error.details);
+            return undefined
+          }
+
+          const newNote = data?.[0] || fullNote
+          set((state) => ({ 
+            notes: [newNote, ...state.notes],
+            selectedNoteId: newNote.id || state.selectedNoteId // Auto-select new note
+          }))
+          
+          console.log('[NotesStore] Note created successfully:', newNote.id);
+          return newNote.id
+        } catch (err) {
+          console.error('[NotesStore] Unexpected error in addNote:', err);
+          return undefined;
+        }
       },
       updateNote: async (id, updates) => {
         if (!supabase) return
-        const { error } = await supabase.from('notes').update(updates).eq('id', id)
-        if (error) console.error('Error updating note:', error)
+
+        const timestamp = hlc.increment()
+        const existingNote = get().notes.find(n => n.id === id)
+        const newFieldVersions: Record<string, string> = { ...(existingNote?.field_versions || {}) }
+        
+        Object.keys(updates).forEach(key => {
+          newFieldVersions[key] = timestamp
+        })
+
+        if ('content' in updates) newFieldVersions['body'] = timestamp;
+        if ('body' in updates) newFieldVersions['content'] = timestamp;
+        newFieldVersions['updated_at'] = timestamp;
+
+        const syncUpdates: Partial<Note> = {
+          ...updates,
+          hlc_timestamp: timestamp,
+          field_versions: newFieldVersions,
+          updated_at: new Date().toISOString()
+        }
+
+        // Optimistic local update
+        get().updateNoteLocal(id, syncUpdates)
+
+        const { error } = await supabase.from(TABLES.NOTES).update(syncUpdates).eq(COLUMNS.ID, id)
+        if (error) {
+          console.error('Error updating note:', error)
+          // Re-fetch on error to ensure consistency
+          get().fetchNotes()
+        }
       },
       updateNoteLocal: (id, updates) => {
         set((state) => ({
@@ -50,40 +169,59 @@ export const useNotesStore = create<NotesState>()(
       },
       deleteNote: async (id) => {
         if (!supabase) return console.warn('Supabase not configured')
-        const deleted_at = new Date().toISOString()
+        const now = new Date().toISOString()
+        const timestamp = hlc.increment()
+        
+        const existingNote = get().notes.find(n => n.id === id)
+        const newFieldVersions: Record<string, string> = { ...(existingNote?.field_versions || {}) }
+        newFieldVersions['deleted_at'] = timestamp
+        newFieldVersions['is_deleted'] = timestamp
+        newFieldVersions['updated_at'] = timestamp
         
         // Optimistic update
         set(state => ({
-          notes: state.notes.map(n => n.id === id ? { ...n, deleted_at } : n)
+          notes: state.notes.map(n => n.id === id ? { ...n, deleted_at: now, is_deleted: true, field_versions: newFieldVersions } : n)
         }))
 
-        const { error } = await supabase.from('notes').update({ deleted_at }).eq('id', id)
+        const { error } = await supabase.from(TABLES.NOTES).update({ 
+          [COLUMNS.DELETED_AT]: now,
+          [COLUMNS.IS_DELETED]: true,
+          deleted_hlc: timestamp,
+          hlc_timestamp: timestamp,
+          field_versions: newFieldVersions,
+          [COLUMNS.UPDATED_AT]: now
+        }).eq(COLUMNS.ID, id)
         if (error) {
           console.error('Error moving note to trash:', error)
-          // Revert on error
-          set(state => ({
-            notes: state.notes.map(n => n.id === id ? { ...n, deleted_at: undefined } : n)
-          }))
+          get().fetchNotes()
         }
       },
       restoreNote: async (id) => {
         if (!supabase) return console.warn('Supabase not configured')
+        const timestamp = hlc.increment()
+        
+        const existingNote = get().notes.find(n => n.id === id)
+        const newFieldVersions: Record<string, string> = { ...(existingNote?.field_versions || {}) }
+        newFieldVersions['deleted_at'] = timestamp
+        newFieldVersions['is_deleted'] = timestamp
+        newFieldVersions['updated_at'] = timestamp
         
         // Optimistic update
         set(state => ({
-          notes: state.notes.map(n => n.id === id ? { ...n, deleted_at: undefined } : n)
+          notes: state.notes.map(n => n.id === id ? { ...n, deleted_at: undefined, is_deleted: false, field_versions: newFieldVersions } : n)
         }))
 
-        const { error } = await supabase.from('notes').update({ deleted_at: null }).eq('id', id)
+        const { error } = await supabase.from(TABLES.NOTES).update({ 
+          [COLUMNS.DELETED_AT]: null,
+          [COLUMNS.IS_DELETED]: false,
+          deleted_hlc: null,
+          hlc_timestamp: timestamp,
+          field_versions: newFieldVersions,
+          [COLUMNS.UPDATED_AT]: new Date().toISOString()
+        }).eq(COLUMNS.ID, id)
         if (error) {
           console.error('Error restoring note:', error)
-          // Revert on error
-          set(state => ({
-            notes: state.notes.map(n => n.id === id ? { ...n, deleted_at: new Date().toISOString() } : n)
-          }))
-        } else {
-          // Re-fetch to ensure sync
-          get().fetchNotes(false)
+          get().fetchNotes()
         }
       },
       permanentlyDeleteNote: async (id) => {
@@ -94,37 +232,105 @@ export const useNotesStore = create<NotesState>()(
           selectedNoteId: state.selectedNoteId === id ? null : state.selectedNoteId
         }))
 
-        const { error } = await supabase.from('notes').delete().eq('id', id)
+        const { error } = await supabase.from(TABLES.NOTES).delete().eq(COLUMNS.ID, id)
         if (error) console.error('Error permanently deleting note:', error)
       },
       setSelectedNoteId: (id) => set({ selectedNoteId: id }),
       fetchNotes: async (includeDeleted = false) => {
         if (!supabase) return
         
-        let query = supabase
-          .from('notes')
-          .select('*')
-        
+        // 1. First fetch: Rapidly load the most recent 50 notes
+        const INITIAL_BATCH_SIZE = 50;
+        let query = supabase.from(TABLES.NOTES).select('*');
         if (!includeDeleted) {
-          query = query.is('deleted_at', null)
+          query = query.eq(COLUMNS.IS_DELETED, false);
         }
         
-        const { data, error } = await query
+        const { data: initialData, error: initialError } = await query
           .order('updated_at', { ascending: false })
+          .limit(INITIAL_BATCH_SIZE);
         
-        if (error) {
-          console.error('Error fetching notes:', error)
-        } else if (data) {
-          set({ notes: data })
+        if (initialError) {
+          console.error('Error fetching initial notes:', initialError);
+          return;
+        }
+
+        if (initialData) {
+          // Immediately update state with the first batch
+          set({ notes: initialData.map(sanitizeNote) });
+
+          // 2. Background catch-up: If we potentially have more notes, fetch the rest
+          if (initialData.length === INITIAL_BATCH_SIZE) {
+            // We fetch the next batch. In a production app with thousands of notes, 
+            // you'd use a loop or cursor, but for most note users, fetching the 
+            // next few hundred is sufficient for a single background pass.
+            const { data: remainingData, error: remainingError } = await query
+              .order('updated_at', { ascending: false })
+              .range(INITIAL_BATCH_SIZE, INITIAL_BATCH_SIZE + 450); // Fetch up to 500 total notes for now
+            
+            if (remainingError) {
+              console.error('Error in background note catch-up:', remainingError);
+            } else if (remainingData && remainingData.length > 0) {
+              set(state => ({
+                notes: [...state.notes, ...remainingData.map(sanitizeNote)]
+              }));
+            }
+          }
         }
       },
       pinNote: async (id, isPinned) => {
+        const timestamp = hlc.increment()
+        const now = new Date().toISOString()
+        
+        const existingNote = get().notes.find(n => n.id === id)
+        const newFieldVersions: Record<string, string> = { ...(existingNote?.field_versions || {}) }
+        newFieldVersions['pinned'] = timestamp
+        newFieldVersions['updated_at'] = timestamp
+        
         set((state) => ({
-          notes: state.notes.map((n) => (n.id === id ? { ...n, pinned: isPinned } : n))
+          notes: state.notes.map((n) => (n.id === id ? { ...n, pinned: isPinned, updated_at: now, hlc_timestamp: timestamp, field_versions: newFieldVersions } : n))
         }))
+        
         if (!supabase) return
-        const { error } = await supabase.from('notes').update({ pinned: isPinned }).eq('id', id)
-        if (error) console.error('Error pinning note:', error)
+        const { error } = await supabase.from(TABLES.NOTES).update({ 
+          [COLUMNS.PINNED]: isPinned,
+          hlc_timestamp: timestamp,
+          field_versions: newFieldVersions,
+          [COLUMNS.UPDATED_AT]: now
+        }).eq(COLUMNS.ID, id)
+        if (error) {
+          console.error('Error pinning note:', error)
+          get().fetchNotes()
+        }
+      },
+      addSubtask: async (noteId, title) => {
+        const note = get().notes.find(n => n.id === noteId)
+        if (!note) return
+
+        const newSubtask: SubTask = {
+          id: crypto.randomUUID(),
+          title,
+          is_completed: false
+        }
+
+        const updatedSubtasks = [...note.subtasks, newSubtask]
+        await get().updateNote(noteId, { subtasks: updatedSubtasks })
+      },
+      updateSubtask: async (noteId, subtaskId, updates) => {
+        const note = get().notes.find(n => n.id === noteId)
+        if (!note) return
+
+        const updatedSubtasks = note.subtasks.map(st => 
+          st.id === subtaskId ? { ...st, ...updates } : st
+        )
+        await get().updateNote(noteId, { subtasks: updatedSubtasks })
+      },
+      deleteSubtask: async (noteId, subtaskId) => {
+        const note = get().notes.find(n => n.id === noteId)
+        if (!note) return
+
+        const updatedSubtasks = note.subtasks.filter(st => st.id !== subtaskId)
+        await get().updateNote(noteId, { subtasks: updatedSubtasks })
       },
     }),
     { name: 'synq-notes' }

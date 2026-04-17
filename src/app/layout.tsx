@@ -1,19 +1,14 @@
 import type { Metadata } from "next";
-import { Inter, Poppins, Roboto_Mono, Manrope } from "next/font/google";
+import { Roboto, Roboto_Mono } from "next/font/google";
 import "./globals.css";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { LayoutContent } from "@/components/layout/layout-content";
 import { DatabaseProvider } from "@/components/providers/database-provider";
 
-const inter = Inter({
+const roboto = Roboto({
+  weight: ["100", "300", "400", "500", "700", "900"],
   subsets: ["latin"],
-  variable: "--font-inter",
-});
-
-const poppins = Poppins({
-  weight: ["300", "400", "500", "600", "700", "800", "900"],
-  subsets: ["latin"],
-  variable: "--font-poppins",
+  variable: "--font-roboto",
 });
 
 const robotoMono = Roboto_Mono({
@@ -21,14 +16,13 @@ const robotoMono = Roboto_Mono({
   variable: "--font-roboto-mono",
 });
 
-const manrope = Manrope({
-  subsets: ["latin"],
-  variable: "--font-manrope",
-});
-
 export const metadata: Metadata = {
   title: "Synq | Productivity OS",
   description: "Minimal productivity for teams and individuals",
+  icons: {
+    icon: "/brand-logo.png",
+    apple: "/brand-logo.png",
+  },
 };
 
 export default function RootLayout({
@@ -38,7 +32,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="h-full dark" suppressHydrationWarning>
-      <body className={`${inter.variable} ${poppins.variable} ${manrope.variable} ${robotoMono.variable} antialiased font-sans h-full overflow-hidden bg-background text-foreground`}>
+      <body className={`${roboto.variable} ${robotoMono.variable} antialiased font-sans h-full overflow-hidden bg-background text-foreground`}>
         <TooltipProvider>
           <DatabaseProvider>
             <LayoutContent>{children}</LayoutContent>

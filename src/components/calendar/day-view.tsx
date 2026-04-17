@@ -9,6 +9,7 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Task, CalendarEvent } from "@/types"
+import { QuickCreateModal } from "@/components/layout/quick-create"
 import { 
   isSameDay,
   format,
@@ -59,6 +60,28 @@ export function DayView({ currentDate, events, tasks }: DayViewProps) {
       {/* Grid */}
       <TimeGrid>
         <div className="flex-1 relative bg-transparent">
+          {/* Grid interactive slots */}
+          <div className="absolute inset-x-0 top-0 bottom-0 flex flex-col pointer-events-none">
+            {Array.from({ length: 24 }).map((_, hour) => {
+              const slotDate = new Date(currentDate)
+              slotDate.setHours(hour, 0, 0, 0)
+              return (
+                <QuickCreateModal
+                  key={hour}
+                  defaultType="event"
+                  defaultDate={slotDate}
+                  trigger={
+                    <button 
+                      type="button"
+                      className="w-full hover:bg-white/[0.02] transition-colors cursor-pointer pointer-events-auto border-none bg-transparent block p-0"
+                      style={{ height: `80px` }} // HOUR_HEIGHT is 80
+                    />
+                  }
+                />
+              )
+            })}
+          </div>
+
           {items.map((item) => {
             const start = item.type === 'event' ? new Date(item.start_date) : new Date(item.due_date!)
             const end = item.type === 'event' ? new Date(item.end_date) : new Date(new Date(item.due_date!).getTime() + 30 * 60000)
@@ -105,7 +128,7 @@ export function DayView({ currentDate, events, tasks }: DayViewProps) {
                         <div className="flex items-center gap-2 text-stone-500">
                           <Clock className="w-3.5 h-3.5" />
                           <span className="text-[11px] font-bold uppercase tracking-tight">
-                            {format(start, 'h:mm a')} – {format(end, 'h:mm a')}
+                            {format(start, 'HH:mm')} – {format(end, 'HH:mm')}
                           </span>
                         </div>
                       </div>

@@ -3,7 +3,6 @@
 import { useState } from "react"
 import { 
   Plus,
-  Calendar as CalendarIcon,
   Clock,
   AlignLeft,
   Target,
@@ -21,15 +20,24 @@ import { useProjectStore } from "@/lib/store/use-project-store"
 import { useNotesStore } from "@/lib/store/use-notes-store"
 import { useEventStore } from "@/lib/store/use-event-store"
 import { AnimatePresence } from "framer-motion"
+import { useUserStore } from "@/lib/store/use-user-store"
 import { RecurrenceModal } from "./recurrence-modal"
 
-export function QuickCreateModal({ trigger, defaultType = 'task' }: { trigger?: React.ReactElement, defaultType?: 'task' | 'project' | 'note' | 'event' }) {
+export function QuickCreateModal({ 
+  trigger, 
+  defaultType = 'task',
+  defaultDate = new Date()
+}: { 
+  trigger?: React.ReactElement, 
+  defaultType?: 'task' | 'project' | 'note' | 'event',
+  defaultDate?: Date 
+}) {
   const [open, setOpen] = useState(false)
   const [type, setType] = useState<'task' | 'project' | 'note' | 'event'>(defaultType)
   const [title, setTitle] = useState("")
   const [description, setDescription] = useState("")
   const [priority, setPriority] = useState("Medium")
-  const [dueDate, setDueDate] = useState<Date>(new Date())
+  const [dueDate, setDueDate] = useState<Date>(defaultDate)
   const [recurrence, setRecurrence] = useState("Does not repeat")
   const [recurrenceModalOpen, setRecurrenceModalOpen] = useState(false)
   const [selectedProjectId, setSelectedProjectId] = useState<string | undefined>(undefined)
@@ -63,8 +71,15 @@ export function QuickCreateModal({ trigger, defaultType = 'task' }: { trigger?: 
       addNote({
         title,
         content: description || "No content yet...",
+        excerpt: (description || "No content yet...").substring(0, 100),
+        body: description || "No content yet...",
         tags: ["quick"],
         pinned: false,
+        is_task: false,
+        is_completed: false,
+        subtasks: [],
+        hlc_timestamp: `${Date.now()}:0:web`,
+        is_deleted: false,
       })
     } else if (type === 'event') {
       addEvent({
@@ -224,12 +239,13 @@ export function QuickCreateModal({ trigger, defaultType = 'task' }: { trigger?: 
                 {/* Row: Profile/Visibility */}
                 <div className="flex gap-6 items-center group">
                   <div className="text-[#c4c7c5]">
-                    <CalendarIcon className="w-5 h-5" />
+                    <div className="w-5 h-5 rounded-full bg-[#4285f4] flex items-center justify-center text-[8px] font-bold text-white uppercase">
+                      {useUserStore.getState().user?.email?.[0] || 'U'}
+                    </div>
                   </div>
                   <div className="flex-1 text-sm">
                     <div className="flex items-center gap-2 font-medium text-[#e3e3e3]">
-                      <span>Guest User</span>
-                      <span className="w-3 h-3 rounded-full bg-[#4285f4]" />
+                      <span>{useUserStore.getState().user?.user_metadata?.full_name || useUserStore.getState().user?.email?.split('@')[0] || "User"}</span>
                     </div>
                     <div className="text-xs text-[#8e918f]">Personal • Private</div>
                   </div>

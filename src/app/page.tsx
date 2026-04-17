@@ -15,7 +15,7 @@ export default function DashboardPage() {
   const { user } = useUserStore()
   const { stats } = useDashboardData()
   const hasMounted = useHasMounted()
-  const greeting = useGreeting(user.name)
+  const greeting = useGreeting(user?.user_metadata?.full_name || user?.email?.split('@')[0] || "User")
 
   const highPriorityCount = stats.tasks.highPriority + stats.events.today
   const activeProjectsCount = stats.projects.active

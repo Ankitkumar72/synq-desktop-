@@ -42,4 +42,4 @@ export const getWeekRangeString = (date: Date) => {
 }
 
 export const getDayFullString = (date: Date) => format(date, 'EEEE, MMMM d, yyyy')
-export const getTimeString = (date: Date) => format(date, 'h:mm a')
+export const getTimeString = (date: Date) => format(date, 'HH:mm')

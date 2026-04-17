@@ -1,7 +1,9 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { CalendarEvent } from '@/types'
+import { hlc } from '@/lib/hlc'
 import { supabase } from '@/lib/supabase.client'
+import { useUserStore } from './use-user-store'
 
 interface EventState {
   events: CalendarEvent[]
@@ -14,14 +16,39 @@ interface EventState {
   fetchEvents: (includeDeleted?: boolean) => Promise<void>
 }
 
+// User state is managed in useUserStore
+
 export const useEventStore = create<EventState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       events: [],
       setEvents: (events) => set({ events }),
       addEvent: async (e) => {
         if (!supabase) return console.warn('Supabase not configured')
-        const { data, error } = await supabase.from('events').insert([e]).select()
+        
+        let userId = useUserStore.getState().user?.id
+        
+        // Robust fallback: fetch user directly if store is empty
+        if (!userId) {
+          const { data: { user } } = await supabase.auth.getUser()
+          userId = user?.id
+        }
+
+        if (!userId) {
+          return console.warn('No authenticated user')
+        }
+
+        const timestamp = hlc.increment()
+        const now = new Date().toISOString()
+        const { data, error } = await supabase
+          .from('events')
+          .insert([{ 
+            ...e, 
+            user_id: userId,
+            hlc_timestamp: timestamp,
+            updated_at: now
+          }])
+          .select()
         if (error) {
           console.error('Error adding event:', error)
         } else if (data) {
@@ -30,38 +57,64 @@ export const useEventStore = create<EventState>()(
       },
       updateEvent: async (id, updates) => {
         if (!supabase) return console.warn('Supabase not configured')
-        const { error } = await supabase.from('events').update(updates).eq('id', id)
-        if (error) console.error('Error updating event:', error)
+        const timestamp = hlc.increment()
+        const now = new Date().toISOString()
+        
+        // Optimistic update
+        set(state => ({
+          events: state.events.map(ev => ev.id === id ? { ...ev, ...updates, hlc_timestamp: timestamp, updated_at: now } : ev)
+        }))
+
+        const { error } = await supabase.from('events').update({
+          ...updates,
+          hlc_timestamp: timestamp,
+          updated_at: now
+        }).eq('id', id)
+        if (error) {
+          console.error('Error updating event:', error)
+          get().fetchEvents()
+        }
       },
       deleteEvent: async (id) => {
         if (!supabase) return console.warn('Supabase not configured')
-        const deleted_at = new Date().toISOString()
+        const now = new Date().toISOString()
+        const timestamp = hlc.increment()
         
         set(state => ({
-          events: state.events.map(ev => ev.id === id ? { ...ev, deleted_at } : ev)
+          events: state.events.map(ev => ev.id === id ? { ...ev, deleted_at: now, is_deleted: true } : ev)
         }))
 
-        const { error } = await supabase.from('events').update({ deleted_at }).eq('id', id)
+        const { error } = await supabase.from('events').update({ 
+          deleted_at: now,
+          is_deleted: true,
+          deleted_hlc: timestamp,
+          hlc_timestamp: timestamp,
+          updated_at: now
+        }).eq('id', id)
         if (error) {
           console.error('Error moving event to trash:', error)
-          set(state => ({
-            events: state.events.map(ev => ev.id === id ? { ...ev, deleted_at: undefined } : ev)
-          }))
+          get().fetchEvents()
         }
       },
       restoreEvent: async (id) => {
         if (!supabase) return console.warn('Supabase not configured')
+        const timestamp = hlc.increment()
+        const now = new Date().toISOString()
         
         set(state => ({
-          events: state.events.map(ev => ev.id === id ? { ...ev, deleted_at: undefined } : ev)
+          events: state.events.map(ev => ev.id === id ? { ...ev, deleted_at: undefined, is_deleted: false } : ev)
         }))
 
-        const { error } = await supabase.from('events').update({ deleted_at: null }).eq('id', id)
+        const { error } = await supabase.from('events').update({ 
+          deleted_at: null,
+          is_deleted: false,
+          deleted_hlc: null,
+          hlc_timestamp: timestamp,
+          updated_at: now
+        }).eq('id', id)
         if (error) {
           console.error('Error restoring event:', error)
-          set(state => ({
-            events: state.events.map(ev => ev.id === id ? { ...ev, deleted_at: new Date().toISOString() } : ev)
-          }))
+          get().fetchEvents()
         }
       },
       permanentlyDeleteEvent: async (id) => {
@@ -77,12 +130,13 @@ export const useEventStore = create<EventState>()(
       fetchEvents: async (includeDeleted = false) => {
         if (!supabase) return
         
+        // RLS automatically filters by user_id (auth.uid() = user_id)
         let query = supabase
           .from('events')
           .select('*')
         
         if (!includeDeleted) {
-          query = query.is('deleted_at', null)
+          query = query.eq('is_deleted', false)
         }
         
         const { data, error } = await query

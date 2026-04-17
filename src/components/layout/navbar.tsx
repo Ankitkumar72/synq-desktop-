@@ -3,12 +3,10 @@
 import { useEffect, useRef } from "react"
 import { Search, Command } from "lucide-react"
 import { Input } from "@/components/ui/input"
-import { usePathname } from "next/navigation"
-import { motion } from "framer-motion"
 import { cn } from "@/lib/utils"
+import { UserNav } from "./user-nav"
 
 export function Navbar() {
-  const pathname = usePathname()
   const searchInputRef = useRef<HTMLInputElement>(null)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -22,15 +20,13 @@ export function Navbar() {
     return () => window.removeEventListener("keydown", handleKeyDown)
   }, [])
 
-  if (pathname.startsWith("/notes")) return null
+
 
   return (
-    <motion.div 
-      initial={{ y: -20, opacity: 0 }}
-      animate={{ y: 0, opacity: 1 }}
+    <div 
       className="h-16 border-b border-white/5 bg-background/50 backdrop-blur-xl sticky top-0 z-30 px-8 flex items-center justify-between transition-colors duration-300"
     >
-      <div className="flex items-center gap-4 flex-1">
+      <div className="flex items-center justify-center gap-4 flex-1">
         <div className="relative w-full max-w-xl group">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-500 group-focus-within:text-blue-500 transition-colors" />
           <Input 
@@ -50,8 +46,8 @@ export function Navbar() {
       </div>
 
       <div className="flex items-center gap-4">
-        {/* Navbar buttons removed as requested */}
+        <UserNav />
       </div>
-    </motion.div>
+    </div>
   )
 }

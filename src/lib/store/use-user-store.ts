@@ -1,23 +1,26 @@
 import { create } from 'zustand'
 import { supabase } from '@/lib/supabase.client'
+import { User } from '@supabase/supabase-js'
 
 interface UserState {
-  user: {
-    name: string
-  }
+  user: User | null
   memberCount: number
   isLoading: boolean
+  isInitialized: boolean
   error: Error | string | null
+  setUser: (user: User | null) => void
+  setInitialized: (initialized: boolean) => void
   fetchMemberCount: () => Promise<void>
 }
 
 export const useUserStore = create<UserState>((set) => ({
-  user: {
-    name: "Ankit Kumar", // Default or fetched user
-  },
+  user: null,
   memberCount: 0,
   isLoading: false,
+  isInitialized: false,
   error: null,
+  setUser: (user) => set({ user }),
+  setInitialized: (initialized) => set({ isInitialized: initialized }),
   fetchMemberCount: async () => {
     set({ isLoading: true, error: null })
     try {
@@ -35,3 +38,4 @@ export const useUserStore = create<UserState>((set) => ({
     }
   },
 }))
+

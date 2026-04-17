@@ -15,7 +15,6 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
-import { cn } from "@/lib/utils"
 import { useEffect } from 'react'
 import { Editor } from '@tiptap/react'
 
@@ -47,10 +46,6 @@ const MenuBar = ({ editor }: { editor: Editor | null }) => {
             variant="ghost"
             size="sm"
             onClick={item.action}
-            className={cn(
-              "h-8 w-8 p-0 rounded-md transition-all duration-200 hover:bg-white/[0.03]",
-              editor.isActive(item.active as string, item.activeOptions) ? "text-[#4B7BFF]" : "text-[#A1A3A7]/40 hover:text-[#E1E2E4]"
-            )}
             title={item.label}
           >
             <Icon className="w-3.5 h-3.5" />
@@ -66,7 +61,7 @@ export function NoteEditor({
   content, 
   onChange 
 }: { 
-  content?: string, 
+  content?: string | null, 
   onChange?: (content: string) => void 
 }) {
   const editor = useEditor({

@@ -27,27 +27,75 @@ import {
   TabsTrigger 
 } from "@/components/ui/tabs"
 import { useTaskStore } from "@/lib/store/use-task-store"
+import { useNotesStore } from "@/lib/store/use-notes-store"
 import { AnimatePage } from "@/components/layout/animate-page"
+import { Task, Note, Priority } from "@/types"
+
+interface DisplayTask {
+  id: string
+  title: string
+  status: 'todo' | 'in-progress' | 'done'
+  priority: Priority
+  project_id?: string
+  due_date?: string
+  is_quick_task: boolean
+  original: Task | Note
+}
 
 export default function TasksPage() {
   const [view, setView] = useState<'list' | 'kanban'>('list')
-  const { tasks, updateTask, deleteTask, fetchTasks, isLoading, error } = useTaskStore()
+  const { tasks, updateTask, deleteTask, fetchTasks, isLoading: tasksLoading, error: tasksError } = useTaskStore()
+  const { notes, updateNote, deleteNote, fetchNotes } = useNotesStore()
   const [searchQuery, setSearchQuery] = useState("")
 
   useEffect(() => {
     fetchTasks()
-  }, [fetchTasks])
+    fetchNotes()
+  }, [fetchTasks, fetchNotes])
 
-  const filteredTasks = tasks.filter(t => 
-    !t.deleted_at && (
-      t.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (t.project_id?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false)
-    )
+  // Map notes that are tasks into a compatible format for display
+  const noteTasks: DisplayTask[] = notes
+    .filter(n => n.is_task && !n.is_deleted)
+    .map(n => ({
+      id: n.id,
+      title: n.title || "Untitled Task",
+      status: n.is_completed ? 'done' : 'todo',
+      priority: n.priority || 'none',
+      project_id: n.category || 'Quick Task',
+      due_date: n.scheduled_time ? new Date(n.scheduled_time).toLocaleDateString() : undefined,
+      is_quick_task: true,
+      original: n
+    }))
+
+  const allTasks: DisplayTask[] = [
+    ...tasks.filter(t => !t.is_deleted).map(t => ({ ...t, is_quick_task: false, original: t })),
+    ...noteTasks
+  ]
+
+  const filteredTasks = allTasks.filter(t => 
+    t.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (t.project_id?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false)
   )
 
   const todoTasks = filteredTasks.filter(t => t.status === 'todo')
   const inProgressTasks = filteredTasks.filter(t => t.status === 'in-progress')
   const doneTasks = filteredTasks.filter(t => t.status === 'done')
+
+  const handleToggleTask = async (task: DisplayTask) => {
+    if (task.is_quick_task) {
+      await updateNote(task.id, { is_completed: task.status !== 'done' })
+    } else {
+      await updateTask(task.id, { status: task.status === 'done' ? 'todo' : 'done' })
+    }
+  }
+
+  const handleDeleteTask = async (task: DisplayTask) => {
+    if (task.is_quick_task) {
+      await deleteNote(task.id)
+    } else {
+      await deleteTask(task.id)
+    }
+  }
 
   const handleAddTask = async () => {
     const title = window.prompt("Enter task title:")
@@ -60,6 +108,9 @@ export default function TasksPage() {
       description: ''
     })
   }
+
+  const isLoading = tasksLoading
+  const error = tasksError
 
   return (
     <AnimatePage>
@@ -177,10 +228,10 @@ export default function TasksPage() {
                     <p className="text-xs text-stone-600">Everything is caught up in this category.</p>
                   </div>
                 ) : (
-                  column.data.map((task) => (
+                  column.data.map((task: DisplayTask) => (
                     <div key={task.id} className="grid grid-cols-[1fr_140px_120px_140px_40px] gap-4 px-8 py-4.5 items-center group hover:bg-white/[0.03] transition-all cursor-default">
                       <div className="flex items-center gap-4">
-                        <div className="cursor-pointer group/check shrink-0" onClick={() => updateTask(task.id, { status: task.status === 'done' ? 'todo' : 'done' })}>
+                        <div className="cursor-pointer group/check shrink-0" onClick={() => handleToggleTask(task)}>
                           {task.status === 'done' ? (
                             <div className="w-5 h-5 rounded-full bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-500 transition-all hover:scale-110">
                               <CheckCircle2 className="w-3.5 h-3.5" />
@@ -191,25 +242,34 @@ export default function TasksPage() {
                             </div>
                           )}
                         </div>
-                        <span className={cn(
-                          "text-[15px] font-semibold transition-all", 
-                          task.status === 'done' 
-                            ? "text-stone-600 line-through decoration-emerald-500/30" 
-                            : "text-white group-hover:text-white"
-                        )}>
-                          {task.title}
-                        </span>
+                        <div className="flex flex-col">
+                          <span className={cn(
+                            "text-[15px] font-semibold transition-all", 
+                            task.status === 'done' 
+                              ? "text-stone-600 line-through decoration-emerald-500/30" 
+                              : "text-white group-hover:text-white"
+                          )}>
+                            {task.title}
+                          </span>
+                          {task.is_quick_task && (
+                            <span className="text-[10px] text-blue-400 font-bold uppercase tracking-wider mt-0.5">Quick Task</span>
+                          )}
+                        </div>
                       </div>
                       <div>
-                        <Badge variant="outline" className="text-[10px] font-black uppercase tracking-widest border-white/10 bg-white/5 text-stone-400 group-hover:text-stone-200 transition-colors py-0.5">
+                        <Badge variant="outline" className={cn(
+                          "text-[10px] font-black uppercase tracking-widest border-white/10 py-0.5",
+                          task.is_quick_task ? "bg-blue-500/10 text-blue-400 border-blue-500/20" : "bg-white/5 text-stone-400"
+                        )}>
                           {task.project_id || 'Personal'}
                         </Badge>
                       </div>
                       <div>
                         <div className={cn(
-                          "flex items-center gap-1.5 px-2.5 py-1 rounded-lg border",
+                          "flex items-center gap-1.5 px-2.5 py-1 rounded-lg border w-fit",
                           task.priority === 'high' ? "bg-rose-500/10 text-rose-500 border-rose-500/20" : 
                           task.priority === 'medium' ? "bg-amber-500/10 text-amber-500 border-amber-500/20" : 
+                          task.priority === 'low' ? "bg-blue-500/10 text-blue-500 border-blue-500/20" :
                           "bg-stone-500/10 text-stone-500 border-stone-500/20"
                         )}>
                           {task.priority === 'high' && <ArrowUp className="w-3 h-3" />}
@@ -228,7 +288,7 @@ export default function TasksPage() {
                         <Button 
                           variant="ghost" 
                           size="icon" 
-                          onClick={() => deleteTask(task.id)}
+                          onClick={() => handleDeleteTask(task)}
                           className="h-8 w-8 text-stone-700 hover:text-rose-500 hover:bg-rose-500/10 opacity-0 group-hover:opacity-100 transition-all rounded-lg"
                         >
                           <MoreHorizontal className="w-4 h-4" />

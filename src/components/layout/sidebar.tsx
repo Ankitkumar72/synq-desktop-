@@ -5,10 +5,9 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
   LayoutDashboard, ListChecks, FolderDot,
-  CalendarDays, FileText, BarChart3, Trash, PanelLeft
+  CalendarDays, FileText, BarChart3, Trash
 } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { motion } from "framer-motion"
 import Image from "next/image"
@@ -17,6 +16,7 @@ import { useProjectStore } from "@/lib/store/use-project-store"
 import { useUserStore } from "@/lib/store/use-user-store"
 import { useUIStore } from "@/lib/store/use-ui-store"
 import { useHasMounted } from "@/hooks/use-has-mounted"
+import { SettingsModal } from "@/components/layout/settings-modal"
 
 interface NavItem {
   name: string
@@ -34,7 +34,7 @@ const NAV_ITEMS: NavItem[] = [
   { name: "Reports", href: "/reports", icon: BarChart3 },
 ]
 
-const TRANSITION = { type: "tween", duration: 0.3, ease: [0.4, 0, 0.2, 1] } as const
+const TRANSITION = { type: "tween", duration: 0.15, ease: [0.16, 1, 0.3, 1] } as const
 
 // Shared animation props for all collapsible text/label elements.
 // Keeps them mounted at all times — avoids DOM mount/unmount CPU spikes.
@@ -53,8 +53,9 @@ export function Sidebar() {
   const { tasks } = useTaskStore()
   const { projects } = useProjectStore()
   const { user } = useUserStore()
-  const { isSidebarOpen, toggleSidebar } = useUIStore()
+  const { isSidebarOpen } = useUIStore()
   const [hovered, setHovered] = React.useState(false)
+  const [isSettingsOpen, setIsSettingsOpen] = React.useState(false)
   const hasMounted = useHasMounted()
 
   if (!hasMounted) return null
@@ -64,10 +65,10 @@ export function Sidebar() {
 
   const badgeCount = { tasks: tasks.length, projects: projects.length } as Record<string, number>
 
-  const initials = user.name
+  const initials = (user?.user_metadata?.full_name || user?.email)
     ?.split(" ")
     .filter(Boolean)
-    .map(n => n[0])
+    .map((n: string) => n[0])
     .join("")
     .toUpperCase() ?? "?"
 
@@ -89,21 +90,23 @@ export function Sidebar() {
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
         className={cn(
-          "absolute inset-y-0 left-0 flex flex-col border-r border-white/10 bg-[#0e0e0e] overflow-hidden",
-          !isSidebarOpen && expanded && "shadow-2xl shadow-black/80 border-white/20"
+          "absolute inset-y-0 left-0 flex flex-col border-r border-border bg-sidebar overflow-hidden",
+          !isSidebarOpen && expanded && "shadow-2xl shadow-black/40 border-white/20"
         )}
       >
         {/* ── Header ───────────────────────────────────────────────── */}
         <div className={cn("p-4 flex items-center", expanded ? "justify-between" : "justify-center")}>
           {/* Logo + "Synq" wordmark */}
           <div className="flex items-center gap-0 min-w-0 relative">
-            <div className="w-7 h-7 rounded-lg overflow-hidden relative shrink-0">
+            <div className="w-6 h-6 relative shrink-0">
               <Image
-                src="/logo.png"
+                src="/brand-logo.png"
                 alt="Synq"
                 fill
-                sizes="28px"
-                className="object-contain scale-[1.3] invert brightness-200"
+                sizes="96px"
+                className="object-contain"
+                quality={100}
+                unoptimized
                 priority
               />
             </div>
@@ -119,22 +122,7 @@ export function Sidebar() {
             </motion.div>
           </div>
 
-          {/* Lock/unlock pin button — only visible when expanded */}
-          <motion.div
-            {...textReveal(expanded)}
-            style={{ willChange: "width, opacity" }}
-            className="overflow-hidden"
-          >
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={toggleSidebar}
-              aria-label={isSidebarOpen ? "Unlock sidebar" : "Lock sidebar"}
-              className="h-8 w-8 text-stone-500 hover:text-white hover:bg-white/10 rounded-lg shrink-0"
-            >
-              <PanelLeft className={cn("w-4 h-4 transition-transform", isSidebarOpen && "text-blue-500")} />
-            </Button>
-          </motion.div>
+
         </div>
 
 
@@ -150,16 +138,16 @@ export function Sidebar() {
                   href={href}
                   title={!expanded ? name : undefined}
                   className={cn(
-                    "flex items-center px-4 py-2.5 text-[15px] font-medium transition-colors group",
+                    "flex items-center px-4 py-2 text-[14px] font-medium transition-colors group",
                     active
-                      ? "bg-white/5 text-white"
-                      : "text-stone-400 hover:text-white hover:bg-white/5"
+                      ? "bg-white/5 text-foreground"
+                      : "text-muted-foreground hover:text-foreground hover:bg-white/5"
                   )}
                 >
                   <div className="flex items-center min-w-0">
                     <Icon className={cn(
                       "w-[18px] h-[18px] shrink-0 transition-colors",
-                      active ? "text-white" : "text-stone-500 group-hover:text-stone-300"
+                      active ? "text-primary" : "text-muted-foreground group-hover:text-stone-300"
                     )} />
 
                     {/* FIX: Nav label — no AnimatePresence, animate width+opacity */}
@@ -193,7 +181,7 @@ export function Sidebar() {
                     >
                       <span className={cn(
                         "font-mono text-[10px] font-black tracking-tighter px-2 py-0.5 rounded-md shrink-0",
-                        active ? "text-white bg-white/10" : "text-stone-500 bg-white/5"
+                        active ? "text-primary bg-primary/10" : "text-muted-foreground bg-white/5"
                       )}>
                         {badge}
                       </span>
@@ -213,7 +201,7 @@ export function Sidebar() {
                 style={{ willChange: "width, opacity" }}
                 className="overflow-hidden whitespace-nowrap px-4 mb-2"
               >
-                <p className="text-[9px] font-black uppercase tracking-[0.25em] text-stone-600">
+                <p className="label-mono">
                   Favorites
                 </p>
               </motion.div>
@@ -223,7 +211,7 @@ export function Sidebar() {
                   <Link
                     key={project.id}
                     href={`/projects/${project.id}`}
-                    className="flex items-center px-4 py-1.5 text-[15px] text-stone-400 hover:text-white hover:bg-white/5 transition-all font-medium min-w-0"
+                    className="flex items-center px-4 py-1.5 text-[14px] text-muted-foreground hover:text-foreground hover:bg-white/5 transition-all font-medium min-w-0"
                   >
                     <div className={cn("w-2 h-2 rounded-full shrink-0", project.color)} />
 
@@ -256,11 +244,11 @@ export function Sidebar() {
             className={cn(
               "flex items-center transition-all group",
               expanded
-                ? "px-4 py-3 text-[15px] font-medium text-stone-500 hover:text-white hover:bg-white/5"
+                ? "px-4 py-3 text-[14px] font-medium text-muted-foreground hover:text-foreground hover:bg-white/5"
                 : "py-3 justify-center"
             )}
           >
-            <Trash className="w-[18px] h-[18px] text-stone-600 group-hover:text-stone-100 transition-colors shrink-0" />
+            <Trash className="w-[18px] h-[18px] text-muted-foreground group-hover:text-foreground transition-colors shrink-0" />
 
             {/* FIX: "Trash" label — keep mounted, animate width/opacity */}
             <motion.div
@@ -281,7 +269,9 @@ export function Sidebar() {
 
         {/* ── User ─────────────────────────────────────────────────── */}
         <div className="p-3 border-t border-white/5">
-          <div className={cn(
+          <div 
+            onClick={() => setIsSettingsOpen(true)}
+            className={cn(
             "p-2 rounded-xl hover:bg-white/5 transition-all group cursor-pointer border border-transparent hover:border-white/5 flex items-center",
             expanded ? "" : "justify-center"
           )}>
@@ -302,13 +292,17 @@ export function Sidebar() {
               className="overflow-hidden whitespace-nowrap"
             >
               <div className="flex-1 min-w-0">
-                <p className="text-[14px] font-bold text-white truncate leading-tight tracking-tight">{user.name}</p>
+                <p className="text-[14px] font-bold text-white truncate leading-tight tracking-tight">
+                  {user?.user_metadata?.full_name || user?.email?.split('@')[0] || "User"}
+                </p>
                 <p className="text-[11px] text-stone-500 font-medium truncate">Owner</p>
               </div>
             </motion.div>
           </div>
         </div>
       </motion.div>
+
+      <SettingsModal open={isSettingsOpen} onOpenChange={setIsSettingsOpen} />
     </motion.aside>
   )
 }

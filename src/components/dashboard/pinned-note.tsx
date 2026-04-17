@@ -35,7 +35,7 @@ export function PinnedNote() {
         </h4>
         <div 
           className="text-[14px] text-stone-400 line-clamp-6 leading-[1.6] font-medium mb-8 prose prose-sm prose-invert max-w-none"
-          dangerouslySetInnerHTML={{ __html: pinnedNote.content }}
+          dangerouslySetInnerHTML={{ __html: pinnedNote.content || '' }}
         />
         <div className="mt-auto flex items-center justify-between pt-6 border-t border-white/5">
           <div className="flex items-center gap-2.5 text-[10px] text-stone-500 font-extrabold uppercase tracking-widest">
