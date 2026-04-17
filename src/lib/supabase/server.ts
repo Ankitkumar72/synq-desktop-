@@ -4,9 +4,23 @@ import { cookies } from 'next/headers'
 export async function createClient() {
   const cookieStore = await cookies()
 
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+  // During build time on Vercel, these might be missing.
+  // Return a dummy client to avoid crashing the build.
+  if (!url || !key) {
+    return createServerClient('https://placeholder.supabase.co', 'placeholder', {
+      cookies: {
+        getAll() { return [] },
+        setAll() { }
+      }
+    })
+  }
+
   return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    url,
+    key,
     {
       cookies: {
         getAll() {

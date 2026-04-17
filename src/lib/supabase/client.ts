@@ -5,7 +5,7 @@ export function createClient() {
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
   if (!url || !key) {
-    return {} as ReturnType<typeof createBrowserClient>
+    return createBrowserClient('https://placeholder.supabase.co', 'placeholder')
   }
 
   return createBrowserClient(url, key)
