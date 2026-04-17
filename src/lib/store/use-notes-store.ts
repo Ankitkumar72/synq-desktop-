@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { TABLES, COLUMNS } from '@/lib/constants'
-import { hlc } from '@/lib/hlc'
+import { hlc, HLC } from '@/lib/hlc'
 import { Note, SubTask } from '@/types'
 import { supabase } from '@/lib/supabase.client'
 import { useUserStore } from './use-user-store'
@@ -37,6 +37,7 @@ interface NotesState {
   addNote: (note: Partial<Note> & { title: string }) => Promise<string | undefined>
   updateNote: (id: string, updates: Partial<Note>) => Promise<void>
   updateNoteLocal: (id: string, updates: Partial<Note>) => void
+  mergeNoteLocal: (remoteNote: Note) => void
   deleteNote: (id: string) => Promise<void>
   restoreNote: (id: string) => Promise<void>
   permanentlyDeleteNote: (id: string) => Promise<void>
@@ -80,6 +81,7 @@ export const useNotesStore = create<NotesState>()(
 
           const timestamp = hlc.increment()
           const now = new Date().toISOString()
+          
           // Robust UUID generation
           const noteId = (typeof crypto !== 'undefined' && crypto.randomUUID) 
             ? crypto.randomUUID() 
@@ -106,6 +108,12 @@ export const useNotesStore = create<NotesState>()(
             priority: note.priority || 'none'
           })
 
+          // OPTIMISTIC UPDATE: Add to local state immediately
+          set((state) => ({ 
+            notes: [fullNote, ...state.notes],
+            selectedNoteId: fullNote.id // Auto-select new note
+          }))
+
           console.log('[NotesStore] Inserting note into database:', noteId);
           const { data, error } = await supabase
             .from(TABLES.NOTES)
@@ -113,18 +121,24 @@ export const useNotesStore = create<NotesState>()(
             .select()
 
           if (error) {
-            console.error('[NotesStore] Database error:', error.message, error.details);
+            console.error('[NotesStore] Database error, rolling back:', error.message);
+            // ROLLBACK: Remove the note if insertion failed
+            set((state) => ({
+              notes: state.notes.filter(n => n.id !== noteId),
+              selectedNoteId: state.selectedNoteId === noteId ? (state.notes.length > 1 ? state.notes[1].id : null) : state.selectedNoteId
+            }))
             return undefined
           }
 
-          const newNote = data?.[0] || fullNote
-          set((state) => ({ 
-            notes: [newNote, ...state.notes],
-            selectedNoteId: newNote.id || state.selectedNoteId // Auto-select new note
-          }))
+          if (data?.[0]) {
+            // Update with the official record from database (e.g. server-side timestamps)
+            set((state) => ({ 
+              notes: state.notes.map(n => n.id === noteId ? data[0] : n)
+            }))
+          }
           
-          console.log('[NotesStore] Note created successfully:', newNote.id);
-          return newNote.id
+          console.log('[NotesStore] Note created successfully:', noteId);
+          return noteId
         } catch (err) {
           console.error('[NotesStore] Unexpected error in addNote:', err);
           return undefined;
@@ -166,6 +180,56 @@ export const useNotesStore = create<NotesState>()(
         set((state) => ({
           notes: state.notes.map((n) => (n.id === id ? { ...n, ...updates } : n))
         }))
+      },
+      mergeNoteLocal: (remoteNote) => {
+        // Sync our local clock with the incoming note to prevent drift
+        hlc.receive(remoteNote.hlc_timestamp)
+
+        set((state) => {
+          const existingIndex = state.notes.findIndex(n => n.id === remoteNote.id)
+          
+          if (existingIndex === -1) {
+            // New note arrived from remote
+            return { notes: [sanitizeNote(remoteNote), ...state.notes] }
+          }
+
+          const existing = state.notes[existingIndex]
+          
+          // If the whole record is newer, or we don't have field versions, just merge it
+          if (HLC.compare(remoteNote.hlc_timestamp, existing.hlc_timestamp) > 0) {
+            // Combine fields selectively
+            const mergedNode = { ...existing }
+            const remoteFields = remoteNote.field_versions || {}
+            const localFields = existing.field_versions || {}
+
+            Object.entries(remoteNote).forEach(([key, value]) => {
+              const remoteV = remoteFields[key]
+              const localV = localFields[key]
+
+              // If remote field is newer or missing locally
+              if (remoteV && (!localV || HLC.compare(remoteV, localV) > 0)) {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                (mergedNode as any)[key] = value
+                if (!mergedNode.field_versions) mergedNode.field_versions = {}
+                mergedNode.field_versions[key] = remoteV
+              }
+            })
+            
+            // Special handling for content/body syncing
+            if (remoteFields['content'] && (!localFields['content'] || HLC.compare(remoteFields['content'], localFields['content']) > 0)) {
+              mergedNode.body = remoteNote.body
+              mergedNode.content = remoteNote.content
+            }
+
+            mergedNode.hlc_timestamp = remoteNote.hlc_timestamp
+            
+            const newNotes = [...state.notes]
+            newNotes[existingIndex] = mergedNode
+            return { notes: newNotes }
+          }
+
+          return state // No update needed
+        })
       },
       deleteNote: async (id) => {
         if (!supabase) return console.warn('Supabase not configured')

@@ -18,7 +18,7 @@ export default function NotesPage() {
   const { isSidebarOpen } = useUIStore()
   const [searchQuery, setSearchQuery] = useState("")
 
-  const debouncedUpdate = useDebounce(updateNote, 1000)
+  const debouncedUpdate = useDebounce(updateNote, 400)
 
   const filteredNotes = useMemo(() => {
     const result = notes

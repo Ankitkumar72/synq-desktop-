@@ -11,6 +11,8 @@ import { useProfileStore } from '@/lib/store/use-profile-store'
 import { registerDevice, type DeviceRegistrationResult } from '@/lib/device-manager'
 import { DeviceLimitPage } from '@/components/device-limit-page'
 import { hlc, HLC } from '@/lib/hlc'
+import { Task, Project, Note, CalendarEvent } from '@/types'
+import { AuthChangeEvent, Session, RealtimePostgresChangesPayload } from '@supabase/supabase-js'
 
 export function DatabaseProvider({ children }: { children: React.ReactNode }) {
   const { setTasks } = useTaskStore()
@@ -39,17 +41,17 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
     if (tasks) {
       setTasks(tasks)
       // Sync HLC with existing data
-      tasks.forEach(t => t.hlc_timestamp && hlc.receive(t.hlc_timestamp))
+      tasks.forEach((t: Task) => t.hlc_timestamp && hlc.receive(t.hlc_timestamp))
     }
     if (projects) setProjects(projects)
     if (notes) {
       setNotes(notes.map(sanitizeNote))
       // Sync HLC with existing data
-      notes.forEach(n => n.hlc_timestamp && hlc.receive(n.hlc_timestamp))
+      notes.forEach((n: Note) => n.hlc_timestamp && hlc.receive(n.hlc_timestamp))
     }
     if (events) {
       setEvents(events)
-      events.forEach(e => e.hlc_timestamp && hlc.receive(e.hlc_timestamp))
+      events.forEach((e: CalendarEvent) => e.hlc_timestamp && hlc.receive(e.hlc_timestamp))
     }
   }, [setTasks, setProjects, setNotes, setEvents])
 
@@ -82,7 +84,7 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
     checkUserAndFetch()
 
     // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event: AuthChangeEvent, session: Session | null) => {
       if (session) {
         useUserStore.getState().setUser(session.user)
 
@@ -113,67 +115,63 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
     })
 
     // Real-time handling functions
-    const handleRemoteNotes = (payload: any) => {
+    const handleRemoteNotes = (payload: RealtimePostgresChangesPayload<Note>) => {
       const { eventType, new: newRecord, old: oldRecord } = payload
       const store = useNotesStore.getState()
-      hlc.receive(newRecord.hlc_timestamp || '')
+      if (newRecord && 'hlc_timestamp' in newRecord) hlc.receive(newRecord.hlc_timestamp || '')
       
-      if (eventType === 'INSERT') {
-        const existing = store.notes.find(n => n.id === newRecord.id)
-        if (!existing) store.setNotes([sanitizeNote(newRecord), ...store.notes])
-      } else if (eventType === 'UPDATE') {
-        const existing = store.notes.find(n => n.id === newRecord.id)
-        if (!existing || HLC.compare(newRecord.hlc_timestamp, existing.hlc_timestamp) > 0) {
-          store.updateNoteLocal(newRecord.id, sanitizeNote(newRecord))
-        }
-      } else if (eventType === 'DELETE') {
+      if (eventType === 'INSERT' && 'id' in newRecord) {
+        store.mergeNoteLocal(newRecord as Note)
+      } else if (eventType === 'UPDATE' && 'id' in newRecord) {
+        store.mergeNoteLocal(newRecord as Note)
+      } else if (eventType === 'DELETE' && oldRecord && 'id' in oldRecord) {
         store.setNotes(store.notes.filter(n => n.id !== oldRecord.id))
       }
     }
 
-    const handleRemoteTasks = (payload: any) => {
+    const handleRemoteTasks = (payload: RealtimePostgresChangesPayload<Task>) => {
       const { eventType, new: newRecord, old: oldRecord } = payload
       const store = useTaskStore.getState()
-      if (newRecord?.hlc_timestamp) hlc.receive(newRecord.hlc_timestamp)
+      if (newRecord && 'hlc_timestamp' in newRecord && newRecord.hlc_timestamp) hlc.receive(newRecord.hlc_timestamp)
 
-      if (eventType === 'INSERT') {
+      if (eventType === 'INSERT' && newRecord && 'id' in newRecord) {
         const existing = store.tasks.find(t => t.id === newRecord.id)
-        if (!existing) store.setTasks([newRecord, ...store.tasks])
-      } else if (eventType === 'UPDATE') {
+        if (!existing) store.setTasks([newRecord as Task, ...store.tasks])
+      } else if (eventType === 'UPDATE' && newRecord && 'id' in newRecord) {
         const existing = store.tasks.find(t => t.id === newRecord.id)
-        if (!existing || HLC.compare(newRecord.hlc_timestamp, existing.hlc_timestamp || '') > 0) {
-          store.setTasks(store.tasks.map(t => t.id === newRecord.id ? newRecord : t))
+        if (!existing || HLC.compare(newRecord.hlc_timestamp as string, existing.hlc_timestamp || '') > 0) {
+          store.setTasks(store.tasks.map(t => t.id === newRecord.id ? (newRecord as Task) : t))
         }
-      } else if (eventType === 'DELETE') {
+      } else if (eventType === 'DELETE' && oldRecord && 'id' in oldRecord) {
         store.setTasks(store.tasks.filter(t => t.id !== oldRecord.id))
       }
     }
 
-    const handleRemoteProjects = (payload: any) => {
+    const handleRemoteProjects = (payload: RealtimePostgresChangesPayload<Project>) => {
       const { eventType, new: newRecord, old: oldRecord } = payload
       const store = useProjectStore.getState()
       
-      if (eventType === 'INSERT') {
+      if (eventType === 'INSERT' && newRecord && 'id' in newRecord) {
         const existing = store.projects.find(p => p.id === newRecord.id)
-        if (!existing) store.setProjects([newRecord, ...store.projects])
-      } else if (eventType === 'UPDATE') {
+        if (!existing) store.setProjects([newRecord as Project, ...store.projects])
+      } else if (eventType === 'UPDATE' && newRecord && 'id' in newRecord) {
         // Simple overwrite for projects
-        store.setProjects(store.projects.map(p => p.id === newRecord.id ? newRecord : p))
-      } else if (eventType === 'DELETE') {
+        store.setProjects(store.projects.map(p => p.id === newRecord.id ? (newRecord as Project) : p))
+      } else if (eventType === 'DELETE' && oldRecord && 'id' in oldRecord) {
         store.setProjects(store.projects.filter(p => p.id !== oldRecord.id))
       }
     }
 
-    const handleRemoteEvents = (payload: any) => {
+    const handleRemoteEvents = (payload: RealtimePostgresChangesPayload<CalendarEvent>) => {
       const { eventType, new: newRecord, old: oldRecord } = payload
       const store = useEventStore.getState()
       
-      if (eventType === 'INSERT') {
+      if (eventType === 'INSERT' && newRecord && 'id' in newRecord) {
         const existing = store.events.find(e => e.id === newRecord.id)
-        if (!existing) store.setEvents([...store.events, newRecord])
-      } else if (eventType === 'UPDATE') {
-        store.setEvents(store.events.map(e => e.id === newRecord.id ? newRecord : e))
-      } else if (eventType === 'DELETE') {
+        if (!existing) store.setEvents([...store.events, newRecord as CalendarEvent])
+      } else if (eventType === 'UPDATE' && newRecord && 'id' in newRecord) {
+        store.setEvents(store.events.map(e => e.id === newRecord.id ? (newRecord as CalendarEvent) : e))
+      } else if (eventType === 'DELETE' && oldRecord && 'id' in oldRecord) {
         store.setEvents(store.events.filter(e => e.id !== oldRecord.id))
       }
     }
@@ -192,7 +190,7 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
       subscription.unsubscribe()
       channels.forEach(channel => supabase.removeChannel(channel))
     }
-  }, [fetchData])
+  }, [fetchData, setEvents, setNotes, setProjects, setTasks])
 
   // Block the entire app if device limit is exceeded
   if (deviceLimitExceeded && deviceInfo) {

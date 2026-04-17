@@ -35,8 +35,10 @@ export class HLC {
   toString(): string {
     // Switching to simple decimal counter to match mobile app expectations (:0:node instead of :0000:node)
     const hlcString = `${this.lastTimestamp}:${this.counter}:${this.nodeId}`;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     if (!(globalThis as any).hlc_logged) {
       console.log(`[HLC] Sync initialized: ${this.nodeId} (v2-decimal)`);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (globalThis as any).hlc_logged = true;
     }
     return hlcString;
