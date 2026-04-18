@@ -36,7 +36,7 @@ export default function Error({
             Something went wrong
           </h1>
           <p className="text-stone-400 text-[16px] leading-relaxed font-medium">
-            An unexpected error occurred. We've been notified and are looking into it.
+            An unexpected error occurred. We&apos;ve been notified and are looking into it.
           </p>
           <div className="p-4 bg-black/40 rounded-2xl border border-white/5 text-left">
             <p className="text-[12px] font-mono text-stone-500 break-all">

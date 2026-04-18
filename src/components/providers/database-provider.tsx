@@ -1,10 +1,10 @@
 "use client"
 
-import { useEffect, useCallback, useState } from 'react'
+import { useEffect, useCallback, useState, useRef } from 'react'
 import { supabase } from '@/lib/supabase.client'
 import { useTaskStore } from '@/lib/store/use-task-store'
 import { useProjectStore } from '@/lib/store/use-project-store'
-import { useNotesStore, sanitizeNote } from '@/lib/store/use-notes-store'
+import { useNotesStore } from '@/lib/store/use-notes-store'
 import { useUserStore } from '@/lib/store/use-user-store'
 import { useEventStore } from '@/lib/store/use-event-store'
 import { useProfileStore } from '@/lib/store/use-profile-store'
@@ -15,62 +15,47 @@ import { Task, Project, Note, CalendarEvent } from '@/types'
 import { AuthChangeEvent, Session, RealtimePostgresChangesPayload } from '@supabase/supabase-js'
 
 export function DatabaseProvider({ children }: { children: React.ReactNode }) {
-  const setTasks = useTaskStore((s) => s.setTasks)
-  const setProjects = useProjectStore((s) => s.setProjects)
-  const setNotes = useNotesStore((s) => s.setNotes)
-  const setEvents = useEventStore((s) => s.setEvents)
-
   const [deviceLimitExceeded, setDeviceLimitExceeded] = useState(false)
   const [deviceInfo, setDeviceInfo] = useState<DeviceRegistrationResult | null>(null)
+  
+  // Prevent double-initialization
+  const initStarted = useRef(false)
 
   const fetchData = useCallback(async () => {
-    // RLS automatically scopes all queries to auth.uid() = user_id
-    // We also filter out soft-deleted records
-    const [
-      { data: tasks },
-      { data: projects },
-      { data: notes },
-      { data: events }
-    ] = await Promise.all([
-      supabase.from('tasks').select('*').is('deleted_at', null).order('created_at', { ascending: false }),
-      supabase.from('projects').select('*').order('created_at', { ascending: false }),
-      supabase.from('notes').select('*').is('deleted_at', null).order('updated_at', { ascending: false }),
-      supabase.from('events').select('*').is('deleted_at', null).order('start_date', { ascending: true }),
-    ])
+    // Rely on individual stores' optimized fetchers (handling chunking natively)
+    // We run these in parallel, but they internally limit the payloads
+    const promises = [
+      useTaskStore.getState().fetchTasks(),
+      useNotesStore.getState().fetchNotes(),
+      useEventStore.getState().fetchEvents()
+    ]
+    
+    // Project store doesn't have a fetchProjects method yet, so we'll fetch it safely here
+    const fetchProj = async () => {
+      const { data } = await supabase.from('projects').select('*').order('created_at', { ascending: false })
+      if (data) useProjectStore.getState().setProjects(data)
+    }
+    promises.push(fetchProj())
 
-    if (tasks) {
-      setTasks(tasks)
-      // Sync HLC with existing data
-      tasks.forEach((t: Task) => t.hlc_timestamp && hlc.receive(t.hlc_timestamp))
-    }
-    if (projects) setProjects(projects)
-    if (notes) {
-      setNotes(notes.map(sanitizeNote))
-      // Sync HLC with existing data
-      notes.forEach((n: Note) => n.hlc_timestamp && hlc.receive(n.hlc_timestamp))
-    }
-    if (events) {
-      setEvents(events)
-      events.forEach((e: CalendarEvent) => e.hlc_timestamp && hlc.receive(e.hlc_timestamp))
-    }
-  }, [setTasks, setProjects, setNotes, setEvents])
+    await Promise.allSettled(promises)
+  }, [])
 
   useEffect(() => {
-    // Listen for auth changes. Supabase v2 fires INITIAL_SESSION on mount.
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event: AuthChangeEvent, session: Session | null) => {
-      console.log(`[DatabaseProvider] Auth change detected: ${_event}`)
+    // Extract the init routine so both methods (manual & event) can run it safely
+    const executeInit = async (session: Session | null) => {
+      if (initStarted.current) return
+      initStarted.current = true
+
       try {
         if (session) {
           useUserStore.getState().setUser(session.user)
 
-          // Fetch profile on auth change
           await useProfileStore.getState().fetchProfile().catch(err => {
-            console.error('[DatabaseProvider] Profile fetch failed on auth change:', err)
+            console.error('[DatabaseProvider] Profile fetch failed:', err)
           })
 
-          // Re-register device on auth change (e.g. token refresh)
           const result = await registerDevice().catch(err => {
-            console.error('[DatabaseProvider] Device registration failed on auth change:', err)
+            console.error('[DatabaseProvider] Device registration failed:', err)
             return { allowed: true }
           })
 
@@ -82,16 +67,17 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
 
           setDeviceLimitExceeded(false)
           setDeviceInfo(null)
-          fetchData().catch(err => {
-            console.error('[DatabaseProvider] Data fetch failed on auth change:', err)
+          
+          await fetchData().catch(err => {
+            console.error('[DatabaseProvider] Data fetch failed:', err)
           })
         } else {
-          // Clear data on sign out
+          // Clear data if logged out
           useUserStore.getState().setUser(null)
-          setTasks([])
-          setProjects([])
-          setNotes([])
-          setEvents([])
+          useTaskStore.getState().setTasks([])
+          useProjectStore.getState().setProjects([])
+          useNotesStore.getState().setNotes([])
+          useEventStore.getState().setEvents([])
           setDeviceLimitExceeded(false)
           setDeviceInfo(null)
         }
@@ -100,6 +86,25 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
       } finally {
         // Always ensure isInitialized is true after any session init attempt
         useUserStore.getState().setInitialized(true)
+      }
+    }
+
+    // Manual initial check (critical for standalone Electron/desktop runtimes)
+    supabase.auth.getSession().then(({ data: { session }, error }) => {
+      if (error) console.error('[DatabaseProvider] getSession error:', error)
+      executeInit(session)
+    })
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event: AuthChangeEvent, session: Session | null) => {
+      console.log(`[DatabaseProvider] Auth change detected: ${_event}`)
+      // If SIGNED_IN or SIGNED_OUT happened after we initialized already, we bypass the lock to reload context
+      if ((_event === 'SIGNED_IN' || _event === 'SIGNED_OUT') && initStarted.current) {
+         initStarted.current = false // lift exact lock so it can re-init
+         executeInit(session)
+      } else if (!initStarted.current) {
+         // Fallback just in case getSession hasn't run yet
+         executeInit(session)
       }
     })
 
@@ -179,7 +184,7 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
       subscription.unsubscribe()
       channels.forEach(channel => supabase.removeChannel(channel))
     }
-  }, [fetchData, setEvents, setNotes, setProjects, setTasks])
+  }, [fetchData])
 
   // Block the entire app if device limit is exceeded
   if (deviceLimitExceeded && deviceInfo) {
