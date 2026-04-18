@@ -15,9 +15,12 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Editor } from '@tiptap/react'
 import { useNotesStore } from '@/lib/store/use-notes-store'
+import { useUserStore } from '@/lib/store/use-user-store'
+import { supabase } from '@/lib/supabase.client'
+import { hlc } from '@/lib/hlc'
 
 const MenuBar = ({ editor }: { editor: Editor | null }) => {
   if (!editor) return null
@@ -58,9 +61,7 @@ const MenuBar = ({ editor }: { editor: Editor | null }) => {
 }
 
 
-interface MarkdownStorage {
-  getMarkdown: () => string
-}
+
 
 export function NoteEditor({ 
   id,
@@ -72,7 +73,11 @@ export function NoteEditor({
   onChange?: (content: string) => void 
 }) {
   const { setFocusedNoteId } = useNotesStore()
+  const { user } = useUserStore()
+  const [isIdle, setIsIdle] = useState(true)
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const broadcastTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const idleTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   
   const editor = useEditor({
     extensions: [
@@ -91,8 +96,33 @@ export function NoteEditor({
     onUpdate: ({ editor }) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const markdown = (editor.storage as any).markdown.getMarkdown()
+      const body = editor.getText().split('\n')[0] || '' // Simple excerpt
+      const title = editor.getText().split('\n')[0] || 'Untitled'
+
+      // Mark as NOT idle immediately on user input
+      setIsIdle(false)
+      if (idleTimeoutRef.current) clearTimeout(idleTimeoutRef.current)
+      idleTimeoutRef.current = setTimeout(() => setIsIdle(true), 3000)
       
-      // Keystroke-level debounced save
+      // 1. INSTANT BROADCAST (200ms) - Sub-perceptual feedback for peers
+      if (broadcastTimeoutRef.current) clearTimeout(broadcastTimeoutRef.current)
+      broadcastTimeoutRef.current = setTimeout(() => {
+        if (!user?.id) return
+        const channel = supabase.channel(`synq:notes:${user.id}`)
+        channel.send({
+          type: 'broadcast',
+          event: 'note-update',
+          payload: { 
+            id, 
+            content: markdown, 
+            body,
+            title,
+            hlc_timestamp: hlc.increment() 
+          }
+        })
+      }, 200)
+
+      // 2. PERSISTENCE SAVE (500ms) - Commit to database
       if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current)
       saveTimeoutRef.current = setTimeout(() => {
         onChange?.(markdown)
@@ -126,12 +156,20 @@ export function NoteEditor({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const currentMarkdown = (editor.storage as any).markdown?.getMarkdown()
     
-    // FOCUS GUARD: Only update editor content if it's different AND 
-    // the editor is NOT currently focused to avoid cursor jumps.
-    if (content !== undefined && content !== currentMarkdown && !editor.isFocused) {
-      editor.commands.setContent(content || '')
+    // FOCUS GUARD: Only update editor content if it's different.
+    // We allow updates if:
+    // 1. Editor is not focused OR
+    // 2. User is idle (hasn't typed for 3s)
+    if (content !== undefined && content !== currentMarkdown) {
+      if (!editor.isFocused || isIdle) {
+        // preserve selection if possible or just reset
+        const { from, to } = editor.state.selection
+        editor.commands.setContent(content || '')
+        // Selection might be invalid if content changed significantly, but try to restore
+        try { editor.commands.setTextSelection({ from, to }) } catch { /* ignore */ }
+      }
     }
-  }, [content, editor])
+  }, [content, editor, isIdle])
 
   return (
     <div className="flex flex-col h-full bg-transparent max-w-4xl mx-auto w-full group">

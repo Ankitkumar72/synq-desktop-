@@ -160,7 +160,7 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
       // Use unique channel names per attempt to avoid stale channel reuse
       const suffix = attempt > 0 ? `_r${attempt}` : ''
       const channel = supabase
-        .channel(`synq:${name}${suffix}`)
+        .channel(`synq:${name}${name === 'notes' ? '' : suffix}${name === 'notes' ? `:${userId}` : ''}`)
         .on(
           'postgres_changes',
           {
@@ -171,6 +171,25 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
           },
           handler as (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => void
         )
+
+      if (name === 'notes') {
+        channel.on(
+          'broadcast',
+          { event: 'note-update' },
+          ({ payload }) => {
+            // Convert broadcast payload to a mock Postgres payload to reuse handleRemoteNotes
+            handleRemoteNotes({ 
+              eventType: 'UPDATE', 
+              new: payload as Note, 
+              old: {} as Note,
+              schema: 'public',
+              table: 'notes',
+              commit_timestamp: new Date().toISOString(),
+              errors: []
+            })
+          }
+        )
+      }
 
       channel.subscribe((status, err) => {
         console.log(`[Realtime] ${name}: ${status}${err ? ` — ${err.message}` : ''}`)
