@@ -15,10 +15,10 @@ import { Task, Project, Note, CalendarEvent } from '@/types'
 import { AuthChangeEvent, Session, RealtimePostgresChangesPayload } from '@supabase/supabase-js'
 
 export function DatabaseProvider({ children }: { children: React.ReactNode }) {
-  const { setTasks } = useTaskStore()
-  const { setProjects } = useProjectStore()
-  const { setNotes } = useNotesStore()
-  const { setEvents } = useEventStore()
+  const setTasks = useTaskStore((s) => s.setTasks)
+  const setProjects = useProjectStore((s) => s.setProjects)
+  const setNotes = useNotesStore((s) => s.setNotes)
+  const setEvents = useEventStore((s) => s.setEvents)
 
   const [deviceLimitExceeded, setDeviceLimitExceeded] = useState(false)
   const [deviceInfo, setDeviceInfo] = useState<DeviceRegistrationResult | null>(null)
@@ -56,57 +56,7 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
   }, [setTasks, setProjects, setNotes, setEvents])
 
   useEffect(() => {
-    // Initial fetch only if session exists
-    const checkUserAndFetch = async () => {
-      console.log('[DatabaseProvider] Starting initialization...')
-      try {
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession()
-        
-        if (sessionError) throw sessionError
-
-        if (session) {
-          console.log('[DatabaseProvider] Session found, identifying user...')
-          useUserStore.getState().setUser(session.user)
-
-          // Fetch profile (plan_tier, isPro)
-          console.log('[DatabaseProvider] Fetching profile...')
-          await useProfileStore.getState().fetchProfile().catch(err => {
-            console.error('[DatabaseProvider] Profile fetch failed (non-critical):', err)
-          })
-
-          // Register this browser as an active device
-          console.log('[DatabaseProvider] Registering device...')
-          const result = await registerDevice().catch(err => {
-            console.error('[DatabaseProvider] Device registration failed (non-critical):', err)
-            return { allowed: true, reason: 'Registration failed, falling back to open' }
-          })
-
-          if (result && !result.allowed) {
-            console.warn('[DatabaseProvider] Device limit exceeded')
-            setDeviceLimitExceeded(true)
-            setDeviceInfo(result)
-            return 
-          }
-
-          console.log('[DatabaseProvider] Fetching application data...')
-          await fetchData().catch(err => {
-            console.error('[DatabaseProvider] Initial data fetch failed:', err)
-          })
-        } else {
-          console.log('[DatabaseProvider] No active session')
-          useUserStore.getState().setUser(null)
-        }
-      } catch (err) {
-        console.error('[DatabaseProvider] Critical initialization error:', err)
-      } finally {
-        console.log('[DatabaseProvider] Initialization complete')
-        useUserStore.getState().setInitialized(true)
-      }
-    }
-
-    checkUserAndFetch()
-
-    // Listen for auth changes
+    // Listen for auth changes. Supabase v2 fires INITIAL_SESSION on mount.
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event: AuthChangeEvent, session: Session | null) => {
       console.log(`[DatabaseProvider] Auth change detected: ${_event}`)
       try {
@@ -148,10 +98,8 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
       } catch (err) {
         console.error('[DatabaseProvider] Error handling auth change:', err)
       } finally {
-        // Always ensure isInitialized is true after a sign-in event attempt
-        if (_event === 'SIGNED_IN' || _event === 'INITIAL_SESSION') {
-          useUserStore.getState().setInitialized(true)
-        }
+        // Always ensure isInitialized is true after any session init attempt
+        useUserStore.getState().setInitialized(true)
       }
     })
 
