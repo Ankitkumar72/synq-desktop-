@@ -18,7 +18,6 @@ import { AuthChangeEvent, Session, RealtimePostgresChangesPayload, RealtimeChann
 const MAX_REALTIME_RETRIES = 5
 const RETRY_BASE_DELAY_MS = 2000
 // Poll intervals (ms)
-const POLL_INTERVAL_REALTIME_UP = 60_000   // 60s when realtime is healthy
 const POLL_INTERVAL_REALTIME_DOWN = 10_000 // 10s when realtime is down
 const HEALTH_CHECK_INTERVAL = 45_000       // 45s health check
 
@@ -234,10 +233,6 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
     if (pollTimerRef.current) clearInterval(pollTimerRef.current)
 
     pollTimerRef.current = setInterval(() => {
-      const interval = realtimeConnectedRef.current
-        ? POLL_INTERVAL_REALTIME_UP
-        : POLL_INTERVAL_REALTIME_DOWN
-
       // Only poll when the timer fires at the right cadence
       // Timer runs every 10s; skip if realtime is up and not enough time
       if (realtimeConnectedRef.current) {
@@ -284,18 +279,29 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
 
       try {
         if (session) {
+          const t0 = performance.now()
           currentUserIdRef.current = session.user.id
           useUserStore.getState().setUser(session.user)
 
-          await useProfileStore.getState().fetchProfile().catch(err => {
-            console.error('[DatabaseProvider] Profile fetch failed:', err)
-          })
+          // *** SPEED FIX: Fire EVERYTHING in parallel ***
+          // Profile, device check, data fetch, and realtime all start at once.
+          // Only device registration can block the UI (if limit exceeded).
+          const [profileResult, deviceResult] = await Promise.allSettled([
+            useProfileStore.getState().fetchProfile(),
+            registerDevice().catch(err => {
+              console.error('[DatabaseProvider] Device registration failed:', err)
+              return { allowed: true }
+            }),
+            fetchData(),  // data streams into stores as it arrives
+          ])
 
-          const result = await registerDevice().catch(err => {
-            console.error('[DatabaseProvider] Device registration failed:', err)
-            return { allowed: true }
-          })
+          // Log any profile failure (non-blocking)
+          if (profileResult.status === 'rejected') {
+            console.error('[DatabaseProvider] Profile fetch failed:', profileResult.reason)
+          }
 
+          // Check device limit — the only blocking gate
+          const result = deviceResult.status === 'fulfilled' ? deviceResult.value : { allowed: true }
           if (result && !result.allowed) {
             setDeviceLimitExceeded(true)
             setDeviceInfo(result as DeviceRegistrationResult)
@@ -304,15 +310,13 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
 
           setDeviceLimitExceeded(false)
           setDeviceInfo(null)
-          
-          await fetchData().catch(err => {
-            console.error('[DatabaseProvider] Data fetch failed:', err)
-          })
 
-          // *** KEY FIX: Subscribe to realtime AFTER auth is confirmed ***
+          // Start realtime + background systems immediately
           subscribeToRealtime()
           startPollFallback()
           startHealthCheck()
+
+          console.log(`[DatabaseProvider] Init complete in ${Math.round(performance.now() - t0)}ms`)
         } else {
           // Clear data if logged out
           currentUserIdRef.current = null
