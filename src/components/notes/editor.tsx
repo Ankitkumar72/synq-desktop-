@@ -15,8 +15,9 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { Editor } from '@tiptap/react'
+import { useNotesStore } from '@/lib/store/use-notes-store'
 
 const MenuBar = ({ editor }: { editor: Editor | null }) => {
   if (!editor) return null
@@ -57,13 +58,22 @@ const MenuBar = ({ editor }: { editor: Editor | null }) => {
 }
 
 
+interface MarkdownStorage {
+  getMarkdown: () => string
+}
+
 export function NoteEditor({ 
+  id,
   content, 
   onChange 
 }: { 
+  id: string,
   content?: string | null, 
   onChange?: (content: string) => void 
 }) {
+  const { setFocusedNoteId } = useNotesStore()
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  
   const editor = useEditor({
     extensions: [
       StarterKit,
@@ -80,7 +90,27 @@ export function NoteEditor({
     immediatelyRender: false,
     onUpdate: ({ editor }) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      onChange?.((editor.storage as any).markdown.getMarkdown())
+      const markdown = (editor.storage as any).markdown.getMarkdown()
+      
+      // Keystroke-level debounced save
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current)
+      saveTimeoutRef.current = setTimeout(() => {
+        onChange?.(markdown)
+      }, 500)
+    },
+    onFocus: () => {
+      setFocusedNoteId(id)
+    },
+    onBlur: () => {
+      setFocusedNoteId(null)
+      // Immediate save on blur
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current)
+        saveTimeoutRef.current = null
+      }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const markdown = (editor?.storage as any)?.markdown?.getMarkdown() || ''
+      onChange?.(markdown)
     },
     editorProps: {
       attributes: {
@@ -95,7 +125,10 @@ export function NoteEditor({
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const currentMarkdown = (editor.storage as any).markdown?.getMarkdown()
-    if (content !== undefined && content !== currentMarkdown) {
+    
+    // FOCUS GUARD: Only update editor content if it's different AND 
+    // the editor is NOT currently focused to avoid cursor jumps.
+    if (content !== undefined && content !== currentMarkdown && !editor.isFocused) {
       editor.commands.setContent(content || '')
     }
   }, [content, editor])

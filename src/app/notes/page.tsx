@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Plus, Clock, Pin } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -40,6 +40,16 @@ export default function NotesPage() {
   const selectedNote = useMemo(() => {
     return notes.find(n => n.id === selectedNoteId)
   }, [notes, selectedNoteId])
+
+  // Handle remote deletion
+  useEffect(() => {
+    if (selectedNote?.is_deleted) {
+      // If the note was deleted on another device, deselect it
+      setSelectedNoteId(null)
+      // Note: Toast could be added here if a toast system exists
+      console.log('Note was deleted on another device')
+    }
+  }, [selectedNote?.is_deleted, setSelectedNoteId])
 
   const handleAddNote = async () => {
     console.log('adding note...'); const newId = await addNote({
@@ -205,6 +215,7 @@ export default function NotesPage() {
 
                   </div>
                   <NoteEditor 
+                    id={selectedNote.id}
                     content={selectedNote.content} 
                     onChange={(val) => {
                       const plainText = val
@@ -219,7 +230,7 @@ export default function NotesPage() {
                       }
                       
                       updateNoteLocal(selectedNote.id, updates)
-                      debouncedUpdate(selectedNote.id, updates)
+                      updateNote(selectedNote.id, updates)
                     }} 
                   />
                 </div>

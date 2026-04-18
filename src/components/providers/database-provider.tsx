@@ -180,7 +180,9 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
           subscribedCount++
           if (subscribedCount === totalChannels) {
             realtimeConnectedRef.current = true
-            console.log('[Realtime] All channels connected ✓')
+            console.log('[Realtime] All channels connected ✓ — triggering sync')
+            // Re-fetch everything once on subscription to ensure no missed events during the gap
+            fetchData().catch(err => console.error('[Realtime] Reconnect fetch failed:', err))
           }
         } else if (
           status === 'TIMED_OUT' ||
@@ -207,7 +209,7 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
     })
 
     channelsRef.current = channels
-  }, [handleRemoteTasks, handleRemoteProjects, handleRemoteNotes, handleRemoteEvents])
+  }, [fetchData, handleRemoteTasks, handleRemoteProjects, handleRemoteNotes, handleRemoteEvents])
 
   // -------------------------------------------------------------------------
   // Tear down realtime channels

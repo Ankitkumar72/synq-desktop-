@@ -47,6 +47,8 @@ interface NotesState {
   addSubtask: (noteId: string, title: string) => Promise<void>
   updateSubtask: (noteId: string, subtaskId: string, updates: Partial<SubTask>) => Promise<void>
   deleteSubtask: (noteId: string, subtaskId: string) => Promise<void>
+  focusedNoteId: string | null
+  setFocusedNoteId: (id: string | null) => void
 }
 
 // User state is now managed centrally in useUserStore
@@ -56,6 +58,8 @@ export const useNotesStore = create<NotesState>()(
     (set, get) => ({
       notes: [],
       selectedNoteId: null,
+      focusedNoteId: null,
+      setFocusedNoteId: (id) => set({ focusedNoteId: id }),
       setNotes: (notes) => set((state) => ({ 
         notes, 
         selectedNoteId: state.selectedNoteId || (notes.length > 0 ? notes[0].id : null)
@@ -216,7 +220,11 @@ export const useNotesStore = create<NotesState>()(
             })
             
             // Special handling for content/body syncing
-            if (remoteFields['content'] && (!localFields['content'] || HLC.compare(remoteFields['content'], localFields['content']) > 0)) {
+            // FOCUS GUARD: If this note is currently being focused (edited),
+            // skip updating the content to prevent cursor jumps.
+            const isFocused = get().focusedNoteId === remoteNote.id;
+
+            if (!isFocused && remoteFields['content'] && (!localFields['content'] || HLC.compare(remoteFields['content'], localFields['content']) > 0)) {
               mergedNode.body = remoteNote.body
               mergedNode.content = remoteNote.content
             }
