@@ -58,59 +58,100 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     // Initial fetch only if session exists
     const checkUserAndFetch = async () => {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (session) {
-        useUserStore.getState().setUser(session.user)
+      console.log('[DatabaseProvider] Starting initialization...')
+      try {
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+        
+        if (sessionError) throw sessionError
 
-        // Fetch profile (plan_tier, isPro)
-        await useProfileStore.getState().fetchProfile()
+        if (session) {
+          console.log('[DatabaseProvider] Session found, identifying user...')
+          useUserStore.getState().setUser(session.user)
 
-        // Register this browser as an active device
-        const result = await registerDevice()
-        if (!result.allowed) {
-          setDeviceLimitExceeded(true)
-          setDeviceInfo(result)
-          useUserStore.getState().setInitialized(true)
-          return // Don't fetch data if device is blocked
+          // Fetch profile (plan_tier, isPro)
+          console.log('[DatabaseProvider] Fetching profile...')
+          await useProfileStore.getState().fetchProfile().catch(err => {
+            console.error('[DatabaseProvider] Profile fetch failed (non-critical):', err)
+          })
+
+          // Register this browser as an active device
+          console.log('[DatabaseProvider] Registering device...')
+          const result = await registerDevice().catch(err => {
+            console.error('[DatabaseProvider] Device registration failed (non-critical):', err)
+            return { allowed: true, reason: 'Registration failed, falling back to open' }
+          })
+
+          if (result && !result.allowed) {
+            console.warn('[DatabaseProvider] Device limit exceeded')
+            setDeviceLimitExceeded(true)
+            setDeviceInfo(result)
+            return 
+          }
+
+          console.log('[DatabaseProvider] Fetching application data...')
+          await fetchData().catch(err => {
+            console.error('[DatabaseProvider] Initial data fetch failed:', err)
+          })
+        } else {
+          console.log('[DatabaseProvider] No active session')
+          useUserStore.getState().setUser(null)
         }
-
-        await fetchData()
-      } else {
-        useUserStore.getState().setUser(null)
+      } catch (err) {
+        console.error('[DatabaseProvider] Critical initialization error:', err)
+      } finally {
+        console.log('[DatabaseProvider] Initialization complete')
+        useUserStore.getState().setInitialized(true)
       }
-      useUserStore.getState().setInitialized(true)
     }
 
     checkUserAndFetch()
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event: AuthChangeEvent, session: Session | null) => {
-      if (session) {
-        useUserStore.getState().setUser(session.user)
+      console.log(`[DatabaseProvider] Auth change detected: ${_event}`)
+      try {
+        if (session) {
+          useUserStore.getState().setUser(session.user)
 
-        // Fetch profile on auth change
-        await useProfileStore.getState().fetchProfile()
+          // Fetch profile on auth change
+          await useProfileStore.getState().fetchProfile().catch(err => {
+            console.error('[DatabaseProvider] Profile fetch failed on auth change:', err)
+          })
 
-        // Re-register device on auth change (e.g. token refresh)
-        const result = await registerDevice()
-        if (!result.allowed) {
-          setDeviceLimitExceeded(true)
-          setDeviceInfo(result)
-          return
+          // Re-register device on auth change (e.g. token refresh)
+          const result = await registerDevice().catch(err => {
+            console.error('[DatabaseProvider] Device registration failed on auth change:', err)
+            return { allowed: true }
+          })
+
+          if (result && !result.allowed) {
+            setDeviceLimitExceeded(true)
+            setDeviceInfo(result as DeviceRegistrationResult)
+            return
+          }
+
+          setDeviceLimitExceeded(false)
+          setDeviceInfo(null)
+          fetchData().catch(err => {
+            console.error('[DatabaseProvider] Data fetch failed on auth change:', err)
+          })
+        } else {
+          // Clear data on sign out
+          useUserStore.getState().setUser(null)
+          setTasks([])
+          setProjects([])
+          setNotes([])
+          setEvents([])
+          setDeviceLimitExceeded(false)
+          setDeviceInfo(null)
         }
-
-        setDeviceLimitExceeded(false)
-        setDeviceInfo(null)
-        fetchData()
-      } else {
-        // Clear data on sign out
-        useUserStore.getState().setUser(null)
-        setTasks([])
-        setProjects([])
-        setNotes([])
-        setEvents([])
-        setDeviceLimitExceeded(false)
-        setDeviceInfo(null)
+      } catch (err) {
+        console.error('[DatabaseProvider] Error handling auth change:', err)
+      } finally {
+        // Always ensure isInitialized is true after a sign-in event attempt
+        if (_event === 'SIGNED_IN' || _event === 'INITIAL_SESSION') {
+          useUserStore.getState().setInitialized(true)
+        }
       }
     })
 
