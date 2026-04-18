@@ -26,11 +26,11 @@ export async function login(formData: FormData) {
 export async function signup(formData: FormData) {
   const supabase = await createClient()
   const headerList = await headers()
-  const origin = headerList.get('origin') || headerList.get('host')
+  const origin = headerList.get('host')
     
-  const emailRedirectTo = origin 
-    ? `${origin.includes('localhost') ? 'http' : 'https'}://${origin.replace(/^https?:\/\//, '')}/auth/callback`
-    : `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/auth/callback`
+  const protocol = origin?.includes('localhost') ? 'http' : 'https'
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || (origin ? `${protocol}://${origin}` : 'http://localhost:3000')
+  const emailRedirectTo = `${siteUrl}/auth/callback`
 
   const data = {
     email: formData.get('email') as string,
@@ -65,12 +65,12 @@ export async function signup(formData: FormData) {
 export async function signInWithGoogle() {
   const supabase = await createClient()
   const headerList = await headers()
-  const origin = headerList.get('origin') || headerList.get('host')
+  const host = headerList.get('host')
   
   // Construct the redirect URL dynamically
-  const redirectTo = origin 
-    ? `${origin.includes('localhost') ? 'http' : 'https'}://${origin.replace(/^https?:\/\//, '')}/auth/callback`
-    : `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/auth/callback`
+  const protocol = host?.includes('localhost') ? 'http' : 'https'
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || (host ? `${protocol}://${host}` : 'http://localhost:3000')
+  const redirectTo = `${siteUrl}/auth/callback`
 
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: 'google',

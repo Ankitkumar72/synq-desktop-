@@ -13,8 +13,21 @@ export function createGhostClient<T = unknown>(): T {
     get: (_target, prop) => {
       // Handle thenable for async/await support on method calls
       if (prop === 'then') return undefined;
+      
       // Handle the case where someone checks for the presence of a target or data
       if (prop === 'data' || prop === 'error') return ghost;
+
+      // HARDENING: Return safe defaults for common property names to prevent Proxy leakage
+      const stringProps = ['id', 'email', 'name', 'full_name', 'plan_tier', 'status', 'title', 'content', 'description'];
+      if (typeof prop === 'string' && stringProps.includes(prop)) {
+        return '';
+      }
+      
+      if (prop === 'count') return 0;
+      if (prop === 'created_at' || prop === 'updated_at' || prop === 'due_date' || prop === 'start_date') return new Date().toISOString();
+      if (prop === 'roles' || prop === 'permissions' || prop === 'tasks' || prop === 'notes') return [];
+      if (prop === 'isAdmin' || prop === 'isPro' || prop === 'pinned') return false;
+
       return ghost;
     },
     // eslint-disable-next-line @typescript-eslint/no-unused-vars

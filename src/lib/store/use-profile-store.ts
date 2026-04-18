@@ -37,8 +37,12 @@ export const useProfileStore = create<ProfileState>((set) => ({
 
       if (error) throw error
 
-      const planTier = (data?.plan_tier as PlanTier) || 'free'
-      const isAdmin = data?.is_admin || false
+      const rawPlanTier = data?.plan_tier
+      const planTier: PlanTier = (rawPlanTier === 'pro' || rawPlanTier === 'free') 
+        ? rawPlanTier 
+        : 'free'
+      
+      const isAdmin = !!data?.is_admin
 
       set({
         planTier,
