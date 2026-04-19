@@ -124,10 +124,17 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
   // Subscribe to realtime — ONLY called after auth is confirmed
   // -------------------------------------------------------------------------
 
-  const subscribeToRealtime = useCallback((attempt = 0) => {
+  const subscribeToRealtime = useCallback(async (attempt = 0) => {
     const userId = currentUserIdRef.current
     if (!userId) {
       console.warn('[Realtime] No user ID — skipping subscription')
+      return
+    }
+
+    // Gating realtime setup on an active, confirmed session
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) {
+      console.warn('[Realtime] No active session — skipping channel setup')
       return
     }
 
@@ -361,14 +368,33 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
     }
 
     // Manual initial check (critical for standalone Electron/desktop runtimes)
-    supabase.auth.getSession().then(({ data: { session }, error }) => {
-      if (error) console.error('[DatabaseProvider] getSession error:', error)
+    supabase.auth.getSession().then(async ({ data: { session }, error }) => {
+      if (error) {
+        console.error('[DatabaseProvider] getSession error:', error)
+        if (
+          error.message.includes('refresh_token_not_found') ||
+          error.message.includes('Invalid Refresh Token') ||
+          (error as any).code === 'refresh_token_not_found'
+        ) {
+          await supabase.auth.signOut()
+          window.location.href = '/login'
+          return
+        }
+      }
       executeInit(session)
     })
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event: AuthChangeEvent, session: Session | null) => {
       console.log(`[DatabaseProvider] Auth change detected: ${_event}`)
+      
+      if (_event === 'TOKEN_REFRESHED' && !session) {
+        // Session is gone — clean up and redirect
+        await supabase.auth.signOut()
+        window.location.href = '/login'
+        return
+      }
+
       if ((_event === 'SIGNED_IN' || _event === 'SIGNED_OUT') && initStarted.current) {
          initStarted.current = false // lift exact lock so it can re-init
          executeInit(session)
