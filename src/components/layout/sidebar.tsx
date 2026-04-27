@@ -38,7 +38,7 @@ export function LinearSidebar() {
 
   return (
     <aside className="w-[280px] bg-[#090909] border-r border-[#2E2E2E] flex flex-col p-4 shrink-0 relative z-40">
-      
+
       {/* User Profile */}
       <div className="flex items-center gap-3 mb-6 p-2">
         <div className="relative">
@@ -71,8 +71,8 @@ export function LinearSidebar() {
             <Link key={item.name} href={item.href}>
               <div className={cn(
                 "flex items-center gap-3 px-4 py-2 rounded-lg cursor-pointer transition-colors",
-                isActive 
-                  ? "bg-[#1F1F1F] text-white" 
+                isActive
+                  ? "bg-[#1F1F1F] text-white"
                   : "text-[#999999] hover:bg-[#1F1F1F] hover:text-white"
               )}>
                 <Icon className="w-4 h-4" />
@@ -81,10 +81,10 @@ export function LinearSidebar() {
             </Link>
           )
         })}
-        
+
         <div className="my-4 border-t border-[#2E2E2E]"></div>
-        
-        <SidebarItem icon={<Folder className="w-4 h-4" />} label="Files" />
+
+        <SidebarItem icon={<Folder className="w-4 h-4" />} label="Folders" />
         <SidebarItem icon={<Layers className="w-4 h-4" />} label="Templates" />
         <SidebarItem icon={<BookOpen className="w-4 h-4" />} label="Notebooks" />
         <SidebarItem icon={<Tag className="w-4 h-4" />} label="Tags" />
@@ -108,7 +108,7 @@ export function LinearSidebar() {
             <span>New Page</span>
           </button>
         } />
-        <button 
+        <button
           onClick={openSettings}
           className="w-full flex items-center gap-3 px-4 py-2 text-[#999999] hover:bg-[#1F1F1F] hover:text-white rounded-lg transition-colors text-[13px] font-medium"
         >
