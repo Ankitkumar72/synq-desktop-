@@ -5,7 +5,6 @@ import {
   StickyNote, 
   CheckSquare, 
   Calendar,
-  X,
   RotateCcw,
   Trash2
 } from "lucide-react"
@@ -14,8 +13,8 @@ import { AnimatePage } from "@/components/layout/animate-page"
 import { useNotesStore } from "@/lib/store/use-notes-store"
 import { useTaskStore } from "@/lib/store/use-task-store"
 import { useEventStore } from "@/lib/store/use-event-store"
-import { getDaysRemaining, isExpired } from "@/lib/utils/trash-utils"
-import { formatRelativeDate } from "@/lib/utils/date-utils"
+import { isExpired } from "@/lib/utils/trash-utils"
+
 import { cn } from "@/lib/utils"
 import { Note, Task, CalendarEvent } from "@/types"
 
@@ -100,6 +99,12 @@ export default function TrashPage() {
   
   const [activeCategory, setActiveCategory] = useState<Category>('notes')
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  
+  const [prevCategory, setPrevCategory] = useState<Category>(activeCategory)
+  if (activeCategory !== prevCategory) {
+    setPrevCategory(activeCategory)
+    setSelectedIds(new Set())
+  }
 
   useEffect(() => {
     fetchTasks(true)
@@ -178,10 +183,6 @@ export default function TrashPage() {
       setSelectedIds(new Set())
     }
   }
-
-  useEffect(() => {
-    setSelectedIds(new Set())
-  }, [activeCategory])
 
   return (
     <AnimatePage className="h-full bg-[#030303] flex flex-col font-sans overflow-hidden">

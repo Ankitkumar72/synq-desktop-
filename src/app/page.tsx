@@ -6,17 +6,22 @@ import { motion } from "framer-motion"
 import { AnimatePage } from "@/components/layout/animate-page"
 import { useGreeting } from "@/hooks/use-greeting"
 import { useUserStore } from "@/lib/store/use-user-store"
-import { getUserDisplayName } from "@/lib/user-utils"
+import { getUserDisplayName, getUserInitials } from "@/lib/user-utils"
 import { useTaskStore } from "@/lib/store/use-task-store"
 import { useNotesStore } from "@/lib/store/use-notes-store"
 import { useEventStore } from "@/lib/store/use-event-store"
 import { useHasMounted } from "@/hooks/use-has-mounted"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useRouter } from "next/navigation"
-import { Plus, Circle, Calendar as CalendarIcon, FilePlus, ListPlus, CalendarPlus } from "lucide-react"
+import Link from "next/link"
+import { Plus, Circle, Calendar as CalendarIcon, FilePlus, ListPlus, CalendarPlus, FileText, Code2 } from "lucide-react"
 import { QuickCreateModal } from "@/components/layout/quick-create"
 import { DashboardCard, QuickActionButton } from "@/components/dashboard/premium-dashboard"
-import { getPlainTextFromStoredContent } from "@/lib/notes/note-content"
+
+import { formatDistanceToNowStrict } from "date-fns"
+import { cn } from "@/lib/utils"
+import { Note } from "@/types"
+import { createEmptyNoteContent } from "@/lib/notes/note-content"
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -44,21 +49,84 @@ const QUOTES = [
   "Strive for progress, not perfection."
 ]
 
+function NoteCard({ note, initials }: { note: Note, initials: string }) {
+  const time = note.updated_at 
+    ? formatDistanceToNowStrict(new Date(note.updated_at), { addSuffix: true })
+        .replace(' days', 'd').replace(' day', 'd')
+        .replace(' weeks', 'w').replace(' week', 'w')
+        .replace(' hours', 'h').replace(' hour', 'h')
+        .replace(' minutes', 'm').replace(' minute', 'm')
+    : 'recently'
+
+  const isCode = note.title?.toLowerCase().includes('dsa') || note.category === 'code'
+
+  return (
+    <Link 
+      href={`/notes?id=${note.id}`}
+      className="bg-[#1E1E1E] rounded-[16px] flex flex-col flex-1 min-w-0 cursor-pointer hover:bg-[#252525] transition-all duration-200 border border-white/[0.06] group relative overflow-hidden"
+    >
+      {/* card-header: icon area */}
+      <div className="h-[52px] px-4 flex items-center shrink-0">
+        <div className={cn(
+          "w-8 h-8 rounded-lg flex items-center justify-center transition-colors",
+          isCode ? "bg-red-500/10 text-red-400" : "bg-white/5 text-[#666] group-hover:text-[#999]"
+        )}>
+          {isCode ? <Code2 className="w-4 h-4" /> : <FileText className="w-4 h-4" />}
+        </div>
+      </div>
+
+      {/* card-content */}
+      <div className="px-4 pb-4 flex flex-col flex-1 min-h-0">
+        <h4 className="text-[#E8E8E8] text-[13px] font-semibold leading-snug group-hover:text-white transition-colors line-clamp-2 mb-1.5">
+          {note.title || "Untitled"}
+        </h4>
+        {note.excerpt && (
+          <p className="text-[#555] text-[11px] leading-relaxed line-clamp-2">
+            {note.excerpt}
+          </p>
+        )}
+        
+        <div className="flex items-center gap-1.5 mt-auto pt-3">
+          <div className="w-4 h-4 rounded-full bg-[#2E2E2E] flex items-center justify-center text-[8px] text-[#777] font-bold border border-white/5">
+            {initials}
+          </div>
+          <span className="text-[#4A4A4A] text-[11px] font-medium whitespace-nowrap">{time}</span>
+        </div>
+      </div>
+    </Link>
+  )
+}
+
 export default function DashboardPage() {
   const hasMounted = useHasMounted()
   const router = useRouter()
 
   const { tasks, updateTask } = useTaskStore()
-  const { notes } = useNotesStore()
+  const { notes, addNote } = useNotesStore()
   const { user } = useUserStore()
   const { events, fetchEvents } = useEventStore()
   const [scratchContent, setScratchContent] = useState("")
+
+  const handleCreateNote = async () => {
+    const newId = await addNote({
+      title: "Untitled Note",
+      content: createEmptyNoteContent(),
+      body: null,
+      excerpt: null,
+      tags: [],
+      pinned: false
+    })
+    if (newId) {
+      router.push(`/notes?id=${newId}`)
+    }
+  }
 
   useEffect(() => {
     fetchEvents()
   }, [fetchEvents])
 
   const userName = getUserDisplayName(user)
+  const initials = getUserInitials(user)
   const greeting = useGreeting(userName)
 
   const [randomQuote] = useState(() => {
@@ -85,7 +153,7 @@ export default function DashboardPage() {
         const isScratch = n.category === 'scratchpad' || n.title?.toLowerCase() === 'scratch pad'
         return !isDeleted && !isScratch
       })
-      .slice(0, 3)
+      .slice(0, 5)
     const filteredEvents = events.filter(e => !e.is_deleted && isSameDay(parseISO(e.start_date), today))
 
     return {
@@ -164,13 +232,13 @@ export default function DashboardPage() {
         variants={containerVariants}
         initial="hidden"
         animate="visible"
-        className="flex-1 flex flex-col p-10 overflow-y-auto no-scrollbar bg-[#101011]"
+        className="flex-1 flex flex-col p-8 overflow-y-auto no-scrollbar bg-[#101011]"
       >
 
         {/* Header Area */}
         <motion.header variants={itemVariants} className="flex justify-between items-start mb-10">
           <div>
-            <h1 className="text-[32px] font-semibold tracking-tight text-white">{greeting}</h1>
+            <h1 className="text-[28px] font-semibold tracking-tight text-white">{greeting}</h1>
             <div className="flex flex-col gap-1 mt-2">
               <p className="text-[#999999] text-[15px] font-medium">{format(new Date(), 'EEEE, MMMM d')}</p>
               <p className="text-[#666666] text-[14px] italic font-medium max-w-md">&ldquo;{randomQuote}&rdquo;</p>
@@ -178,9 +246,7 @@ export default function DashboardPage() {
           </div>
 
           <div className="flex gap-3">
-            <QuickCreateModal defaultType="note" trigger={
-              <QuickActionButton icon={<FilePlus className="w-4 h-4" />} label="New Note" />
-            } />
+            <QuickActionButton icon={<FilePlus className="w-4 h-4" />} label="New Note" onClick={handleCreateNote} />
             <QuickCreateModal defaultType="task" trigger={
               <QuickActionButton icon={<ListPlus className="w-4 h-4" />} label="New Task" />
             } />
@@ -192,30 +258,25 @@ export default function DashboardPage() {
 
         {/* Top Grid (Notes) */}
         <motion.div variants={itemVariants} className="grid grid-cols-1 gap-6 mb-6">
-          <DashboardCard title="Notes">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {notesOnly.length > 0 ? (
-                notesOnly.map((note) => (
-                  <div
+          <DashboardCard title="Notes" href="/notes">
+            {notesOnly.length > 0 ? (
+              <div className="flex gap-3">
+                {notesOnly.map((note) => (
+                  <NoteCard
                     key={note.id}
-                    onClick={() => router.push(`/notes?id=${note.id}`)}
-                    className="bg-[#242424] p-5 rounded-xl cursor-pointer hover:bg-[#2a2a2a] transition-all border border-white/5 group"
-                  >
-                    <h4 className="font-bold text-white text-[15px] truncate mb-2 group-hover:text-blue-400 transition-colors">{note.title || "Untitled"}</h4>
-                    <p className="text-[#808080] text-[13px] line-clamp-2 leading-relaxed">
-                      {note.excerpt || getPlainTextFromStoredContent(note.content ?? null) || "No content..."}
-                    </p>
-                  </div>
-                ))
-              ) : (
-                <div className="col-span-3 text-[#515151] italic text-[14px] py-4">No recent notes found.</div>
-              )}
-            </div>
+                    note={note}
+                    initials={initials}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="text-[#515151] italic text-[14px] py-4">No recent notes found.</div>
+            )}
           </DashboardCard>
         </motion.div>
 
         {/* Calendar / Timeline Section */}
-        <motion.div variants={itemVariants} className="bg-[#171717] border border-[#2E2E2E] rounded-2xl p-6 mb-6">
+        <motion.div variants={itemVariants} className="bg-[#171717] border border-[#2E2E2E] rounded-2xl p-5 mb-6">
           <div className="flex justify-between items-center mb-8">
             <div className="flex items-center gap-2">
               <CalendarIcon className="w-5 h-5 text-[#808080]" />
@@ -231,7 +292,7 @@ export default function DashboardPage() {
           {/* Timeline Implementation */}
           <div 
             ref={scrollRef}
-            className="relative overflow-x-auto no-scrollbar -mx-6 px-6"
+            className="relative overflow-x-auto no-scrollbar bg-black/20 border border-white/5 rounded-xl p-4"
           >
             <div 
               style={{ width: `${24 * HOUR_WIDTH}px` }}

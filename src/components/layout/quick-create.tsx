@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useMemo } from "react"
 import Image from "next/image"
 import { 
   Plus,
@@ -70,29 +70,33 @@ export function QuickCreateModal({
   const { addNote } = useNotesStore()
   const { addEvent, updateEvent } = useEventStore()
 
-  useEffect(() => {
-    if (open && editItem) {
-      setType(editItem.type)
-      setTitle(editItem.title)
-      setDescription(editItem.description || "")
-      if (editItem.type === 'task') {
-        setPriority(editItem.priority ? editItem.priority.charAt(0).toUpperCase() + editItem.priority.slice(1) : "Medium")
-        setDueDate(editItem.due_date ? new Date(editItem.due_date) : defaultDate)
-        setRecurrence(editItem.recurrence_rule || "Does not repeat")
-        setSelectedProjectId(editItem.project_id || undefined)
-      } else if (editItem.type === 'event') {
-        setDueDate(new Date(editItem.start_date))
-      }
-    } else if (open && !editItem) {
-      setType(defaultType)
-      setTitle("")
-      setDescription("")
+  const [prevOpen, setPrevOpen] = useState(open)
+  const [prevEditId, setPrevEditId] = useState(editItem?.id)
+
+  if (open && (!prevOpen || editItem?.id !== prevEditId)) {
+    setPrevOpen(open)
+    setPrevEditId(editItem?.id)
+    
+    setType(editItem?.type || defaultType)
+    setTitle(editItem?.title || "")
+    setDescription(editItem?.description || "")
+    
+    if (editItem?.type === 'task') {
+      setPriority(editItem.priority ? editItem.priority.charAt(0).toUpperCase() + editItem.priority.slice(1) : "Medium")
+      setDueDate(editItem.due_date ? new Date(editItem.due_date) : defaultDate)
+      setRecurrence(editItem.recurrence_rule || "Does not repeat")
+      setSelectedProjectId(editItem.project_id || undefined)
+    } else if (editItem?.type === 'event') {
+      setDueDate(new Date(editItem.start_date))
+    } else {
       setPriority("Medium")
       setDueDate(defaultDate)
       setRecurrence("Does not repeat")
       setSelectedProjectId(undefined)
     }
-  }, [open, editItem, defaultType, defaultDate])
+  } else if (!open && prevOpen) {
+    setPrevOpen(false)
+  }
 
   const name = getUserDisplayName(user)
   const initials = getUserInitials(user)

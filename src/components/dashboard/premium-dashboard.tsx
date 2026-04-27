@@ -2,16 +2,26 @@
 
 import React from 'react';
 import { cn } from "@/lib/utils";
+import Link from 'next/link';
+import { ChevronRight } from 'lucide-react';
 
 interface DashboardCardProps {
   title: string;
+  href?: string;
   children: React.ReactNode;
   className?: string;
 }
 
-export const DashboardCard: React.FC<DashboardCardProps> = ({ title, children, className }) => (
-  <div className={cn("bg-[#171717] rounded-2xl p-6 flex flex-col border border-[#2E2E2E]", className)}>
-    <h3 className="text-white text-[18px] font-semibold mb-4 tracking-tight">{title}</h3>
+export const DashboardCard: React.FC<DashboardCardProps> = ({ title, href, children, className }) => (
+  <div className={cn("bg-[#171717] rounded-2xl p-5 flex flex-col border border-[#2E2E2E]", className)}>
+    {href ? (
+      <Link href={href} className="w-fit flex items-center gap-1 group mb-3">
+        <h3 className="text-white text-[16px] font-semibold tracking-tight">{title}</h3>
+        <ChevronRight className="w-4 h-4 text-[#808080] opacity-0 group-hover:opacity-100 transition-opacity" />
+      </Link>
+    ) : (
+      <h3 className="text-white text-[16px] font-semibold mb-3 tracking-tight">{title}</h3>
+    )}
     <div className="flex-grow">{children}</div>
   </div>
 );

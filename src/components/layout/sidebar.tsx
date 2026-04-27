@@ -37,10 +37,10 @@ export function LinearSidebar() {
   const initials = getUserInitials(user)
 
   return (
-    <aside className="w-[280px] bg-[#090909] border-r border-[#2E2E2E] flex flex-col p-4 shrink-0 relative z-40">
+    <aside className="w-[240px] bg-[#090909] border-r border-[#2E2E2E] flex flex-col p-3 shrink-0 relative z-40">
 
       {/* User Profile */}
-      <div className="flex items-center gap-3 mb-6 p-2">
+      <div className="flex items-center gap-3 mb-4 p-2">
         <div className="relative">
           <Avatar className="w-[30px] h-[30px] rounded-lg border-none bg-[#262626]" size="sm">
             <AvatarImage src={user?.user_metadata?.avatar_url} alt={name} loading="eager" />
@@ -55,7 +55,7 @@ export function LinearSidebar() {
       </div>
 
       {/* Search */}
-      <div className="flex items-center justify-between bg-[#1F1F1F] border border-[#2E2E2E] rounded-lg px-3 py-1.5 mb-6 text-[#999999] cursor-pointer hover:bg-white/[0.02] transition-colors">
+      <div className="flex items-center justify-between bg-[#1F1F1F] border border-[#2E2E2E] rounded-lg px-3 py-1.5 mb-4 text-[#999999] cursor-pointer hover:bg-white/[0.02] transition-colors">
         <div className="flex items-center gap-2 text-[13px]">
           <Search className="w-4 h-4" /> Quick Search
         </div>

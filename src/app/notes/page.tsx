@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useMemo, useEffect } from "react";
-import { Plus, Clock, Search, LayoutGrid, Star, FileText, ChevronRight, ChevronDown } from "lucide-react"
+import { useState, useMemo, useEffect, useRef } from "react";
+import { Plus, Clock, Search, FileText, ChevronRight } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -11,6 +11,9 @@ import { SyncStatusIndicator } from "@/components/notes/sync-status-indicator"
 import { AnimatePage } from "@/components/layout/animate-page"
 import { useNotesStore } from "@/lib/store/use-notes-store"
 import { useUIStore } from "@/lib/store/use-ui-store"
+import { Note } from "@/types"
+import { useSearchParams, useRouter } from "next/navigation"
+import { Suspense } from "react"
 import { formatRelativeDate } from "@/lib/utils/date-utils"
 import { useDebounce } from "@/hooks/use-debounce"
 import { NoteContextMenu } from "@/components/notes/note-context-menu"
@@ -23,7 +26,7 @@ function NoteSidebarItem({
   onClick,
   onAction
 }: {
-  note: any,
+  note: Note,
   isSelected: boolean,
   onClick: () => void,
   onAction: (action: string, noteId: string) => void
@@ -57,14 +60,63 @@ function NoteSidebarItem({
 }
 
 
-export default function NotesPage() {
+function NotesPageContent() {
+  const router = useRouter()
   const { notes, selectedNoteId, setSelectedNoteId, addNote, updateNote, deleteNote, pinNote, updateNoteLocal } = useNotesStore()
   const { isSidebarOpen } = useUIStore()
+  const searchParams = useSearchParams()
+  const urlNoteId = searchParams.get("id")
+  
   const [searchQuery, setSearchQuery] = useState("")
   const [expandedSections, setExpandedSections] = useState({
     pinned: true,
     all: true
   })
+
+  const isInitialMount = useRef(true)
+  const lastUrlId = useRef<string | null>(urlNoteId)
+  const hasSyncedFromUrl = useRef(false)
+
+  // Sync state from URL on mount or when URL changes (e.g. external navigation or back button)
+  useEffect(() => {
+    const currentUrlId = searchParams.get("id")
+    if (currentUrlId && currentUrlId !== selectedNoteId) {
+      if (!hasSyncedFromUrl.current || currentUrlId !== lastUrlId.current) {
+        const noteExists = notes.some(n => n.id === currentUrlId)
+        if (noteExists) {
+          setSelectedNoteId(currentUrlId)
+          lastUrlId.current = currentUrlId
+          hasSyncedFromUrl.current = true
+        }
+      }
+    } else if (!currentUrlId && !hasSyncedFromUrl.current && notes.length > 0) {
+      hasSyncedFromUrl.current = true
+    }
+  }, [searchParams, notes, selectedNoteId, setSelectedNoteId])
+
+  // Sync URL with selectedNoteId using silent history updates
+  useEffect(() => {
+    if (isInitialMount.current) {
+      isInitialMount.current = false
+      return
+    }
+
+    const currentUrlId = new URL(window.location.href).searchParams.get('id')
+    
+    if (selectedNoteId) {
+      if (selectedNoteId !== currentUrlId) {
+        const url = new URL(window.location.href)
+        url.searchParams.set('id', selectedNoteId)
+        window.history.replaceState(null, '', url.toString())
+        lastUrlId.current = selectedNoteId
+      }
+    } else if (currentUrlId) {
+      const url = new URL(window.location.href)
+      url.searchParams.delete('id')
+      window.history.replaceState(null, '', url.toString())
+      lastUrlId.current = null
+    }
+  }, [selectedNoteId])
 
   const debouncedUpdate = useDebounce(updateNote, 250)
 
@@ -145,10 +197,10 @@ export default function NotesPage() {
         {/* Sidebar */}
         <div className={cn(
           "flex flex-col bg-neutral-950 border-r border-neutral-800/50 transition-all duration-200 ease-out overflow-hidden shrink-0",
-          isSidebarOpen ? "w-72" : "w-0 border-r-0"
+          isSidebarOpen ? "w-64" : "w-0 border-r-0"
         )}>
           {/* Sidebar Header */}
-          <div className="px-4 pt-6 pb-2">
+          <div className="px-4 pt-4 pb-2">
             <div className="flex items-center justify-between mb-4">
               <h1 className="text-[11px] font-bold uppercase tracking-[0.1em] text-neutral-500">
                 Notes
@@ -301,7 +353,7 @@ export default function NotesPage() {
 
               {/* Editor Content */}
               <div className="flex-1 overflow-y-auto overflow-x-hidden">
-                <div className="max-w-3xl mx-auto w-full px-8 md:px-12 pt-16 pb-32">
+                <div className="max-w-3xl mx-auto w-full px-8 md:px-12 pt-10 pb-32">
                   <input
                     type="text"
                     value={selectedNote.title}
@@ -309,7 +361,7 @@ export default function NotesPage() {
                       updateNoteLocal(selectedNote.id, { title: e.target.value })
                       debouncedUpdate(selectedNote.id, { title: e.target.value })
                     }}
-                    className="w-full text-[40px] font-bold tracking-tight border-none bg-transparent focus-visible:outline-none mb-10 placeholder:text-neutral-800 text-neutral-100 selection:bg-neutral-700 leading-tight"
+                    className="w-full text-[32px] font-bold tracking-tight border-none bg-transparent focus-visible:outline-none mb-6 placeholder:text-neutral-800 text-neutral-100 selection:bg-neutral-700 leading-tight"
                     placeholder="Untitled"
                   />
 
@@ -318,7 +370,8 @@ export default function NotesPage() {
                     id={selectedNote.id}
                     content={selectedNote.content}
                     onChange={(snapshot) => {
-                      updateNote(selectedNote.id, {
+                      // Only update local state. Persistence is handled by the editor's saveYDocToSupabase.
+                      updateNoteLocal(selectedNote.id, {
                         body: snapshot.body,
                         excerpt: snapshot.excerpt,
                       })
@@ -331,5 +384,20 @@ export default function NotesPage() {
         </div>
       </div>
     </AnimatePage>
+  )
+}
+
+export default function NotesPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex h-full items-center justify-center bg-neutral-950">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-8 h-8 border-2 border-neutral-800 border-t-neutral-400 rounded-full animate-spin" />
+          <p className="text-sm text-neutral-500 font-medium">Loading notes...</p>
+        </div>
+      </div>
+    }>
+      <NotesPageContent />
+    </Suspense>
   )
 }

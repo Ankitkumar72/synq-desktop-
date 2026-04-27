@@ -6,8 +6,6 @@ import {
   Trash2, 
   AlignLeft, 
   MapPin, 
-  Lock,
-  Lightbulb,
   Layout
 } from "lucide-react"
 import { 
