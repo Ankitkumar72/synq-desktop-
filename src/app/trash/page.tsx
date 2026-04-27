@@ -248,7 +248,7 @@ export default function TrashPage() {
             ) : (
               <div className="space-y-6">
                 <AnimatePresence>
-                  {selectedIds.length > 0 && (
+                  {selectedIds.size > 0 && (
                     <motion.div 
                       layout
                       initial={{ opacity: 0, scale: 0.95, y: -20 }}
