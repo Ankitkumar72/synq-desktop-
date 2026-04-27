@@ -269,6 +269,7 @@ export const useNotesStore = create<NotesState>()(
             // New note arrived from remote
             // Initialize Yjs doc from the body if it has text content
             if (remoteNote.body) {
+              // We don't await this as it's a background initialization
               initYDocFromPlainText(remoteNote.id, remoteNote.body)
             }
             return { notes: [sanitizeNote(remoteNote), ...state.notes] }
@@ -496,13 +497,6 @@ export const useNotesStore = create<NotesState>()(
             const merged = mergeNotesList(currentNotes, data.map(sanitizeNote), true, includeDeleted)
             
             set({ notes: merged, isLoading: false });
-
-            // Initialize Yjs docs for notes that have body content
-            for (const note of merged) {
-              if (note.body) {
-                initYDocFromPlainText(note.id, note.body)
-              }
-            }
           } else {
             set({ isLoading: false });
           }

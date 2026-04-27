@@ -111,8 +111,12 @@ export function getStateDiff(noteId: string, remoteStateVector: Uint8Array): Uin
  * This converts JSON content to plain text and inserts it into the Y.Doc's
  * XML fragment. TipTap's collaboration extension will then maintain it.
  */
-export function initYDocFromPlainText(noteId: string, plainText: string): Y.Doc {
+export async function initYDocFromPlainText(noteId: string, plainText: string): Promise<Y.Doc> {
   const ydoc = getOrCreateYDoc(noteId)
+  
+  // Wait for IndexedDB persistence to finish loading before checking fragment length
+  await waitForPersistence(noteId)
+  
   const fragment = ydoc.getXmlFragment('content')
   
   // Only initialize if the fragment is empty (don't overwrite existing CRDT state)
