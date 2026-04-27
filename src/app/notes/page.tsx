@@ -1,10 +1,10 @@
 "use client"
 
 import { useState, useMemo, useEffect } from "react";
-import { Plus, Clock, Search, Trash2, LayoutGrid, Star, Archive } from "lucide-react"
+import { Plus, Clock, Search, LayoutGrid, Star, FileText, ChevronRight, ChevronDown } from "lucide-react"
+import { motion, AnimatePresence } from "framer-motion"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
-
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { NoteEditor } from "@/components/notes/editor"
 import { SyncStatusIndicator } from "@/components/notes/sync-status-indicator"
@@ -17,48 +17,76 @@ import { NoteContextMenu } from "@/components/notes/note-context-menu"
 import { cloneNoteContent, createEmptyNoteContent } from "@/lib/notes/note-content"
 
 
+function NoteSidebarItem({
+  note,
+  isSelected,
+  onClick,
+  onAction
+}: {
+  note: any,
+  isSelected: boolean,
+  onClick: () => void,
+  onAction: (action: string, noteId: string) => void
+}) {
+  return (
+    <NoteContextMenu note={note} onAction={onAction}>
+      <button
+        onClick={onClick}
+        className={cn(
+          "group w-full px-3 py-1.5 flex items-center gap-2 transition-all duration-200 rounded-md select-none text-left",
+          isSelected
+            ? "bg-neutral-800/80 text-white"
+            : "text-neutral-400 hover:bg-neutral-800/40 hover:text-neutral-200"
+        )}
+      >
+        <div className="flex items-center justify-center shrink-0 w-7">
+          <FileText className={cn(
+            "w-4 h-4 transition-colors",
+            isSelected ? "text-neutral-200" : "text-neutral-500 group-hover:text-neutral-400"
+          )} />
+        </div>
+        <span className={cn(
+          "text-[13px] truncate flex-1 tracking-tight font-medium",
+          isSelected ? "text-white" : "text-neutral-300 group-hover:text-neutral-200"
+        )}>
+          {note.title || "Untitled"}
+        </span>
+      </button>
+    </NoteContextMenu>
+  )
+}
+
+
 export default function NotesPage() {
   const { notes, selectedNoteId, setSelectedNoteId, addNote, updateNote, deleteNote, pinNote, updateNoteLocal } = useNotesStore()
   const { isSidebarOpen } = useUIStore()
   const [searchQuery, setSearchQuery] = useState("")
-  const [filter, setFilter] = useState<"all" | "pinned" | "trash">("all")
+  const [expandedSections, setExpandedSections] = useState({
+    pinned: true,
+    all: true
+  })
 
   const debouncedUpdate = useDebounce(updateNote, 250)
 
   const filteredNotes = useMemo(() => {
-    const result = notes
-      .filter(note => {
-        if (filter === "trash") return !!note.deleted_at
-        if (filter === "pinned") return !note.deleted_at && note.pinned
-        return !note.deleted_at
-      })
-      .filter(note => !note.is_task) // Exclude tasks from notes view
-      .filter(note => 
-        note.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
+    return notes
+      .filter(note => !note.deleted_at)
+      .filter(note =>
+        note.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
         note.excerpt?.toLowerCase().includes(searchQuery.toLowerCase())
       )
-      .sort((a, b) => {
-        // Pinned notes first (only if in "all" view)
-        if (filter === "all") {
-          if (a.pinned && !b.pinned) return -1
-          if (!a.pinned && b.pinned) return 1
-        }
-        // Then by date
-        return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
-      })
-    return result
-  }, [notes, searchQuery, filter])
+      .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+  }, [notes, searchQuery])
+
+  const pinnedNotes = useMemo(() => filteredNotes.filter(n => n.pinned), [filteredNotes])
 
   const selectedNote = useMemo(() => {
     return notes.find(n => n.id === selectedNoteId)
   }, [notes, selectedNoteId])
 
-  // Handle remote deletion
   useEffect(() => {
     if (selectedNote?.is_deleted) {
-      // If the note was deleted on another device, deselect it
       setSelectedNoteId(null)
-      // Note: Toast could be added here if a toast system exists
     }
   }, [selectedNote?.is_deleted, setSelectedNoteId])
 
@@ -103,187 +131,177 @@ export default function NotesPage() {
         window.open(`/notes?id=${noteId}`, '_blank')
         break
       case "rename":
-        // For production, we could show a modal or just select the note and focus title
         setSelectedNoteId(noteId)
-        // Focus logic would go here if we had a ref to the title input
         break
       default:
     }
   }
 
+
+
   return (
     <AnimatePage className="h-full">
-      <div className="flex h-full bg-[#09090B] text-[#E1E2E4] font-sans selection:bg-[#4B7BFF]/30">
-        {/* Sidebar Organization Area */}
+      <div className="flex h-full bg-neutral-950 text-neutral-300 font-sans selection:bg-neutral-700">
+        {/* Sidebar */}
         <div className={cn(
-          "flex flex-col bg-[#09090B] border-r border-white/[0.04] transition-all duration-300 ease-in-out overflow-hidden shrink-0",
-          isSidebarOpen ? "w-[280px]" : "w-0 border-r-0"
+          "flex flex-col bg-neutral-950 border-r border-neutral-800/50 transition-all duration-200 ease-out overflow-hidden shrink-0",
+          isSidebarOpen ? "w-72" : "w-0 border-r-0"
         )}>
           {/* Sidebar Header */}
-          <div className="px-4 py-4 flex flex-col gap-3">
-            <div className="flex items-center justify-between">
-              <h1 className="text-[11px] font-bold text-white/20 uppercase tracking-[0.1em] flex items-center gap-2">
-                <div className="w-1.5 h-1.5 rounded-full bg-blue-500/80 shadow-[0_0_8px_rgba(59,130,246,0.3)]" />
-                Workspace
+          <div className="px-4 pt-6 pb-2">
+            <div className="flex items-center justify-between mb-4">
+              <h1 className="text-[11px] font-bold uppercase tracking-[0.1em] text-neutral-500">
+                Notes
               </h1>
-              <Button 
-                variant="ghost" 
-                size="icon" 
+              <Button
+                variant="ghost"
+                size="icon"
                 onClick={handleAddNote}
-                className="h-6 w-6 text-white/30 hover:text-white/80 hover:bg-white/[0.04] rounded-md transition-colors"
+                className="h-6 w-6 text-neutral-500 hover:text-neutral-200 hover:bg-neutral-800/80 rounded-md transition-all"
               >
-                <Plus className="w-3.5 h-3.5" />
+                <Plus className="w-4 h-4" />
               </Button>
             </div>
 
-            {/* Search Input */}
-            <div className="relative group">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-white/20 group-focus-within:text-blue-400/80 transition-colors" />
-              <input 
+            <div className="relative mb-2">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-600" />
+              <input
+                type="text"
                 placeholder="Search..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full h-7 pl-8 pr-3 text-[12px] bg-white/[0.02] border border-white/[0.04] focus:border-white/[0.08] focus:outline-none placeholder:text-white/10 transition-all rounded-[4px] text-white/80"
+                className="w-full h-9 pl-9 pr-3 text-[13px] bg-neutral-900/40 border-none focus:ring-1 focus:ring-neutral-800 focus:outline-none focus:bg-neutral-900/60 placeholder:text-neutral-700 transition-all rounded-lg text-neutral-300"
               />
             </div>
           </div>
 
-          {/* Nav Sections */}
-          <div className="px-2 space-y-0.5">
-            {[
-              { id: "all", label: "All Notes", icon: LayoutGrid },
-              { id: "pinned", label: "Pinned", icon: Star },
-              { id: "trash", label: "Trash", icon: Trash2 },
-            ].map((item) => (
-              <button
-                key={item.id}
-                onClick={() => setFilter(item.id as "all" | "pinned" | "trash")}
-                className={cn(
-                  "w-full flex items-center gap-2.5 px-2.5 py-1.5 text-[12px] rounded-md transition-colors",
-                  filter === item.id 
-                    ? "bg-white/[0.06] text-white/90 font-medium shadow-sm" 
-                    : "text-white/40 hover:bg-white/[0.03] hover:text-white/70"
-                )}
-              >
-                <item.icon className={cn(
-                  "w-3.5 h-3.5 opacity-80",
-                  filter === item.id ? "text-blue-400/90" : "text-inherit"
-                )} />
-                {item.label}
-              </button>
-            ))}
-          </div>
-
-          <div className="mt-8 px-4 mb-2">
-            <h2 className="text-[10px] font-bold text-white/10 uppercase tracking-[0.15em] px-1">
-              {filter === 'all' ? 'Recent' : filter.charAt(0).toUpperCase() + filter.slice(1)}
-            </h2>
-          </div>
-
           <ScrollArea className="flex-1">
-            <div className="flex flex-col px-2 pb-8">
-              {filteredNotes.length === 0 ? (
-                <div className="p-8 text-center space-y-2">
-                  <p className="text-[11px] font-medium text-white/20">No notes here</p>
-                </div>
-              ) : (
-                filteredNotes.map((note) => (
-                  <NoteContextMenu 
-                    key={note.id} 
-                    note={note} 
-                    onAction={handleNoteAction}
+            <div className="flex flex-col px-2 pb-6 gap-2">
+              {/* Pinned Section */}
+              {pinnedNotes.length > 0 && (
+                <div className="flex flex-col">
+                  <button
+                    onClick={() => setExpandedSections(s => ({ ...s, pinned: !s.pinned }))}
+                    className="flex items-center gap-2 px-3 py-2 text-[12px] font-semibold text-neutral-500 hover:text-neutral-300 transition-colors w-full text-left group mt-4 mb-1"
                   >
-                    <div 
-                      className={cn(
-                        "group px-3 py-2.5 cursor-pointer transition-all duration-200 rounded-md mb-0.5 relative flex flex-col gap-1.5 border border-transparent select-none",
-                        selectedNoteId === note.id 
-                          ? "bg-white/[0.06] text-white/90 border-white/[0.04] active-note-glow shadow-[0_4px_12px_rgba(0,0,0,0.1)]" 
-                          : "text-white/40 hover:bg-white/[0.03] hover:text-white/70"
-                      )}
-                      onClick={() => setSelectedNoteId(note.id)}
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <span className={cn(
-                          "text-[13px] font-semibold truncate flex-1 transition-colors",
-                          selectedNoteId === note.id ? "text-white/90" : "text-white/50 group-hover:text-white/80"
-                        )}>
-                          {note.title || "Untitled"}
-                        </span>
-                        {note.pinned && <Star className="w-2.5 h-2.5 text-blue-400 fill-blue-400/20 shrink-0" />}
-                      </div>
-                      <div className="flex flex-col gap-1">
-                        <span className={cn(
-                          "text-[11px] truncate leading-tight transition-colors line-clamp-1",
-                          selectedNoteId === note.id ? "text-white/40" : "text-white/20 group-hover:text-white/30"
-                        )}>
-                          {note.excerpt || "No content"}
-                        </span>
-                        <div className="flex items-center gap-2 mt-0.5 opacity-40 group-hover:opacity-60 transition-opacity">
-                          <Clock className="w-2.5 h-2.5" />
-                          <span className="text-[9px] font-bold uppercase tracking-wider font-mono">
-                            {formatRelativeDate(note.updated_at)}
-                          </span>
+                    <ChevronRight className={cn(
+                      "w-3 h-3 transition-transform duration-200 shrink-0",
+                      expandedSections.pinned && "rotate-90"
+                    )} />
+                    Pinned
+                  </button>
+                  <AnimatePresence initial={false}>
+                    {expandedSections.pinned && (
+                      <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: "auto", opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.2, ease: "easeInOut" }}
+                        className="overflow-hidden"
+                      >
+                        <div className="flex flex-col gap-0.5 mt-0.5">
+                          {pinnedNotes.map((note) => (
+                            <NoteSidebarItem
+                              key={`pinned-${note.id}`}
+                              note={note}
+                              isSelected={selectedNoteId === note.id}
+                              onClick={() => setSelectedNoteId(note.id)}
+                              onAction={handleNoteAction}
+                            />
+                          ))}
                         </div>
-                      </div>
-                      {selectedNoteId === note.id && (
-                        <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[2px] h-4 bg-blue-500 rounded-full shadow-[0_0_10px_rgba(59,130,246,0.5)]" />
-                      )}
-                    </div>
-                  </NoteContextMenu>
-                ))
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
               )}
+
+              {/* All Notes Section */}
+              <div className="flex flex-col">
+                <button
+                  onClick={() => setExpandedSections(s => ({ ...s, all: !s.all }))}
+                  className="flex items-center gap-2 px-3 py-2 text-[12px] font-semibold text-neutral-500 hover:text-neutral-300 transition-colors w-full text-left group mt-4 mb-1"
+                >
+                  <ChevronRight className={cn(
+                    "w-3 h-3 transition-transform duration-200 shrink-0",
+                    expandedSections.all && "rotate-90"
+                  )} />
+                  All Notes
+                </button>
+                <AnimatePresence initial={false}>
+                  {expandedSections.all && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: "auto", opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.2, ease: "easeInOut" }}
+                      className="overflow-hidden"
+                    >
+                      <div className="flex flex-col gap-0.5 mt-0.5">
+                        {filteredNotes.length === 0 ? (
+                          <p className="px-6 py-2 text-[12px] text-neutral-600 italic">No notes found</p>
+                        ) : (
+                          filteredNotes.map((note) => (
+                            <NoteSidebarItem
+                              key={`all-${note.id}`}
+                              note={note}
+                              isSelected={selectedNoteId === note.id}
+                              onClick={() => setSelectedNoteId(note.id)}
+                              onAction={handleNoteAction}
+                            />
+                          ))
+                        )}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
             </div>
           </ScrollArea>
         </div>
 
-        {/* Editor Main Area */}
-        <div className="flex-1 flex flex-col bg-[#09090B] overflow-hidden">
+        {/* Main Editor Area */}
+        <div className="flex-1 flex flex-col bg-neutral-950 overflow-hidden">
           {!selectedNote ? (
             <div className="flex-1 flex flex-col items-center justify-center p-12 text-center">
-              <div className="w-16 h-16 rounded-2xl bg-white/[0.02] border border-white/[0.05] flex items-center justify-center mb-6">
-                <LayoutGrid className="w-8 h-8 text-white/10" />
+              <div className="w-12 h-12 rounded-xl bg-neutral-900 border border-neutral-800 flex items-center justify-center mb-4">
+                <FileText className="w-6 h-6 text-neutral-700" />
               </div>
-              <h2 className="text-lg font-medium text-white/40 mb-2">Select a note to view</h2>
-              <p className="text-sm text-white/20 max-w-xs mx-auto">Choose a note from the sidebar or create a new one to get started.</p>
-              <Button 
+              <h2 className="text-base font-medium text-neutral-500 mb-1">Select a note</h2>
+              <p className="text-[13px] text-neutral-600 max-w-sm">
+                Choose a note from the sidebar or create a new one to start writing.
+              </p>
+              <Button
                 onClick={handleAddNote}
                 variant="outline"
-                className="mt-8 bg-white/[0.02] border-white/[0.05] hover:bg-white/[0.05] text-white/60 hover:text-white"
+                className="mt-6 bg-neutral-900 border-neutral-800 hover:bg-neutral-800 text-neutral-400 hover:text-neutral-200 h-8 text-[13px] px-4"
               >
-                <Plus className="w-4 h-4 mr-2" />
+                <Plus className="w-3.5 h-3.5 mr-1.5" />
                 New Note
               </Button>
             </div>
           ) : (
-            <div className="flex-1 flex flex-col overflow-hidden relative">
-              {/* Header / Toolbar Area */}
-              <header className="h-14 border-b border-white/[0.04] flex items-center justify-between px-8 glass-header z-30 select-none">
-                <div className="flex items-center gap-4">
-                  <div className="flex items-center gap-3 text-[11px] font-semibold tracking-tight">
-                    <div className="flex items-center gap-1.5 text-white/20 hover:text-white/40 transition-colors cursor-pointer">
-                      <Archive className="w-3.5 h-3.5" />
-                      <span>Library</span>
-                    </div>
-                    <span className="text-white/5 select-none">/</span>
-                    <div className="flex items-center gap-1.5 text-white/20 hover:text-white/40 transition-colors cursor-pointer">
-                      <span>Notes</span>
-                    </div>
-                    <span className="text-white/5 select-none">/</span>
-                    <span className="text-white/80 truncate max-w-[240px] font-medium">{selectedNote.title || "Untitled"}</span>
-                  </div>
+            <div className="flex-1 flex flex-col overflow-hidden">
+              {/* Clean Header */}
+              <header className="h-12 border-b border-neutral-800/50 flex items-center justify-between px-6 shrink-0">
+                <div className="flex items-center gap-3">
+                  <span className="text-[13px] text-neutral-500 font-medium truncate max-w-[300px]">
+                    {selectedNote.title || "Untitled"}
+                  </span>
                 </div>
 
-                <div className="flex items-center gap-6">
+                <div className="flex items-center gap-4">
                   <SyncStatusIndicator />
-                  <div className="flex items-center gap-2 text-[10px] text-white/20 font-bold uppercase tracking-widest font-mono bg-white/[0.02] px-2.5 py-1 rounded-md border border-white/[0.03]">
-                    <Clock className="w-3 h-3 opacity-60" />
+                  <div className="flex items-center gap-1.5 text-[11px] text-neutral-600 font-mono">
+                    <Clock className="w-3 h-3" />
                     <span>{formatRelativeDate(selectedNote.updated_at)}</span>
                   </div>
                 </div>
               </header>
 
-              <div className="flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar">
-                <div className="max-w-3xl mx-auto w-full px-8 md:px-12 pt-20 pb-40">
+              {/* Editor Content */}
+              <div className="flex-1 overflow-y-auto overflow-x-hidden">
+                <div className="max-w-3xl mx-auto w-full px-8 md:px-12 pt-16 pb-32">
                   <input
                     type="text"
                     value={selectedNote.title}
@@ -291,20 +309,20 @@ export default function NotesPage() {
                       updateNoteLocal(selectedNote.id, { title: e.target.value })
                       debouncedUpdate(selectedNote.id, { title: e.target.value })
                     }}
-                    className="w-full text-4xl font-bold tracking-tight border-none bg-transparent focus-visible:outline-none mb-12 placeholder:text-white/5 text-white selection:bg-blue-500/30"
+                    className="w-full text-[40px] font-bold tracking-tight border-none bg-transparent focus-visible:outline-none mb-10 placeholder:text-neutral-800 text-neutral-100 selection:bg-neutral-700 leading-tight"
                     placeholder="Untitled"
                   />
-                  
-                  <NoteEditor 
+
+                  <NoteEditor
                     key={selectedNote.id}
                     id={selectedNote.id}
-                    content={selectedNote.content} 
+                    content={selectedNote.content}
                     onChange={(snapshot) => {
-                      updateNote(selectedNote.id, { 
+                      updateNote(selectedNote.id, {
                         body: snapshot.body,
                         excerpt: snapshot.excerpt,
                       })
-                    }} 
+                    }}
                   />
                 </div>
               </div>

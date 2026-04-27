@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useState, useRef } from "react"
 import { format, isSameDay, parseISO, differenceInMinutes } from "date-fns"
 import { motion } from "framer-motion"
 import { AnimatePage } from "@/components/layout/animate-page"
@@ -102,26 +102,47 @@ export default function DashboardPage() {
     }
   }
 
-  // Timeline Helper: 8 AM to 8 PM
-  const timelineHours = [8, 10, 12, 14, 16, 18, 20]
-  const startTime = 8 // 8 AM
-  const totalHours = 12 // Until 8 PM
+  // Timeline Constants: Full 24 Hours
+  const timelineHours = Array.from({ length: 24 }, (_, i) => i)
+  const HOUR_WIDTH = 90 // Compact width per hour block
+  const scrollRef = useRef<HTMLDivElement>(null)
+
+  // Current time for indicator
+  const [now, setNow] = useState(new Date())
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 60000)
+    return () => clearInterval(timer)
+  }, [])
+
+  // Auto-scroll to current time
+  useEffect(() => {
+    if (scrollRef.current && hasMounted) {
+      const currentHour = new Date().getHours()
+      const scrollPos = (currentHour * HOUR_WIDTH) - (scrollRef.current.clientWidth / 2) + (HOUR_WIDTH / 2)
+      scrollRef.current.scrollTo({ left: scrollPos, behavior: 'smooth' })
+    }
+  }, [hasMounted])
 
   const getEventStyle = (startDate: string, endDate: string) => {
     const start = parseISO(startDate)
     const end = parseISO(endDate)
 
     const startMins = start.getHours() * 60 + start.getMinutes()
-    const timelineStartMins = startTime * 60
-
-    const left = ((startMins - timelineStartMins) / (totalHours * 60)) * 100
     const duration = differenceInMinutes(end, start)
-    const width = (duration / (totalHours * 60)) * 100
+
+    const left = (startMins / (24 * 60)) * (24 * HOUR_WIDTH)
+    const width = (duration / (24 * 60)) * (24 * HOUR_WIDTH)
 
     return {
-      left: `${Math.max(0, Math.min(100, left))}%`,
-      width: `${Math.max(5, Math.min(100 - left, width))}%`,
+      left: `${left}px`,
+      width: `${Math.max(60, width)}px`, // Minimum width for visibility
     }
+  }
+
+  const getCurrentTimePosition = () => {
+    const mins = now.getHours() * 60 + now.getMinutes()
+    return (mins / (24 * 60)) * (24 * HOUR_WIDTH)
   }
 
   if (!hasMounted) {
@@ -138,12 +159,12 @@ export default function DashboardPage() {
   }
 
   return (
-    <AnimatePage>
+    <AnimatePage className="flex-1 flex flex-col min-h-0">
       <motion.main
         variants={containerVariants}
         initial="hidden"
         animate="visible"
-        className="flex-1 flex flex-col p-10 overflow-y-auto bg-[#101011]"
+        className="flex-1 flex flex-col p-10 overflow-y-auto no-scrollbar bg-[#101011]"
       >
 
         {/* Header Area */}
@@ -208,37 +229,69 @@ export default function DashboardPage() {
           </div>
 
           {/* Timeline Implementation */}
-          <div className="relative border-t border-[#2E2E2E] pt-10 flex min-h-[140px] px-2">
-            {/* Time Markers */}
-            {timelineHours.map(hour => (
-              <div key={hour} className="flex-1 text-left text-[#515151] text-[12px] font-mono border-l border-[#2E2E2E]/50 pl-2 h-4">
-                {hour > 12 ? `${hour - 12}pm` : hour === 12 ? '12pm' : `${hour}am`}
-              </div>
-            ))}
-
-            {/* Dynamic Events */}
-            {todaysEvents.length > 0 ? (
-              todaysEvents.map(event => {
-                const style = getEventStyle(event.start_date, event.end_date)
-                return (
-                  <div
-                    key={event.id}
-                    style={style}
-                    className="absolute top-20 bg-blue-500/10 border-l-2 border-blue-500 p-3 rounded-r-lg group cursor-pointer hover:bg-blue-500/20 transition-all z-10"
+          <div 
+            ref={scrollRef}
+            className="relative overflow-x-auto no-scrollbar -mx-6 px-6"
+          >
+            <div 
+              style={{ width: `${24 * HOUR_WIDTH}px` }}
+              className="relative min-h-[160px] pb-2"
+            >
+              {/* Hour Blocks */}
+              <div className="flex relative z-10 h-32">
+                {timelineHours.map(hour => (
+                  <div 
+                    key={hour} 
+                    style={{ width: `${HOUR_WIDTH}px`, flexShrink: 0 }}
+                    className="border-r border-white/5 bg-white/[0.01] flex flex-col p-3 group hover:bg-white/[0.03] transition-colors"
                   >
-                    <p className="text-blue-400 font-bold text-[13px] truncate">{event.title}</p>
-                    <p className="text-blue-400/60 text-[11px]">
-                      {format(parseISO(event.start_date), 'h:mm a')} - {format(parseISO(event.end_date), 'h:mm a')}
-                    </p>
+                    <span className="text-[#515151] text-[11px] font-mono font-bold uppercase tracking-widest group-hover:text-[#808080] transition-colors">
+                      {hour === 0 ? '12am' : hour > 12 ? `${hour - 12}pm` : hour === 12 ? '12pm' : `${hour}am`}
+                    </span>
+                    <div className="mt-auto h-1 w-4 bg-white/5 rounded-full" />
                   </div>
-                )
-              })
-            ) : (
-              <div className="absolute inset-0 flex items-center justify-center text-[#515151] italic text-[14px] pointer-events-none">
-                No events scheduled for today
+                ))}
               </div>
-            )}
+
+              {/* Current Time Indicator */}
+              <div 
+                className="absolute top-0 bottom-0 w-[2px] bg-red-500/40 z-30 pointer-events-none"
+                style={{ left: `${getCurrentTimePosition()}px` }}
+              >
+                <div className="absolute top-0 left-1/2 -translate-x-1/2 w-2.5 h-2.5 rounded-full bg-red-500 shadow-[0_0_12px_rgba(239,68,68,0.6)]" />
+              </div>
+
+              {/* Dynamic Events Layer */}
+              <div className="absolute inset-0 pointer-events-none z-20 pt-12">
+                {todaysEvents.length > 0 ? (
+                  todaysEvents.map(event => {
+                    const style = getEventStyle(event.start_date, event.end_date)
+                    return (
+                      <div
+                        key={event.id}
+                        style={style}
+                        className="absolute top-12 bg-blue-500/10 border-l-2 border-blue-500 p-2.5 rounded-r-lg pointer-events-auto cursor-pointer hover:bg-blue-500/20 transition-all shadow-lg backdrop-blur-sm h-16 flex flex-col justify-center"
+                      >
+                        <p className="text-blue-400 font-bold text-[12px] truncate leading-tight">{event.title}</p>
+                        <p className="text-blue-400/60 text-[10px] font-medium mt-0.5">
+                          {format(parseISO(event.start_date), 'h:mm a')}
+                        </p>
+                      </div>
+                    )
+                  })
+                ) : null}
+              </div>
+            </div>
           </div>
+
+          {/* Empty State Message */}
+          {todaysEvents.length === 0 && (
+            <div className="mt-4 flex justify-center w-full">
+              <span className="text-[#515151] italic text-[13px] bg-white/[0.02] px-4 py-1.5 rounded-full border border-white/5">
+                No events scheduled for today
+              </span>
+            </div>
+          )}
         </motion.div>
 
         {/* Bottom Grid (Tasks & Scratch Pad) */}

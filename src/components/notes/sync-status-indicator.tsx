@@ -9,7 +9,7 @@ export function SyncStatusIndicator() {
   const [queueDepth, setQueueDepth] = useState(0)
 
   useEffect(() => {
-    
+
     // Listen for online/offline events
     const handleStatusChange = () => setIsOnline(navigator.onLine)
     window.addEventListener("online", handleStatusChange)

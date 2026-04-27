@@ -22,6 +22,7 @@ interface WeekViewProps {
   currentDate: Date
   events: CalendarEvent[]
   tasks: Task[]
+  onItemClick: (item: (Task & { type: 'task' }) | (CalendarEvent & { type: 'event' })) => void
 }
 
 const isAllDayEvent = (event: CalendarEvent) => {
@@ -30,7 +31,7 @@ const isAllDayEvent = (event: CalendarEvent) => {
   return (end.getTime() - start.getTime()) >= 24 * 60 * 60 * 1000
 }
 
-export function WeekView({ currentDate, events, tasks }: WeekViewProps) {
+export function WeekView({ currentDate, events, tasks, onItemClick }: WeekViewProps) {
   const weekDays = useMemo(() => {
     const start = startOfWeek(currentDate)
     return eachDayOfInterval({ start, end: addDays(start, 6) })
@@ -139,16 +140,13 @@ export function WeekView({ currentDate, events, tasks }: WeekViewProps) {
                   {allDayEvents.map(event => (
                     <div 
                       key={event.id}
-                      className="flex-1 rounded-sm px-2 py-0.5 flex items-center min-h-[20px]"
+                      onClick={() => onItemClick({ ...event, type: 'event' })}
+                      className="rounded-md px-2 py-1 flex items-center min-h-[24px] shadow-sm transition-all hover:brightness-110 cursor-pointer"
                       style={{
-                        backgroundColor: event.color ? `${event.color}40` : '#133c36', // Fallback to teal 20%
-                        borderLeft: `3px solid ${event.color || '#2dd4bf'}`,
+                        backgroundColor: event.color ? event.color : '#4285F4',
                       }}
                     >
-                      <span 
-                        className="text-[10px] font-bold leading-none truncate"
-                        style={{ color: event.color || '#ccfbf1' }}
-                      >
+                      <span className="text-[10px] font-bold leading-none truncate text-white uppercase tracking-tighter">
                         {event.title}
                       </span>
                     </div>
@@ -209,39 +207,34 @@ export function WeekView({ currentDate, events, tasks }: WeekViewProps) {
                 return (
                   <div 
                     key={item.id}
+                    onClick={() => onItemClick(item)}
                     className={cn(
-                      "absolute left-1 right-1 rounded border p-1.5 overflow-hidden z-10 transition-all hover:z-20 cursor-pointer group/event",
+                      "absolute left-1 right-1 rounded-lg border-l-[3px] p-2.5 overflow-hidden z-10 transition-all hover:z-20 cursor-pointer group/event shadow-lg",
                       item.type === 'event' 
-                        ? "bg-[#1f1f1f] border-white/5 hover:bg-[#2a2a2a] shadow-sm" 
-                        : "bg-blue-900/20 border-blue-500/20 hover:bg-blue-900/40"
+                        ? "bg-[#4285F4]/10 border-[#4285F4] hover:bg-[#4285F4]/20" 
+                        : "bg-[#039BE5]/10 border-[#039BE5] hover:bg-[#039BE5]/20"
                     )}
                     style={{ 
                       top: `${top}px`, 
                       height: `${height}px`,
                     }}
                   >
-                    <div 
-                      className="absolute left-0 top-0 bottom-0 w-[3px] bg-opacity-70 group-hover/event:bg-opacity-100 transition-opacity"
-                      style={{ 
-                        backgroundColor: item.type === 'event' 
-                          ? (item.color?.startsWith('bg-') ? undefined : item.color)
-                          : '#3B82F6' 
-                      }}
-                    />
-                    <div className="flex flex-col gap-0.5 h-full ml-1.5">
-                      <div className="flex items-start gap-1">
-                        {item.type === 'task' && <CheckSquare className="w-3 h-3 text-blue-400 mt-0.5 shrink-0" />}
+                    <div className="flex flex-col gap-1.5 h-full">
+                      <div className="flex items-start gap-2">
+                        {item.type === 'task' && <CheckSquare className="w-3.5 h-3.5 text-[#039BE5] mt-0.5 shrink-0" />}
                         <span className={cn(
-                          "text-[10px] font-semibold leading-tight line-clamp-2 uppercase tracking-tighter",
-                          item.type === 'event' ? "text-stone-300" : "text-blue-200"
+                          "text-[11px] font-bold leading-tight line-clamp-2 uppercase tracking-tight",
+                          item.type === 'event' ? "text-[#4285F4]" : "text-[#039BE5]"
                         )}>
                           {item.title}
                         </span>
                       </div>
                       {durationMinutes >= 45 && (
-                        <span className="text-[9px] font-medium text-stone-500 uppercase">
-                          {format(start, 'HH:mm')}
-                        </span>
+                        <div className="flex items-center gap-1 opacity-60">
+                          <span className="text-[9px] font-bold uppercase">
+                            {format(start, 'h:mm a')}
+                          </span>
+                        </div>
                       )}
                     </div>
                   </div>

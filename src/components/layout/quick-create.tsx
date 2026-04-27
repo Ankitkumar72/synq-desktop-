@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useMemo } from "react"
 import Image from "next/image"
 import { 
   Plus,
@@ -25,85 +25,150 @@ import { useUserStore } from "@/lib/store/use-user-store"
 import { getUserDisplayName, getUserInitials } from "@/lib/user-utils"
 import { RecurrenceModal } from "./recurrence-modal"
 import { buildExcerpt, createNoteContentFromText } from "@/lib/notes/note-content"
+import { Task, CalendarEvent } from "@/types"
 
 export function QuickCreateModal({ 
   trigger, 
   defaultType = 'task',
-  defaultDate = new Date()
+  defaultDate: propDefaultDate,
+  editItem = null,
+  open: controlledOpen,
+  onOpenChange: setControlledOpen
 }: { 
   trigger?: React.ReactElement, 
   defaultType?: 'task' | 'project' | 'note' | 'event',
-  defaultDate?: Date 
+  defaultDate?: Date,
+  editItem?: (Task & { type: 'task' }) | (CalendarEvent & { type: 'event' }) | null,
+  open?: boolean,
+  onOpenChange?: (open: boolean) => void
 }) {
-  const [open, setOpen] = useState(false)
-  const [type, setType] = useState<'task' | 'project' | 'note' | 'event'>(defaultType)
-  const [title, setTitle] = useState("")
-  const [description, setDescription] = useState("")
-  const [priority, setPriority] = useState("Medium")
-  const [dueDate, setDueDate] = useState<Date>(defaultDate)
-  const [recurrence, setRecurrence] = useState("Does not repeat")
+  const [internalOpen, setInternalOpen] = useState(false)
+  const open = controlledOpen ?? internalOpen
+  const setOpen = setControlledOpen ?? setInternalOpen
+  
+  const defaultDate = useMemo(() => propDefaultDate ?? new Date(), [propDefaultDate])
+
+  const [type, setType] = useState<'task' | 'project' | 'note' | 'event'>(editItem?.type || defaultType)
+  const [title, setTitle] = useState(editItem?.title || "")
+  const [description, setDescription] = useState(editItem?.description || "")
+  const [priority, setPriority] = useState(
+    (editItem?.type === 'task' ? editItem.priority?.charAt(0).toUpperCase() + editItem.priority?.slice(1) : "Medium") || "Medium"
+  )
+  const [dueDate, setDueDate] = useState<Date>(
+    editItem?.type === 'task' 
+      ? (editItem.due_date ? new Date(editItem.due_date) : defaultDate)
+      : (editItem?.type === 'event' ? new Date(editItem.start_date) : defaultDate)
+  )
+  const [recurrence, setRecurrence] = useState(
+    (editItem?.type === 'task' ? editItem.recurrence_rule : null) || "Does not repeat"
+  )
   const [recurrenceModalOpen, setRecurrenceModalOpen] = useState(false)
   const [selectedProjectId, setSelectedProjectId] = useState<string | undefined>(undefined)
   const { user } = useUserStore()
-  const { addTask } = useTaskStore()
+  const { addTask, updateTask } = useTaskStore()
   const { addProject, projects } = useProjectStore()
   const { addNote } = useNotesStore()
-  const { addEvent } = useEventStore()
+  const { addEvent, updateEvent } = useEventStore()
+
+  useEffect(() => {
+    if (open && editItem) {
+      setType(editItem.type)
+      setTitle(editItem.title)
+      setDescription(editItem.description || "")
+      if (editItem.type === 'task') {
+        setPriority(editItem.priority ? editItem.priority.charAt(0).toUpperCase() + editItem.priority.slice(1) : "Medium")
+        setDueDate(editItem.due_date ? new Date(editItem.due_date) : defaultDate)
+        setRecurrence(editItem.recurrence_rule || "Does not repeat")
+        setSelectedProjectId(editItem.project_id || undefined)
+      } else if (editItem.type === 'event') {
+        setDueDate(new Date(editItem.start_date))
+      }
+    } else if (open && !editItem) {
+      setType(defaultType)
+      setTitle("")
+      setDescription("")
+      setPriority("Medium")
+      setDueDate(defaultDate)
+      setRecurrence("Does not repeat")
+      setSelectedProjectId(undefined)
+    }
+  }, [open, editItem, defaultType, defaultDate])
 
   const name = getUserDisplayName(user)
   const initials = getUserInitials(user)
 
-  const handleCreate = () => {
+  const handleSave = () => {
     if (!title) return
 
-    if (type === 'task') {
-      addTask({
-        title,
-        status: 'todo',
-        priority: priority.toLowerCase() as "low" | "medium" | "high",
-        project_id: selectedProjectId,
-        due_date: dueDate.toISOString(),
-        assignee_id: undefined,
-      })
-    } else if (type === 'project') {
-      addProject({
-        name: title,
-        description,
-        status: 'on-track',
-        color: 'bg-stone-900',
-        is_favorite: false,
-      })
-    } else if (type === 'note') {
-      const plainText = description || ""
-      addNote({
-        title,
-        content: createNoteContentFromText(plainText),
-        excerpt: buildExcerpt(plainText),
-        body: plainText || null,
-        tags: ["quick"],
-        pinned: false,
-        is_task: false,
-        is_completed: false,
-        subtasks: [],
-        hlc_timestamp: `${Date.now()}:0:web`,
-        is_deleted: false,
-      })
-    } else if (type === 'event') {
-      addEvent({
-        title,
-        description,
-        start_date: dueDate.toISOString(),
-        end_date: new Date(dueDate.getTime() + 3600000).toISOString(),
-        color: 'rgb(59, 130, 246)',
-      })
+    if (editItem) {
+      if (editItem.type === 'task') {
+        updateTask(editItem.id, {
+          title,
+          description,
+          priority: priority.toLowerCase() as "low" | "medium" | "high",
+          project_id: selectedProjectId,
+          due_date: dueDate.toISOString(),
+          recurrence_rule: recurrence === "Does not repeat" ? undefined : recurrence
+        })
+      } else if (editItem.type === 'event') {
+        updateEvent(editItem.id, {
+          title,
+          description,
+          start_date: dueDate.toISOString(),
+          end_date: new Date(dueDate.getTime() + 3600000).toISOString(),
+        })
+      }
+    } else {
+      if (type === 'task') {
+        addTask({
+          title,
+          description,
+          status: 'todo',
+          priority: priority.toLowerCase() as "low" | "medium" | "high",
+          project_id: selectedProjectId,
+          due_date: dueDate.toISOString(),
+          assignee_id: undefined,
+          recurrence_rule: recurrence === "Does not repeat" ? undefined : recurrence
+        })
+      } else if (type === 'project') {
+        addProject({
+          name: title,
+          description,
+          status: 'on-track',
+          color: 'bg-stone-900',
+          is_favorite: false,
+        })
+      } else if (type === 'note') {
+        const plainText = description || ""
+        addNote({
+          title,
+          content: createNoteContentFromText(plainText),
+          excerpt: buildExcerpt(plainText),
+          body: plainText || null,
+          tags: ["quick"],
+          pinned: false,
+          hlc_timestamp: `${Date.now()}:0:web`,
+          is_deleted: false,
+        })
+      } else if (type === 'event') {
+        addEvent({
+          title,
+          description,
+          start_date: dueDate.toISOString(),
+          end_date: new Date(dueDate.getTime() + 3600000).toISOString(),
+          color: 'rgb(59, 130, 246)',
+        })
+      }
     }
 
     setOpen(false)
-    setTitle("")
-    setDescription("")
-    setPriority("Medium")
-    setDueDate(new Date())
-    setSelectedProjectId(undefined)
+    if (!editItem) {
+      setTitle("")
+      setDescription("")
+      setPriority("Medium")
+      setDueDate(new Date())
+      setSelectedProjectId(undefined)
+    }
   }
 
   const types = [
@@ -273,7 +338,7 @@ export function QuickCreateModal({
               {/* Footer */}
               <div className="p-6 bg-transparent flex items-center justify-end">
                 <button
-                  onClick={handleCreate}
+                  onClick={handleSave}
                   disabled={!title}
                   className={cn(
                     "h-10 px-8 rounded-full font-bold text-sm shadow-sm transition-all",
@@ -282,7 +347,7 @@ export function QuickCreateModal({
                       : "bg-[#3c4043] text-[#70757a] cursor-not-allowed"
                   )}
                 >
-                  Save
+                  {editItem ? 'Save' : 'Create'}
                 </button>
               </div>
             </div>

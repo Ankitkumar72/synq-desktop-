@@ -16,6 +16,7 @@ interface MonthViewProps {
   events: CalendarEvent[]
   tasks: Task[]
   onSelectDate: (date: Date) => void
+  onItemClick: (item: (Task & { type: 'task' }) | (CalendarEvent & { type: 'event' })) => void
 }
 
 export function MonthView({
@@ -23,6 +24,7 @@ export function MonthView({
   events,
   tasks,
   onSelectDate,
+  onItemClick,
 }: MonthViewProps) {
   const grid = useMemo(() => generateCalendarGrid(currentMonth), [currentMonth])
 
@@ -91,32 +93,27 @@ export function MonthView({
                 </span>
               </div>
 
-              {/* Events */}
-              <div className="space-y-1">
+              {/* Items */}
+              <div className="space-y-1 overflow-y-auto scrollbar-none max-h-[calc(100%-32px)]">
                 {getItemsForDay(date).map((item) => (
                   <div
                     key={item.id}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onItemClick(item)
+                    }}
                     className={cn(
-                      "flex items-center gap-1 px-2 py-1 rounded text-[11px]",
+                      "flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] font-bold transition-all hover:brightness-110",
                       item.type === "event"
-                        ? "bg-white/[0.05]"
-                        : "bg-blue-500/[0.1]"
+                        ? "bg-[#4285F4] text-white shadow-sm shadow-[#4285F4]/20"
+                        : "bg-[#039BE5]/20 text-[#039BE5] border border-[#039BE5]/30"
                     )}
                   >
-                    <div 
-                      className="w-[2px] h-3 rounded-full" 
-                      style={{ 
-                        backgroundColor: item.type === 'event' 
-                          ? (item.color?.startsWith('bg-') ? '#444' : item.color)
-                          : '#3B82F6' 
-                      }}
-                    />
-
                     {item.type === "task" && (
-                      <CheckSquare className="w-3 h-3 text-blue-400" />
+                      <CheckSquare className="w-3 h-3 shrink-0" />
                     )}
 
-                    <span className="truncate text-stone-300 font-medium tracking-tight">
+                    <span className="truncate tracking-tight leading-tight uppercase">
                       {item.title}
                     </span>
                   </div>

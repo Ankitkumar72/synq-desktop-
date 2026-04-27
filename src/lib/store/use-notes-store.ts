@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { TABLES, COLUMNS } from '@/lib/constants'
 import { hlc, HLC } from '@/lib/hlc'
-import { Note, SubTask } from '@/types'
+import { Note } from '@/types'
 import { supabase } from '@/lib/supabase.client'
 import { useUserStore } from './use-user-store'
 import { enqueueOperation } from '@/lib/crdt/offline-queue'
@@ -28,11 +28,6 @@ export function sanitizeNote(note: Partial<Note>): Note {
     tags: Array.isArray(note.tags) ? note.tags : [],
     category: note.category ?? 'personal',
     priority: note.priority ?? 'none',
-    is_task: note.is_task ?? false,
-    is_completed: note.is_completed ?? false,
-    is_all_day: note.is_all_day ?? false,
-    is_recurring_instance: note.is_recurring_instance ?? false,
-    subtasks: Array.isArray(note.subtasks) ? note.subtasks : [],
     hlc_timestamp: note.hlc_timestamp || hlc.now(),
     is_deleted: note.is_deleted ?? false,
     pinned: note.pinned ?? false,
@@ -47,6 +42,8 @@ interface NotesState {
   selectedNoteId: string | null
   activeEditNoteId: string | null
   activeEditAt: number
+  isLoading: boolean
+  error: string | null
   setNotes: (notes: Note[]) => void
   addNote: (note: Partial<Note> & { title: string }) => Promise<string | undefined>
   updateNote: (id: string, updates: Partial<Note>) => Promise<void>
@@ -58,9 +55,6 @@ interface NotesState {
   fetchNotes: (includeDeleted?: boolean) => Promise<void>
   setSelectedNoteId: (id: string | null) => void
   pinNote: (id: string, isPinned: boolean) => Promise<void>
-  addSubtask: (noteId: string, title: string) => Promise<void>
-  updateSubtask: (noteId: string, subtaskId: string, updates: Partial<SubTask>) => Promise<void>
-  deleteSubtask: (noteId: string, subtaskId: string) => Promise<void>
   focusedNoteId: string | null
   setFocusedNoteId: (id: string | null) => void
   markNoteActivity: (id: string) => void
@@ -78,6 +72,8 @@ export const useNotesStore = create<NotesState>()(
       selectedNoteId: null,
       activeEditNoteId: null,
       activeEditAt: 0,
+      isLoading: false,
+      error: null,
       focusedNoteId: null,
       setFocusedNoteId: (id) => set({ focusedNoteId: id }),
       
@@ -133,7 +129,7 @@ export const useNotesStore = create<NotesState>()(
             : `local-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
           
           const newFieldVersions: Record<string, string> = {}
-          const defaultFields = ['title', 'content', 'body', 'excerpt', 'is_task', 'is_completed', 'pinned', 'category', 'priority', 'updated_at', 'created_at']
+          const defaultFields = ['title', 'content', 'body', 'excerpt', 'pinned', 'category', 'priority', 'updated_at', 'created_at']
           
           defaultFields.forEach(key => {
             newFieldVersions[key] = timestamp
@@ -147,8 +143,6 @@ export const useNotesStore = create<NotesState>()(
             field_versions: newFieldVersions,
             updated_at: now,
             created_at: now,
-            is_task: note.is_task ?? false,
-            is_completed: note.is_completed ?? false,
             category: note.category || 'personal',
             priority: note.priority || 'none'
           })
@@ -471,30 +465,50 @@ export const useNotesStore = create<NotesState>()(
           return
         }
 
-        // Fetch all notes in one query (up to 500)
-        let query = supabase.from(TABLES.NOTES).select('*').eq(COLUMNS.USER_ID, userId);
-        if (!includeDeleted) {
-          query = query.eq(COLUMNS.IS_DELETED, false);
-        }
-        
-        const { data, error } = await query
-          .order('updated_at', { ascending: false })
-          .limit(500);
-        
-        if (error) {
-          console.error('Error fetching notes:', error);
-          return;
-        }
-
-        if (data) {
-          set({ notes: data.map(sanitizeNote) });
-
-          // Initialize Yjs docs for notes that have body content
-          for (const note of data) {
-            if (note.body) {
-              initYDocFromPlainText(note.id, note.body)
-            }
+        try {
+          set({ isLoading: true });
+          
+          // Fetch all notes in one query (up to 500)
+          let query = supabase.from(TABLES.NOTES).select('*').eq(COLUMNS.USER_ID, userId);
+          if (!includeDeleted) {
+            query = query.eq(COLUMNS.IS_DELETED, false);
           }
+          
+          const { data, error, status, statusText } = await query
+            .order('updated_at', { ascending: false })
+            .limit(500);
+          
+          if (error) {
+            console.error('[NotesStore] Error fetching notes:', {
+              message: error.message,
+              code: error.code,
+              details: error.details,
+              hint: error.hint,
+              status,
+              statusText
+            });
+            set({ isLoading: false });
+            return;
+          }
+
+          if (data) {
+            const currentNotes = get().notes
+            const merged = mergeNotesList(currentNotes, data.map(sanitizeNote), true, includeDeleted)
+            
+            set({ notes: merged, isLoading: false });
+
+            // Initialize Yjs docs for notes that have body content
+            for (const note of merged) {
+              if (note.body) {
+                initYDocFromPlainText(note.id, note.body)
+              }
+            }
+          } else {
+            set({ isLoading: false });
+          }
+        } catch (err) {
+          console.error('[NotesStore] Unexpected error in fetchNotes:', err);
+          set({ isLoading: false });
         }
       },
 
@@ -532,38 +546,6 @@ export const useNotesStore = create<NotesState>()(
         }
       },
 
-      addSubtask: async (noteId, title) => {
-        const note = get().notes.find(n => n.id === noteId)
-        if (!note) return
-
-        const newSubtask: SubTask = {
-          id: crypto.randomUUID(),
-          title,
-          is_completed: false
-        }
-
-        const updatedSubtasks = [...note.subtasks, newSubtask]
-        await get().updateNote(noteId, { subtasks: updatedSubtasks })
-      },
-
-      updateSubtask: async (noteId, subtaskId, updates) => {
-        const note = get().notes.find(n => n.id === noteId)
-        if (!note) return
-
-        const updatedSubtasks = note.subtasks.map(st => 
-          st.id === subtaskId ? { ...st, ...updates } : st
-        )
-        await get().updateNote(noteId, { subtasks: updatedSubtasks })
-      },
-
-      deleteSubtask: async (noteId, subtaskId) => {
-        const note = get().notes.find(n => n.id === noteId)
-        if (!note) return
-
-        const updatedSubtasks = note.subtasks.filter(st => st.id !== subtaskId)
-        await get().updateNote(noteId, { subtasks: updatedSubtasks })
-      },
-
       clearStore: () => {
         set({ 
           notes: [], 
@@ -577,3 +559,70 @@ export const useNotesStore = create<NotesState>()(
     { name: 'synq-notes' }
   )
 )
+
+/**
+ * Merge a list of fetched notes with the current local list.
+ * Used during fetchNotes to avoid clobbering local optimistic state.
+ * 
+ * @param local Current local notes
+ * @param remote Notes fetched from server
+ * @param isComprehensive If true, we assume the remote list represents the full state (for the given filter)
+ * @param includesDeleted If true, the remote list includes soft-deleted items
+ */
+function mergeNotesList(local: Note[], remote: Note[], isComprehensive = false, includesDeleted = false): Note[] {
+  const remoteMap = new Map(remote.map(n => [n.id, n]))
+  const merged = new Map<string, Note>()
+
+  // 1. Process existing local notes
+  for (const localNote of local) {
+    const remoteNote = remoteMap.get(localNote.id)
+
+    if (remoteNote) {
+      // Item exists in both: Merge using HLC
+      const remoteHlc = remoteNote.hlc_timestamp || ''
+      const localHlc = localNote.hlc_timestamp || ''
+      
+      if (HLC.compare(remoteHlc, localHlc) >= 0) {
+        merged.set(localNote.id, remoteNote)
+      } else {
+        merged.set(localNote.id, localNote)
+      }
+    } else {
+      // Item is in local but NOT in remote
+      if (isComprehensive) {
+        // If it's a new local item (unsynced), we MUST keep it
+        const isNewLocal = localNote.id.startsWith('local-') || !localNote.user_id
+        
+        if (isNewLocal) {
+          merged.set(localNote.id, localNote)
+        } else {
+          // It was a server item, but now it's missing from a comprehensive fetch.
+          if (includesDeleted) {
+            // We fetched EVERYTHING (including trash) and it's missing -> Hard Delete on server.
+            continue 
+          } else {
+            // We only fetched active items. 
+            if (localNote.is_deleted) {
+              merged.set(localNote.id, localNote)
+            } else {
+              // It was active locally, but missing from active remote -> Gone or Soft-Deleted.
+              continue
+            }
+          }
+        }
+      } else {
+        // Not a comprehensive fetch, keep what we have
+        merged.set(localNote.id, localNote)
+      }
+    }
+  }
+
+  // 2. Add brand new remote notes
+  for (const remoteNote of remote) {
+    if (!merged.has(remoteNote.id)) {
+      merged.set(remoteNote.id, remoteNote)
+    }
+  }
+
+  return Array.from(merged.values())
+}

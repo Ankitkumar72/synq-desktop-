@@ -12,6 +12,8 @@ const SKIP_FIELDS = ['id', 'user_id', 'created_at', 'field_versions', 'hlc_times
 
 interface EventState {
   events: CalendarEvent[]
+  isLoading: boolean
+  error: string | null
   setEvents: (events: CalendarEvent[]) => void
   addEvent: (event: Omit<CalendarEvent, 'id' | 'created_at' | 'updated_at'>) => Promise<void>
   updateEvent: (id: string, updates: Partial<CalendarEvent>) => Promise<void>
@@ -27,6 +29,8 @@ export const useEventStore = create<EventState>()(
   persist(
     (set, get) => ({
       events: [],
+      isLoading: false,
+      error: null,
       setEvents: (events) => set({ events }),
 
       addEvent: async (e) => {
@@ -207,6 +211,7 @@ export const useEventStore = create<EventState>()(
 
       fetchEvents: async (includeDeleted = false) => {
         if (!supabase) return
+        set({ isLoading: true, error: null })
         
         let userId = useUserStore.getState().user?.id
         if (!userId) {
@@ -216,26 +221,42 @@ export const useEventStore = create<EventState>()(
 
         if (!userId) {
           console.warn('[EventStore] fetchEvents called without authenticated user')
+          set({ isLoading: false, error: 'No authenticated user' })
           return
         }
 
-        // RLS automatically filters by user_id (auth.uid() = user_id)
-        let query = supabase
-          .from('events')
-          .select('*')
-          .eq('user_id', userId)
-        
-        if (!includeDeleted) {
-          query = query.eq('is_deleted', false)
-        }
-        
-        const { data, error } = await query
-          .order('start_date', { ascending: true })
-        
-        if (error) {
-          console.error('Error fetching events:', error)
-        } else {
-          set({ events: data || [] })
+        try {
+          // RLS automatically filters by user_id (auth.uid() = user_id)
+          let query = supabase
+            .from('events')
+            .select('*')
+            .eq('user_id', userId)
+          
+          if (!includeDeleted) {
+            query = query.eq('is_deleted', false)
+          }
+          
+          const { data, error, status, statusText } = await query
+            .order('start_date', { ascending: true })
+          
+          if (error) {
+            console.error('[EventStore] Error fetching events:', {
+              message: error.message,
+              code: error.code,
+              details: error.details,
+              hint: error.hint,
+              status,
+              statusText
+            })
+            set({ isLoading: false, error: error.message })
+          } else {
+            const currentEvents = get().events
+            const merged = mergeEventsList(currentEvents, data || [], true, includeDeleted)
+            set({ events: merged, isLoading: false })
+          }
+        } catch (err) {
+          console.error('[EventStore] Unexpected error in fetchEvents:', err)
+          set({ isLoading: false, error: err instanceof Error ? err.message : String(err) })
         }
       },
 
@@ -291,3 +312,70 @@ export const useEventStore = create<EventState>()(
     { name: 'synq-events' }
   )
 )
+
+/**
+ * Merge a list of fetched events with the current local list.
+ * Used during fetchEvents to avoid clobbering local optimistic state.
+ * 
+ * @param local Current local events
+ * @param remote Events fetched from server
+ * @param isComprehensive If true, we assume the remote list represents the full state (for the given filter)
+ * @param includesDeleted If true, the remote list includes soft-deleted items
+ */
+function mergeEventsList(local: CalendarEvent[], remote: CalendarEvent[], isComprehensive = false, includesDeleted = false): CalendarEvent[] {
+  const remoteMap = new Map(remote.map(e => [e.id, e]))
+  const merged = new Map<string, CalendarEvent>()
+
+  // 1. Process existing local events
+  for (const localEvent of local) {
+    const remoteEvent = remoteMap.get(localEvent.id)
+
+    if (remoteEvent) {
+      // Item exists in both: Merge using HLC
+      const remoteHlc = remoteEvent.hlc_timestamp || ''
+      const localHlc = localEvent.hlc_timestamp || ''
+      
+      if (HLC.compare(remoteHlc, localHlc) >= 0) {
+        merged.set(localEvent.id, remoteEvent)
+      } else {
+        merged.set(localEvent.id, localEvent)
+      }
+    } else {
+      // Item is in local but NOT in remote
+      if (isComprehensive) {
+        // If it's a new local item (unsynced), we MUST keep it
+        const isNewLocal = localEvent.id.startsWith('local-') || !localEvent.user_id
+        
+        if (isNewLocal) {
+          merged.set(localEvent.id, localEvent)
+        } else {
+          // It was a server item, but now it's missing from a comprehensive fetch.
+          if (includesDeleted) {
+            // We fetched EVERYTHING (including trash) and it's missing -> Hard Delete on server.
+            continue 
+          } else {
+            // We only fetched active items. 
+            if (localEvent.is_deleted) {
+              merged.set(localEvent.id, localEvent)
+            } else {
+              // It was active locally, but missing from active remote -> Gone or Soft-Deleted.
+              continue
+            }
+          }
+        }
+      } else {
+        // Not a comprehensive fetch, keep what we have
+        merged.set(localEvent.id, localEvent)
+      }
+    }
+  }
+
+  // 2. Add brand new remote events
+  for (const remoteEvent of remote) {
+    if (!merged.has(remoteEvent.id)) {
+      merged.set(remoteEvent.id, remoteEvent)
+    }
+  }
+
+  return Array.from(merged.values())
+}

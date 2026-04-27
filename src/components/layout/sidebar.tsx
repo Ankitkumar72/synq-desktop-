@@ -11,7 +11,8 @@ import {
   Layers,
   BookOpen,
   Tag,
-  Users
+  Users,
+  Trash2
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
@@ -92,6 +93,15 @@ export function LinearSidebar() {
 
       {/* Bottom Actions */}
       <div className="pt-4 border-t border-[#2E2E2E] space-y-1">
+        <Link href="/trash">
+          <div className={cn(
+            "flex items-center gap-3 px-4 py-2 rounded-lg cursor-pointer transition-colors mb-1",
+            pathname === "/trash" ? "bg-[#1F1F1F] text-white" : "text-[#999999] hover:bg-[#1F1F1F] hover:text-white"
+          )}>
+            <Trash2 className="w-4 h-4" />
+            <span className="text-[13px] font-medium">Trash</span>
+          </div>
+        </Link>
         <QuickCreateModal trigger={
           <button className="w-full flex items-center gap-3 px-4 py-2 text-[#999999] hover:bg-[#1F1F1F] hover:text-white rounded-lg transition-colors text-[13px] font-medium">
             <Plus className="w-4 h-4" />
@@ -110,8 +120,8 @@ export function LinearSidebar() {
   )
 }
 
-function SidebarItem({ icon, label, isActive }: { icon: React.ReactNode; label: string; isActive?: boolean }) {
-  return (
+function SidebarItem({ icon, label, href, isActive }: { icon: React.ReactNode; label: string; href?: string; isActive?: boolean }) {
+  const content = (
     <div className={cn(
       "flex items-center gap-3 px-4 py-2 rounded-lg cursor-pointer transition-colors",
       isActive ? "bg-[#1F1F1F] text-white" : "text-[#999999] hover:bg-[#1F1F1F] hover:text-white"
@@ -120,4 +130,10 @@ function SidebarItem({ icon, label, isActive }: { icon: React.ReactNode; label: 
       <span className="text-[13px] font-medium">{label}</span>
     </div>
   )
+
+  if (href) {
+    return <Link href={href}>{content}</Link>
+  }
+
+  return content
 }

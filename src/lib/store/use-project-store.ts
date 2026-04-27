@@ -39,10 +39,19 @@ export const useProjectStore = create<ProjectState>()(
 
         const timestamp = hlc.increment()
         const now = new Date().toISOString()
+
+        const newFieldVersions: Record<string, string> = {}
+        const defaultFields = ['name', 'description', 'color', 'status', 'is_favorite', 'updated_at', 'created_at']
+        
+        defaultFields.forEach(key => {
+          newFieldVersions[key] = timestamp
+        })
+
         const projectPayload = { 
           ...pr, 
           user_id: userId,
           hlc_timestamp: timestamp,
+          field_versions: newFieldVersions,
           updated_at: now
         }
 
@@ -64,7 +73,12 @@ export const useProjectStore = create<ProjectState>()(
             .insert([projectPayload])
             .select()
           if (error) {
-            console.error('Error adding project:', error)
+            console.error('[ProjectStore] Error adding project:', {
+              message: error.message,
+              details: error.details,
+              hint: error.hint,
+              code: error.code
+            })
             await enqueueOperation({
               entityType: 'project',
               entityId: tempId,

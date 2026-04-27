@@ -73,19 +73,7 @@ export interface Note {
   tags: string[]
   category?: string
   priority?: Priority
-  is_task: boolean
-  is_completed: boolean
-  is_all_day?: boolean
-  is_recurring_instance?: boolean
   folder_id?: string
-  parent_recurring_id?: string
-  scheduled_time?: string | null
-  end_time?: string | null
-  reminder_time?: string | null
-  original_scheduled_time?: string | null
-  completed_at?: string | null
-  recurrence_rule?: string | null
-  subtasks: SubTask[]
   color?: number
   order?: number
   hlc_timestamp: string

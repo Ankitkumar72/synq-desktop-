@@ -20,9 +20,10 @@ interface DayViewProps {
   currentDate: Date
   events: CalendarEvent[]
   tasks: Task[]
+  onItemClick: (item: (Task & { type: 'task' }) | (CalendarEvent & { type: 'event' })) => void
 }
 
-export function DayView({ currentDate, events, tasks }: DayViewProps) {
+export function DayView({ currentDate, events, tasks, onItemClick }: DayViewProps) {
   const HOUR_HEIGHT = 80
 
   const items = useMemo(() => {
@@ -95,40 +96,33 @@ export function DayView({ currentDate, events, tasks }: DayViewProps) {
             return (
               <div 
                 key={item.id}
+                onClick={() => onItemClick(item)}
                 className={cn(
-                  "absolute left-4 right-8 rounded-2xl border p-5 overflow-hidden backdrop-blur-xl z-10 transition-all hover:z-20 cursor-pointer group/event shadow-xl",
+                  "absolute left-4 right-8 rounded-xl border-l-[4px] p-6 overflow-hidden z-10 transition-all hover:z-20 cursor-pointer group/event shadow-2xl",
                   item.type === 'event' 
-                    ? "bg-white/[0.03] border-white/10 hover:bg-white/10" 
-                    : "bg-blue-500/5 border-blue-500/20 hover:bg-blue-500/10"
+                    ? "bg-[#4285F4]/5 border-[#4285F4] hover:bg-[#4285F4]/10" 
+                    : "bg-[#039BE5]/5 border-[#039BE5] hover:bg-[#039BE5]/10"
                 )}
                 style={{ 
                   top: `${top}px`, 
                   height: `${height}px`,
                 }}
               >
-                <div 
-                  className="absolute left-0 top-0 bottom-0 w-1.5 rounded-full opacity-70 group-hover/event:opacity-100 transition-opacity"
-                  style={{ 
-                    backgroundColor: item.type === 'event' 
-                      ? (item.color?.startsWith('bg-') ? undefined : item.color)
-                      : '#3B82F6' 
-                  }}
-                />
-                <div className="flex flex-col gap-3 h-full overflow-hidden">
+                <div className="flex flex-col gap-4 h-full overflow-hidden">
                   <div className="flex items-start justify-between">
-                    <div className="flex items-start gap-3">
-                      {item.type === 'task' && <CheckSquare className="w-5 h-5 text-blue-400 mt-0.5 shrink-0" />}
-                      <div className="flex flex-col gap-1">
+                    <div className="flex items-start gap-4">
+                      {item.type === 'task' && <CheckSquare className="w-6 h-6 text-[#039BE5] mt-0.5 shrink-0" />}
+                      <div className="flex flex-col gap-1.5">
                         <span className={cn(
-                          "text-base font-bold tracking-tight leading-tight",
-                          item.type === 'event' ? "text-stone-100" : "text-blue-100"
+                          "text-xl font-bold tracking-tight leading-tight uppercase",
+                          item.type === 'event' ? "text-[#4285F4]" : "text-[#039BE5]"
                         )}>
                           {item.title}
                         </span>
-                        <div className="flex items-center gap-2 text-stone-500">
-                          <Clock className="w-3.5 h-3.5" />
-                          <span className="text-[11px] font-bold uppercase tracking-tight">
-                            {format(start, 'HH:mm')} – {format(end, 'HH:mm')}
+                        <div className="flex items-center gap-2.5 text-stone-500 font-bold text-[12px] uppercase tracking-wider">
+                          <Clock className="w-4 h-4" />
+                          <span>
+                            {format(start, 'h:mm a')} – {format(end, 'h:mm a')}
                           </span>
                         </div>
                       </div>
@@ -136,18 +130,18 @@ export function DayView({ currentDate, events, tasks }: DayViewProps) {
                   </div>
 
                   {durationMinutes >= 60 && item.description && (
-                    <div className="flex items-start gap-2 pt-1 border-t border-white/5 opacity-60 group-hover:opacity-100 transition-opacity">
-                      <AlignLeft className="w-3.5 h-3.5 text-stone-600 shrink-0 mt-0.5" />
-                      <p className="text-[11px] text-stone-400 line-clamp-2 leading-normal">
+                    <div className="flex items-start gap-3 pt-3 border-t border-white/5 opacity-70 group-hover:opacity-100 transition-opacity">
+                      <AlignLeft className="w-4 h-4 text-stone-600 shrink-0 mt-0.5" />
+                      <p className="text-[13px] text-stone-400 line-clamp-3 leading-relaxed font-medium">
                         {item.description}
                       </p>
                     </div>
                   )}
 
                   {durationMinutes >= 90 && item.type === 'event' && item.location && (
-                    <div className="flex items-center gap-2 opacity-60 group-hover:opacity-100 transition-opacity">
-                      <MapPin className="w-3.5 h-3.5 text-stone-600 shrink-0" />
-                      <span className="text-[11px] text-stone-400 truncate">
+                    <div className="flex items-center gap-3 opacity-70 group-hover:opacity-100 transition-opacity">
+                      <MapPin className="w-4 h-4 text-stone-600 shrink-0" />
+                      <span className="text-[13px] text-stone-400 truncate font-medium">
                         {item.location}
                       </span>
                     </div>

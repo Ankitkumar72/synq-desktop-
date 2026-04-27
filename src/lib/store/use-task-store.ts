@@ -51,27 +51,41 @@ export const useTaskStore = create<TaskState>()(
           return
         }
 
-        // RLS automatically filters by user_id (auth.uid() = user_id)
-        let query = supabase
-          .from('tasks')
-          .select('*')
-          .eq('user_id', userId)
-        
-        if (!includeDeleted) {
-          query = query.eq('is_deleted', false)
-        }
-        
-        const { data, error } = await query
-          .order('created_at', { ascending: false })
-        
-        if (error) {
-          set({ error: error.message, isLoading: false })
-          console.error('Error fetching tasks:', error)
-        } else {
-          // Merge each fetched task using CRDT merge to preserve local state
-          const currentTasks = get().tasks
-          const merged = mergeTaskList(currentTasks, data || [])
-          set({ tasks: merged, isLoading: false })
+        try {
+          // RLS automatically filters by user_id (auth.uid() = user_id)
+          let query = supabase
+            .from('tasks')
+            .select('*')
+            .eq('user_id', userId)
+          
+          if (!includeDeleted) {
+            query = query.eq('is_deleted', false)
+          }
+          
+          const { data, error, status, statusText } = await query
+            .order('created_at', { ascending: false })
+          
+          if (error) {
+            console.error('[TaskStore] Error fetching tasks:', {
+              message: error.message,
+              code: error.code,
+              details: error.details,
+              hint: error.hint,
+              status,
+              statusText
+            })
+            set({ error: error.message, isLoading: false })
+          } else {
+            // Merge each fetched task using CRDT merge to preserve local state
+            const currentTasks = get().tasks
+            // If includeDeleted is true, we have the absolute state. 
+            // If false, we have the absolute state of active tasks.
+            const merged = mergeTaskList(currentTasks, data || [], true, includeDeleted)
+            set({ tasks: merged, isLoading: false })
+          }
+        } catch (err) {
+          console.error('[TaskStore] Unexpected error in fetchTasks:', err)
+          set({ error: err instanceof Error ? err.message : String(err), isLoading: false })
         }
       },
 
@@ -99,11 +113,19 @@ export const useTaskStore = create<TaskState>()(
 
         const timestamp = hlc.increment()
         const now = new Date().toISOString()
+        const newFieldVersions: Record<string, string> = {}
+        const defaultFields = ['title', 'description', 'status', 'priority', 'due_date', 'project_id', 'assignee_id', 'order', 'recurrence_rule', 'parent_recurring_id', 'updated_at', 'created_at']
+        
+        defaultFields.forEach(key => {
+          newFieldVersions[key] = timestamp
+        })
+
         const taskPayload = { 
           ...t, 
           due_date: formattedDate,
           user_id: userId,
           hlc_timestamp: timestamp,
+          field_versions: newFieldVersions,
           updated_at: now
         }
 
@@ -123,7 +145,12 @@ export const useTaskStore = create<TaskState>()(
             .select()
           
           if (error) {
-            console.error('Error adding task:', error)
+            console.error('[TaskStore] Error adding task:', {
+              message: error.message,
+              details: error.details,
+              hint: error.hint,
+              code: error.code
+            })
             // Enqueue for retry
             await enqueueOperation({
               entityType: 'task',
@@ -133,7 +160,7 @@ export const useTaskStore = create<TaskState>()(
               hlcTimestamp: timestamp,
             })
             triggerFlush()
-          } else if (data) {
+          } else if (data?.[0]) {
             // Replace temp task with real one
             set(state => ({ 
               tasks: state.tasks.map(task => 
@@ -400,29 +427,69 @@ export const useTaskStore = create<TaskState>()(
 /**
  * Merge a list of fetched tasks with the current local list.
  * Used during fetchTasks to avoid clobbering local optimistic state.
+ * 
+ * @param local Current local tasks
+ * @param remote Tasks fetched from server
+ * @param isComprehensive If true, we assume the remote list represents the full state (for the given filter)
+ * @param includesDeleted If true, the remote list includes soft-deleted items
  */
-function mergeTaskList(local: Task[], remote: Task[]): Task[] {
+function mergeTaskList(local: Task[], remote: Task[], isComprehensive = false, includesDeleted = false): Task[] {
   const remoteMap = new Map(remote.map(t => [t.id, t]))
   const merged = new Map<string, Task>()
 
-  // Start with local tasks
-  for (const t of local) {
-    merged.set(t.id, t)
+  // 1. Process existing local tasks
+  for (const localTask of local) {
+    const remoteTask = remoteMap.get(localTask.id)
+
+    if (remoteTask) {
+      // Item exists in both: Merge using HLC
+      const remoteHlc = remoteTask.hlc_timestamp || ''
+      const localHlc = localTask.hlc_timestamp || ''
+      
+      if (HLC.compare(remoteHlc, localHlc) >= 0) {
+        merged.set(localTask.id, remoteTask)
+      } else {
+        merged.set(localTask.id, localTask)
+      }
+    } else {
+      // Item is in local but NOT in remote
+      if (isComprehensive) {
+        // If it's a new local item (unsynced), we MUST keep it
+        const isNewLocal = localTask.id.startsWith('local-') || !localTask.user_id
+        
+        if (isNewLocal) {
+          merged.set(localTask.id, localTask)
+        } else {
+          // It was a server item, but now it's missing from a comprehensive fetch.
+          
+          if (includesDeleted) {
+            // We fetched EVERYTHING (including trash) and it's missing -> Hard Delete on server.
+            // Remove it from local.
+            continue 
+          } else {
+            // We only fetched active items. 
+            // If local is active, but missing from remote -> It was either deleted or moved to trash.
+            // If local is ALREADY marked as deleted, we keep it (it wouldn't be in the remote active list anyway).
+            if (localTask.is_deleted) {
+              merged.set(localTask.id, localTask)
+            } else {
+              // It was active locally, but missing from active remote -> Gone or Soft-Deleted.
+              // To be safe against ghosts, we remove it.
+              continue
+            }
+          }
+        }
+      } else {
+        // Not a comprehensive fetch (e.g. a delta or single item), keep what we have
+        merged.set(localTask.id, localTask)
+      }
+    }
   }
 
-  // Merge remote tasks
-  for (const [id, remoteTask] of remoteMap) {
-    const localTask = merged.get(id)
-    if (!localTask) {
-      merged.set(id, remoteTask)
-      continue
-    }
-
-    // Use HLC comparison for basic merge on fetch
-    const remoteHlc = remoteTask.hlc_timestamp || ''
-    const localHlc = localTask.hlc_timestamp || ''
-    if (HLC.compare(remoteHlc, localHlc) >= 0) {
-      merged.set(id, remoteTask)
+  // 2. Add brand new remote tasks
+  for (const remoteTask of remote) {
+    if (!merged.has(remoteTask.id)) {
+      merged.set(remoteTask.id, remoteTask)
     }
   }
 

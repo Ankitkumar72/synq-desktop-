@@ -1,19 +1,16 @@
 "use client"
 
-import { useState, useMemo, useEffect, useCallback } from "react"
+import { useState, useMemo, useEffect, useCallback, memo } from "react"
 import { 
-  Trash2, 
-  RotateCcw, 
   StickyNote, 
   CheckSquare, 
   Calendar,
-  Search,
-  X
+  X,
+  RotateCcw,
+  Trash2
 } from "lucide-react"
+import { motion, AnimatePresence } from "framer-motion"
 import { AnimatePage } from "@/components/layout/animate-page"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { useNotesStore } from "@/lib/store/use-notes-store"
 import { useTaskStore } from "@/lib/store/use-task-store"
 import { useEventStore } from "@/lib/store/use-event-store"
@@ -23,21 +20,94 @@ import { cn } from "@/lib/utils"
 import { Note, Task, CalendarEvent } from "@/types"
 
 type UnifiedTrashItem = Note | Task | CalendarEvent
+type Category = 'notes' | 'tasks' | 'events'
+
+const TrashItemRow = memo(({ 
+  item, 
+  isSelected, 
+  onToggle, 
+  onRestore, 
+  onDelete, 
+  category 
+}: { 
+  item: UnifiedTrashItem, 
+  isSelected: boolean, 
+  onToggle: (id: string) => void,
+  onRestore: (id: string) => void,
+  onDelete: (id: string) => void,
+  category: Category
+}) => {
+  return (
+    <div
+      className={cn(
+        "relative px-8 py-4 flex items-center gap-6 transition-colors duration-200",
+        isSelected ? "bg-white/[0.04]" : "hover:bg-white/[0.01]"
+      )}
+    >
+      <div className="w-5 flex items-center justify-center">
+        <input 
+          type="checkbox" 
+          checked={isSelected}
+          onChange={() => onToggle(item.id)}
+          className="w-4 h-4 rounded bg-transparent border-white/10 checked:bg-white checked:border-white transition-all appearance-none cursor-pointer border"
+        />
+      </div>
+      
+      <div className="w-32 text-sm text-white/40 font-medium">
+        {new Date(item.deleted_at!).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' })}
+      </div>
+      <div className="w-24 text-sm text-white/20 font-mono">
+        {new Date(item.deleted_at!).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }).toLowerCase()}
+      </div>
+
+      <div className="flex-1 flex items-center gap-3 min-w-0">
+        <div className="w-7 h-7 rounded border border-white/[0.03] flex items-center justify-center text-white/10 shrink-0">
+          {category === 'notes' ? <StickyNote className="w-4 h-4" strokeWidth={1.5} /> : 
+           category === 'tasks' ? <CheckSquare className="w-4 h-4" strokeWidth={1.5} /> :
+           <Calendar className="w-4 h-4" strokeWidth={1.5} />}
+        </div>
+        <span className="text-base font-medium text-white/70 truncate">
+          {item.title || "Untitled"}
+        </span>
+      </div>
+
+      <div className="flex items-center gap-3 w-40 justify-end">
+        <button 
+          onClick={() => onRestore(item.id)}
+          className="p-2 rounded-lg text-white/20 hover:text-white hover:bg-white/5 transition-all"
+          title="Restore"
+        >
+          <RotateCcw className="w-4 h-4" />
+        </button>
+        <button 
+          onClick={() => onDelete(item.id)}
+          className="p-2 rounded-lg text-rose-500/20 hover:text-rose-500 hover:bg-rose-500/10 transition-all"
+          title="Delete Forever"
+        >
+          <Trash2 className="w-4 h-4" />
+        </button>
+      </div>
+    </div>
+  )
+})
+
+TrashItemRow.displayName = 'TrashItemRow'
 
 export default function TrashPage() {
   const { notes, restoreNote, permanentlyDeleteNote, fetchNotes } = useNotesStore()
   const { tasks, restoreTask, permanentlyDeleteTask, fetchTasks } = useTaskStore()
   const { events, restoreEvent, permanentlyDeleteEvent, fetchEvents } = useEventStore()
-  const [searchQuery, setSearchQuery] = useState("")
+  
+  const [activeCategory, setActiveCategory] = useState<Category>('notes')
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
 
   useEffect(() => {
-    // Initial fetch of all items including trashed ones
     fetchTasks(true)
     fetchEvents(true)
     fetchNotes(true)
   }, [fetchTasks, fetchEvents, fetchNotes])
 
-  // Auto-purge items older than 15 days on mount
+  // Auto-purge items older than 15 days
   useEffect(() => {
     const purgeExpired = async () => {
       const expiredNotes = notes.filter(n => n.deleted_at && isExpired(n.deleted_at))
@@ -48,211 +118,219 @@ export default function TrashPage() {
       for (const task of expiredTasks) await permanentlyDeleteTask(task.id)
       for (const event of expiredEvents) await permanentlyDeleteEvent(event.id)
     }
-    
     purgeExpired()
   }, [notes, tasks, events, permanentlyDeleteNote, permanentlyDeleteTask, permanentlyDeleteEvent])
 
   const filterItems = useCallback((items: UnifiedTrashItem[]) =>
     items
       .filter(i => i.deleted_at)
-      .filter(i => i.title.toLowerCase().includes(searchQuery.toLowerCase()))
-      .sort((a, b) => new Date(b.deleted_at!).getTime() - new Date(a.deleted_at!).getTime()), [searchQuery])
+      .sort((a, b) => new Date(b.deleted_at!).getTime() - new Date(a.deleted_at!).getTime()), [])
 
   const trashedNotes = useMemo(() => filterItems(notes as Note[]), [notes, filterItems])
   const trashedTasks = useMemo(() => filterItems(tasks as Task[]), [tasks, filterItems])
   const trashedEvents = useMemo(() => filterItems(events as CalendarEvent[]), [events, filterItems])
 
-  const emptyTrash = async (type: 'notes' | 'tasks' | 'events') => {
-    const items = type === 'notes' ? trashedNotes : type === 'tasks' ? trashedTasks : trashedEvents
-    if (items.length === 0) return
+  const currentItems = activeCategory === 'notes' ? trashedNotes : activeCategory === 'tasks' ? trashedTasks : trashedEvents
 
-    if (confirm(`Are you sure you want to permanently delete all ${type} in the trash?`)) {
-      if (type === 'notes') {
-        for (const note of trashedNotes) await permanentlyDeleteNote(note.id)
-      } else if (type === 'tasks') {
-        for (const task of trashedTasks) await permanentlyDeleteTask(task.id)
-      } else {
-        for (const event of trashedEvents) await permanentlyDeleteEvent(event.id)
+  const emptyCategory = async () => {
+    if (currentItems.length === 0) return
+    if (confirm(`Permanently delete all ${activeCategory} in trash?`)) {
+      for (const item of currentItems) {
+        if (activeCategory === 'notes') await permanentlyDeleteNote(item.id)
+        else if (activeCategory === 'tasks') await permanentlyDeleteTask(item.id)
+        else await permanentlyDeleteEvent(item.id)
       }
     }
   }
 
+  const toggleSelection = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const toggleAll = () => {
+    if (selectedIds.size === currentItems.length) setSelectedIds(new Set())
+    else setSelectedIds(new Set(currentItems.map(i => i.id)))
+  }
+
+  const batchRestore = async () => {
+    if (selectedIds.size === 0) return
+    for (const id of selectedIds) {
+      if (activeCategory === 'notes') await restoreNote(id)
+      else if (activeCategory === 'tasks') await restoreTask(id)
+      else await restoreEvent(id)
+    }
+    setSelectedIds(new Set())
+  }
+
+  const batchDelete = async () => {
+    if (selectedIds.size === 0) return
+    if (confirm(`Permanently delete ${selectedIds.size} items?`)) {
+      for (const id of selectedIds) {
+        if (activeCategory === 'notes') await permanentlyDeleteNote(id)
+        else if (activeCategory === 'tasks') await permanentlyDeleteTask(id)
+        else await permanentlyDeleteEvent(id)
+      }
+      setSelectedIds(new Set())
+    }
+  }
+
+  useEffect(() => {
+    setSelectedIds(new Set())
+  }, [activeCategory])
+
   return (
-    <AnimatePage>
-      <div className="flex flex-col h-full bg-[#0a0a0a]">
-        {/* Header */}
-        <div className="px-8 py-6 border-b border-white/5 flex items-center justify-between sticky top-0 bg-[#0a0a0a]/80 backdrop-blur-md z-20">
-          <div>
-            <h1 className="text-xl font-bold tracking-tight text-white/90">Trash</h1>
-            <p className="text-[12px] text-stone-500 mt-0.5">Deleted items are removed after 15 days.</p>
-          </div>
-
-          <div className="flex items-center gap-4">
-            <div className="relative group">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-stone-600" />
-              <Input 
-                placeholder="Search trash..." 
-                className="pl-9 w-64 bg-white/[0.03] border-white/5 text-[13px] h-9 rounded-xl focus-visible:ring-indigo-500/20 focus-visible:border-indigo-500/20 transition-all font-medium"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-            </div>
-            <Button 
-              variant="outline" 
-              size="sm" 
-              className="text-stone-300 hover:text-rose-400 hover:border-rose-500/40 hover:bg-rose-500/5 transition-all text-[16px] font-semibold px-7 h-12 rounded-xl border-white/30"
-              onClick={() => {
-                if (trashedNotes.length > 0) emptyTrash('notes')
-                else if (trashedTasks.length > 0) emptyTrash('tasks')
-                else if (trashedEvents.length > 0) emptyTrash('events')
-              }}
-              disabled={trashedNotes.length === 0 && trashedTasks.length === 0 && trashedEvents.length === 0}
-            >
-              Empty All
-            </Button>
-          </div>
-        </div>
-
-        <div className="flex-1 overflow-auto p-8 max-w-7xl mx-auto w-full">
-          <Tabs defaultValue="notes" className="w-full">
-            <div className="flex items-center justify-center mb-20">
-              <TabsList className="bg-white/[0.03] border border-white/20 p-1.5 rounded-[22px]">
-                {[
-                  { key: "notes", label: "Notes", count: trashedNotes.length },
-                  { key: "tasks", label: "Tasks", count: trashedTasks.length },
-                  { key: "events", label: "Events", count: trashedEvents.length }
-                ].map(tab => (
-                  <TabsTrigger 
-                    key={tab.key}
-                    value={tab.key} 
-                    className="px-9 py-3.5 rounded-[18px] data-[state=active]:bg-white/10 data-[state=active]:text-white data-[state=active]:border-stone-300 border-2 border-transparent transition-all text-[17px] font-bold"
-                  >
-                    {tab.label} <span className="ml-3 text-[13px] opacity-40 font-medium">{tab.count}</span>
-                  </TabsTrigger>
-                ))}
-              </TabsList>
-            </div>
-
-            <TabsContent value="notes" className="mt-0 outline-none">
-              <Grid items={trashedNotes} type="note" onRestore={restoreNote} onDelete={permanentlyDeleteNote} />
-            </TabsContent>
-
-            <TabsContent value="tasks" className="mt-0 outline-none">
-              <Grid items={trashedTasks} type="task" onRestore={restoreTask} onDelete={permanentlyDeleteTask} />
-            </TabsContent>
-
-            <TabsContent value="events" className="mt-0 outline-none">
-              <Grid items={trashedEvents} type="event" onRestore={restoreEvent} onDelete={permanentlyDeleteEvent} />
-            </TabsContent>
-          </Tabs>
-        </div>
+    <AnimatePage className="h-full bg-[#030303] flex flex-col font-sans overflow-hidden">
+      {/* Subtle Background Glow */}
+      <div className="absolute inset-0 pointer-events-none">
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-[300px] bg-gradient-to-b from-white/[0.01] to-transparent" />
       </div>
+
+      <header className="relative z-10 py-10 border-b border-white/[0.04] bg-[#030303]/80 backdrop-blur-md">
+        <div className="max-w-5xl mx-auto px-10 flex items-center justify-between">
+          <div className="space-y-2">
+            <h1 className="text-4xl font-semibold text-white tracking-tight">Trash</h1>
+            <p className="text-sm text-white/30">Items are permanently removed after 15 days</p>
+          </div>
+
+          <div className="flex items-center gap-8">
+
+            <nav className="flex items-center gap-1 bg-white/[0.03] p-1 rounded-full border border-white/[0.05]">
+              {(['notes', 'tasks', 'events'] as const).map((cat) => (
+                <button
+                  key={cat}
+                  onClick={() => setActiveCategory(cat)}
+                  className={cn(
+                    "px-6 py-2 rounded-full text-sm font-medium transition-all duration-200 relative",
+                    activeCategory === cat ? "text-white" : "text-white/30 hover:text-white/50"
+                  )}
+                >
+                  {activeCategory === cat && (
+                    <motion.div 
+                      layoutId="active-cat"
+                      className="absolute inset-0 bg-white/5 rounded-full"
+                      transition={{ type: "spring", bounce: 0, duration: 0.4 }}
+                    />
+                  )}
+                  <span className="relative z-10 capitalize">{cat}</span>
+                </button>
+              ))}
+            </nav>
+            
+            {currentItems.length > 0 && (
+              <button 
+                onClick={emptyCategory}
+                className="text-xs font-medium text-white/10 hover:text-white/40 transition-colors"
+              >
+                Empty All
+              </button>
+            )}
+          </div>
+        </div>
+      </header>
+
+      <main className="relative z-10 flex-1 overflow-auto custom-scrollbar py-12">
+        <div className="max-w-5xl mx-auto px-10">
+          <AnimatePresence mode="wait">
+            {currentItems.length === 0 ? (
+              <motion.div 
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="h-[400px] flex flex-col items-center justify-center"
+              >
+                <p className="text-[12px] text-white/10 font-medium tracking-tight">No items in trash</p>
+              </motion.div>
+            ) : (
+              <div className="space-y-6">
+                <AnimatePresence>
+                  {selectedIds.length > 0 && (
+                    <motion.div 
+                      layout
+                      initial={{ opacity: 0, scale: 0.95, y: -20 }}
+                      animate={{ opacity: 1, scale: 1, y: 0 }}
+                      exit={{ opacity: 0, scale: 0.95, y: -20 }}
+                      className="flex items-center gap-6 px-8 py-5 bg-white/[0.03] rounded-2xl border border-white/[0.08] shadow-2xl backdrop-blur-xl z-20 sticky top-4"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-6 h-6 rounded-full bg-white flex items-center justify-center">
+                          <span className="text-[10px] text-black font-bold">{selectedIds.size}</span>
+                        </div>
+                        <span className="text-sm text-white/90 font-semibold tracking-tight">Items Selected</span>
+                      </div>
+                      
+                      <div className="h-6 w-px bg-white/10 mx-2" />
+                      
+                      <div className="flex items-center gap-4">
+                        <button 
+                          onClick={batchRestore} 
+                          className="px-4 py-1.5 text-xs font-semibold text-white bg-white/5 hover:bg-white/10 border border-white/10 rounded-full transition-all active:scale-95"
+                        >
+                          Restore Selected
+                        </button>
+                        <button 
+                          onClick={batchDelete} 
+                          className="px-4 py-1.5 text-xs font-semibold text-rose-400 bg-rose-500/10 hover:bg-rose-500/20 border border-white/0 hover:border-rose-500/20 rounded-full transition-all active:scale-95"
+                        >
+                          Delete Forever
+                        </button>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                <motion.div 
+                  initial={{ opacity: 0, y: 4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="border border-white/[0.03] rounded-lg overflow-hidden bg-[#050505]"
+                >
+                {/* List Header */}
+                <div className="px-8 py-4 border-b border-white/[0.03] flex items-center gap-6 text-[11px] text-white/20 font-medium uppercase tracking-[0.15em] bg-white/[0.01]">
+                  <div className="w-5 flex items-center justify-center">
+                    <input 
+                      type="checkbox" 
+                      checked={selectedIds.size === currentItems.length && currentItems.length > 0}
+                      onChange={toggleAll}
+                      className="w-4 h-4 rounded bg-transparent border-white/10 checked:bg-white checked:border-white transition-all appearance-none cursor-pointer border"
+                    />
+                  </div>
+                  <div className="w-32">Date</div>
+                  <div className="w-24">Time</div>
+                  <div className="flex-1">Title</div>
+                  <div className="w-40 text-right pr-20">Actions</div>
+                </div>
+
+                <div className="divide-y divide-white/[0.02]">
+                  {currentItems.map((item) => (
+                    <TrashItemRow
+                      key={item.id}
+                      item={item}
+                      isSelected={selectedIds.has(item.id)}
+                      onToggle={toggleSelection}
+                      onRestore={(id) => {
+                        if (activeCategory === 'notes') restoreNote(id)
+                        else if (activeCategory === 'tasks') restoreTask(id)
+                        else restoreEvent(id)
+                      }}
+                      onDelete={(id) => {
+                        if (activeCategory === 'notes') permanentlyDeleteNote(id)
+                        else if (activeCategory === 'tasks') permanentlyDeleteTask(id)
+                        else permanentlyDeleteEvent(id)
+                      }}
+                      category={activeCategory}
+                    />
+                  ))}
+                </div>
+                </motion.div>
+              </div>
+            )}
+          </AnimatePresence>
+        </div>
+      </main>
     </AnimatePage>
-  )
-}
-
-function Grid({ items, type, onRestore, onDelete }: { 
-  items: UnifiedTrashItem[], 
-  type: 'note' | 'task' | 'event',
-  onRestore: (id: string) => void,
-  onDelete: (id: string) => void
-}) {
-  if (items.length === 0) return <EmptyTrashState type={type} />
-
-  return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-      {items.map((item) => (
-        <TrashItemCard 
-          key={item.id}
-          title={item.title}
-          type={type}
-          deletedAt={item.deleted_at!}
-          onRestore={() => onRestore(item.id)}
-          onDelete={() => onDelete(item.id)}
-        />
-      ))}
-    </div>
-  )
-}
-
-function TrashItemCard({ 
-  title, 
-  type, 
-  deletedAt, 
-  onRestore, 
-  onDelete 
-}: { 
-  title: string, 
-  type: 'note' | 'task' | 'event', 
-  deletedAt: string, 
-  onRestore: () => void, 
-  onDelete: () => void 
-}) {
-  const daysRemaining = getDaysRemaining(deletedAt)
-  const isEmergency = daysRemaining <= 3
-
-  return (
-    <div className="bg-[#141414] border border-white/5 rounded-2xl p-5 group flex flex-col gap-4 shadow-[0_4px_20px_rgba(0,0,0,0.2)] hover:border-white/10 transition-all">
-      <div className="flex items-start justify-between">
-        <div className={cn(
-          "w-9 h-9 rounded-xl flex items-center justify-center bg-white/[0.03] border border-white/5 text-stone-400 group-hover:text-white transition-colors",
-          type === 'note' && 'group-hover:text-indigo-400', 
-          type === 'task' && 'group-hover:text-emerald-400', 
-          type === 'event' && 'group-hover:text-amber-400'
-        )}>
-          {type === 'note' ? <StickyNote className="w-4 h-4" /> : 
-           type === 'task' ? <CheckSquare className="w-4 h-4" /> :
-           <Calendar className="w-4 h-4" />}
-        </div>
-
-        <div className={cn(
-          "px-2.5 py-1 rounded-full text-[10px] font-bold tracking-tight uppercase bg-white/5",
-          isEmergency ? "text-rose-500" : "text-stone-500"
-        )}>
-          {daysRemaining}d left
-        </div>
-      </div>
-
-      <div className="space-y-1.5 flex-1">
-        <h3 className="text-[17px] font-bold text-stone-100 leading-tight line-clamp-1">
-          {title || "Untitled"}
-        </h3>
-        <p className="text-[14px] text-stone-500 font-medium">Deleted {formatRelativeDate(deletedAt)}</p>
-      </div>
-
-      <div className="flex items-center gap-3 pt-2 opacity-0 group-hover:opacity-100 transition-opacity">
-        <Button 
-          variant="outline" 
-          size="sm" 
-          className="flex-1 bg-white/[0.02] hover:bg-white/10 text-stone-100 hover:text-white border-white/30 rounded-xl text-[15px] h-12 font-bold transition-all"
-          onClick={onRestore}
-        >
-          <RotateCcw className="w-5 h-5 mr-3" />
-          Restore
-        </Button>
-        <Button 
-          variant="outline" 
-          size="icon" 
-          className="w-12 h-12 rounded-xl text-stone-500 hover:text-rose-500 hover:bg-rose-500/10 transition-all border-white/30 hover:border-rose-500/40"
-          onClick={onDelete}
-        >
-          <X className="w-5.5 h-5.5" />
-        </Button>
-      </div>
-    </div>
-  )
-}
-
-function EmptyTrashState({ type }: { type: string }) {
-  return (
-    <div className="col-span-full flex flex-col items-center justify-center py-24 text-center">
-      <div className="w-16 h-16 rounded-3xl bg-white/[0.02] border border-white/5 flex items-center justify-center mb-6">
-        <Trash2 className="w-6 h-6 text-stone-800" strokeWidth={1} />
-      </div>
-      <h3 className="text-base font-semibold text-stone-200">Empty Trash</h3>
-      <p className="text-[13px] text-stone-600 mt-1 max-w-[240px] font-medium mx-auto">
-        Your deleted {type} will appear here and stay for 15 days.
-      </p>
-    </div>
   )
 }

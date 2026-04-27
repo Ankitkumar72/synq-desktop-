@@ -9,6 +9,10 @@ import {
   Settings,
   HelpCircle,
   ChevronDown,
+  CalendarRange,
+  CheckSquare,
+  CalendarDays,
+  Clock,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { QuickCreateModal } from "@/components/layout/quick-create"
@@ -37,6 +41,8 @@ import { startOfWeek, eachDayOfInterval } from 'date-fns'
 import { MonthView } from "@/components/calendar/month-view"
 import { WeekView } from "@/components/calendar/week-view"
 import { DayView } from "@/components/calendar/day-view"
+import { ItemDetail } from "@/components/calendar/item-detail"
+import { Task, CalendarEvent } from "@/types"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -45,7 +51,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 
 export default function CalendarPage() {
-  const [view, setView] = useState<'month' | 'week' | 'day' | 'overdue' | 'schedule'>('month')
+  const [view, setView] = useState<'month' | 'week' | 'day' | 'overdue' | 'schedule' | 'tasks' | 'events'>('month')
   const [currentDate, setCurrentDate] = useState(new Date())
   const [selectedDate, setSelectedDate] = useState(new Date())
   const [miniCalendarMonth, setMiniCalendarMonth] = useState(new Date())
@@ -53,6 +59,22 @@ export default function CalendarPage() {
   const { events, fetchEvents } = useEventStore()
   const { tasks, fetchTasks } = useTaskStore()
   const hasMounted = useHasMounted()
+
+  const [selectedItem, setSelectedItem] = useState<(Task & { type: 'task' }) | (CalendarEvent & { type: 'event' }) | null>(null)
+  const [isDetailOpen, setIsDetailOpen] = useState(false)
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false)
+  const [itemToEdit, setItemToEdit] = useState<((Task & { type: 'task' }) | (CalendarEvent & { type: 'event' })) | null>(null)
+
+  const handleItemClick = (item: (Task & { type: 'task' }) | (CalendarEvent & { type: 'event' })) => {
+    setSelectedItem(item)
+    setIsDetailOpen(true)
+  }
+
+  const handleEdit = (item: (Task & { type: 'task' }) | (CalendarEvent & { type: 'event' })) => {
+    setIsDetailOpen(false)
+    setItemToEdit(item)
+    setIsEditModalOpen(true)
+  }
 
   useEffect(() => {
     fetchEvents()
@@ -86,6 +108,8 @@ export default function CalendarPage() {
     if (view === 'day') return getDayFullString(currentDate)
     if (view === 'overdue') return "Overdue Tasks"
     if (view === 'schedule') return "Upcoming Schedule"
+    if (view === 'tasks') return "All Tasks"
+    if (view === 'events') return "All Events"
     return ""
   }
 
@@ -119,6 +143,37 @@ export default function CalendarPage() {
                 setMiniCalendarMonth(startOfMonth(date))
               }}
             />
+          </div>
+
+          <div className="px-2 mb-6 space-y-1">
+            {[
+              { id: 'schedule', label: 'Schedule', icon: CalendarRange },
+              { id: 'tasks', label: 'Tasks', icon: CheckSquare },
+              { id: 'events', label: 'Events', icon: CalendarDays },
+              { id: 'overdue', label: 'Overdue Tasks', icon: Clock },
+            ].map((item) => {
+              const Icon = item.icon
+              const isActive = view === item.id
+              return (
+                <Button
+                  key={item.id}
+                  variant="ghost"
+                  onClick={() => setView(item.id as 'month' | 'week' | 'day' | 'overdue' | 'schedule' | 'tasks' | 'events')}
+                  className={cn(
+                    "w-full justify-start gap-3 h-11 px-4 rounded-xl transition-all group",
+                    isActive 
+                      ? "bg-white/[0.08] text-white font-bold border border-white/10 shadow-lg shadow-black/20" 
+                      : "text-stone-400 hover:text-white hover:bg-white/[0.05]"
+                  )}
+                >
+                  <Icon className={cn("w-4.5 h-4.5 transition-colors", isActive ? "text-blue-400" : "text-stone-500 group-hover:text-stone-300")} />
+                  <span className="text-[14px] tracking-tight">{item.label}</span>
+                  {isActive && (
+                    <div className="ml-auto w-1.5 h-1.5 rounded-full bg-blue-400 shadow-[0_0_8px_rgba(96,165,250,0.6)]" />
+                  )}
+                </Button>
+              )
+            })}
           </div>
 
           <div className="flex-1 overflow-y-auto px-2 space-y-8 scrollbar-none pb-4">
@@ -204,6 +259,7 @@ export default function CalendarPage() {
                 currentMonth={currentDate}
                 events={events}
                 tasks={tasks}
+                onItemClick={handleItemClick}
                 onSelectDate={(date) => {
                   setSelectedDate(date)
                   setCurrentDate(date)
@@ -211,13 +267,30 @@ export default function CalendarPage() {
                 }}
               />
             )}
-            {view === 'week' && <WeekView currentDate={currentDate} events={events} tasks={tasks} />}
-            {view === 'day' && <DayView currentDate={currentDate} events={events} tasks={tasks} />}
+            {view === 'week' && <WeekView currentDate={currentDate} events={events} tasks={tasks} onItemClick={handleItemClick} />}
+            {view === 'day' && <DayView currentDate={currentDate} events={events} tasks={tasks} onItemClick={handleItemClick} />}
             {view === 'schedule' && <ScheduleView />}
             {view === 'overdue' && <OverdueView />}
+            {view === 'tasks' && <TasksView />}
+            {view === 'events' && <EventsView />}
           </div>
         </main>
       </div>
+
+      {selectedItem && (
+        <ItemDetail 
+          item={selectedItem} 
+          open={isDetailOpen} 
+          onOpenChange={setIsDetailOpen} 
+          onEdit={handleEdit}
+        />
+      )}
+
+      <QuickCreateModal
+        open={isEditModalOpen}
+        onOpenChange={setIsEditModalOpen}
+        editItem={itemToEdit}
+      />
     </AnimatePage>
   )
 }
@@ -326,6 +399,28 @@ function OverdueView() {
       <div className="text-center">
         <h3 className="text-stone-300 font-bold mb-1 font-display">Overdue Items</h3>
         <p className="text-sm">Tasks past their deadline will be listed here.</p>
+      </div>
+    </div>
+  )
+}
+
+function TasksView() {
+  return (
+    <div className="flex-1 flex flex-col items-center justify-center text-stone-500 gap-4 animate-in fade-in slide-in-from-bottom-4 duration-700">
+      <div className="text-center">
+        <h3 className="text-stone-300 font-bold mb-1 font-display">Task Board</h3>
+        <p className="text-sm">Manage all your tasks in one unified view.</p>
+      </div>
+    </div>
+  )
+}
+
+function EventsView() {
+  return (
+    <div className="flex-1 flex flex-col items-center justify-center text-stone-500 gap-4 animate-in fade-in slide-in-from-bottom-4 duration-700">
+      <div className="text-center">
+        <h3 className="text-stone-300 font-bold mb-1 font-display">Event List</h3>
+        <p className="text-sm">Browse and manage your upcoming calendar events.</p>
       </div>
     </div>
   )

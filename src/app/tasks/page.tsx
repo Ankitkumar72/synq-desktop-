@@ -45,7 +45,7 @@ interface DisplayTask {
 export default function TasksPage() {
   const [view, setView] = useState<'list' | 'kanban'>('list')
   const { tasks, updateTask, deleteTask, fetchTasks, isLoading: tasksLoading, error: tasksError } = useTaskStore()
-  const { notes, updateNote, deleteNote, fetchNotes } = useNotesStore()
+  const { fetchNotes } = useNotesStore()
   const [searchQuery, setSearchQuery] = useState("")
 
   useEffect(() => {
@@ -53,24 +53,18 @@ export default function TasksPage() {
     fetchNotes()
   }, [fetchTasks, fetchNotes])
 
-  // Map notes that are tasks into a compatible format for display
-  const noteTasks: DisplayTask[] = notes
-    .filter(n => n.is_task && !n.is_deleted)
-    .map(n => ({
-      id: n.id,
-      title: n.title || "Untitled Task",
-      status: n.is_completed ? 'done' : 'todo',
-      priority: n.priority || 'none',
-      project_id: n.category || 'Quick Task',
-      due_date: n.scheduled_time ? new Date(n.scheduled_time).toLocaleDateString() : undefined,
-      is_quick_task: true,
-      original: n
+  const allTasks: DisplayTask[] = tasks
+    .filter(t => !t.is_deleted)
+    .map(t => ({ 
+      id: t.id,
+      title: t.title || "Untitled Task",
+      status: t.status === 'done' ? 'done' : t.status === 'in-progress' ? 'in-progress' : 'todo',
+      priority: t.priority || 'none',
+      project_id: t.project_id || 'Personal',
+      due_date: t.due_date ? new Date(t.due_date).toLocaleDateString() : undefined,
+      is_quick_task: false,
+      original: t 
     }))
-
-  const allTasks: DisplayTask[] = [
-    ...tasks.filter(t => !t.is_deleted).map(t => ({ ...t, is_quick_task: false, original: t })),
-    ...noteTasks
-  ]
 
   const filteredTasks = allTasks.filter(t => 
     t.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -82,19 +76,11 @@ export default function TasksPage() {
   const doneTasks = filteredTasks.filter(t => t.status === 'done')
 
   const handleToggleTask = async (task: DisplayTask) => {
-    if (task.is_quick_task) {
-      await updateNote(task.id, { is_completed: task.status !== 'done' })
-    } else {
-      await updateTask(task.id, { status: task.status === 'done' ? 'todo' : 'done' })
-    }
+    await updateTask(task.id, { status: task.status === 'done' ? 'todo' : 'done' })
   }
 
   const handleDeleteTask = async (task: DisplayTask) => {
-    if (task.is_quick_task) {
-      await deleteNote(task.id)
-    } else {
-      await deleteTask(task.id)
-    }
+    await deleteTask(task.id)
   }
 
   const handleAddTask = async () => {
