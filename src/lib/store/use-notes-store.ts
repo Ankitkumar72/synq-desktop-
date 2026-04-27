@@ -5,6 +5,18 @@ import { hlc, HLC } from '@/lib/hlc'
 import { Note, SubTask } from '@/types'
 import { supabase } from '@/lib/supabase.client'
 import { useUserStore } from './use-user-store'
+import { enqueueOperation } from '@/lib/crdt/offline-queue'
+import { triggerFlush, getOnlineStatus, saveYDocToSupabase } from '@/lib/crdt/sync-manager'
+import { 
+  getOrCreateYDoc, 
+  setActiveEdit, 
+  markLocallyModified, 
+  applyMobileBodyUpdate,
+  getPlainTextFromYDoc,
+  getExcerptFromYDoc,
+  initYDocFromPlainText,
+  destroyYDoc,
+} from '@/lib/crdt/crdt-doc'
 
 export function sanitizeNote(note: Partial<Note>): Note {
   return {
@@ -33,6 +45,8 @@ export function sanitizeNote(note: Partial<Note>): Note {
 interface NotesState {
   notes: Note[]
   selectedNoteId: string | null
+  activeEditNoteId: string | null
+  activeEditAt: number
   setNotes: (notes: Note[]) => void
   addNote: (note: Partial<Note> & { title: string }) => Promise<string | undefined>
   updateNote: (id: string, updates: Partial<Note>) => Promise<void>
@@ -49,21 +63,48 @@ interface NotesState {
   deleteSubtask: (noteId: string, subtaskId: string) => Promise<void>
   focusedNoteId: string | null
   setFocusedNoteId: (id: string | null) => void
+  markNoteActivity: (id: string) => void
+  clearActiveNoteActivity: (id?: string) => void
+  saveNoteContent: (id: string) => Promise<void>
+  clearStore: () => void
 }
 
-// User state is now managed centrally in useUserStore
+const ACTIVE_NOTE_EDIT_GRACE_MS = 1500
 
 export const useNotesStore = create<NotesState>()(
   persist(
     (set, get) => ({
       notes: [],
       selectedNoteId: null,
+      activeEditNoteId: null,
+      activeEditAt: 0,
       focusedNoteId: null,
       setFocusedNoteId: (id) => set({ focusedNoteId: id }),
+      
+      markNoteActivity: (id) => {
+        set({ activeEditNoteId: id, activeEditAt: Date.now() })
+        // Tell the CRDT doc manager this note is being actively edited
+        setActiveEdit(id, true)
+      },
+      
+      clearActiveNoteActivity: (id) => {
+        set((state) => {
+          if (!id || state.activeEditNoteId === id) {
+            // Clear the active edit flag on the CRDT doc manager
+            if (state.activeEditNoteId) {
+              setActiveEdit(state.activeEditNoteId, false)
+            }
+            return { activeEditNoteId: null, activeEditAt: 0 }
+          }
+          return {}
+        })
+      },
+
       setNotes: (notes) => set((state) => ({ 
         notes, 
         selectedNoteId: state.selectedNoteId || (notes.length > 0 ? notes[0].id : null)
       })),
+
       addNote: async (note) => {
         console.log('[NotesStore] Attempting to add note:', note.title);
         if (!supabase) {
@@ -112,33 +153,45 @@ export const useNotesStore = create<NotesState>()(
             priority: note.priority || 'none'
           })
 
+          // Initialize a Y.Doc for this new note
+          getOrCreateYDoc(noteId)
+
           // OPTIMISTIC UPDATE: Add to local state immediately
           set((state) => ({ 
             notes: [fullNote, ...state.notes],
             selectedNoteId: fullNote.id // Auto-select new note
           }))
 
-          console.log('[NotesStore] Inserting note into database:', noteId);
-          const { data, error } = await supabase
-            .from(TABLES.NOTES)
-            .insert([fullNote])
-            .select()
+          if (getOnlineStatus()) {
+            console.log('[NotesStore] Inserting note into database:', noteId);
+            const { data, error } = await supabase
+              .from(TABLES.NOTES)
+              .insert([fullNote])
+              .select()
 
-          if (error) {
-            console.error('[NotesStore] Database error, rolling back:', error.message);
-            // ROLLBACK: Remove the note if insertion failed
-            set((state) => ({
-              notes: state.notes.filter(n => n.id !== noteId),
-              selectedNoteId: state.selectedNoteId === noteId ? (state.notes.length > 1 ? state.notes[1].id : null) : state.selectedNoteId
-            }))
-            return undefined
-          }
-
-          if (data?.[0]) {
-            // Update with the official record from database (e.g. server-side timestamps)
-            set((state) => ({ 
-              notes: state.notes.map(n => n.id === noteId ? data[0] : n)
-            }))
+            if (error) {
+              console.error('[NotesStore] Database error, queueing for retry:', error.message);
+              await enqueueOperation({
+                entityType: 'note',
+                entityId: noteId,
+                operationType: 'insert',
+                payload: fullNote,
+                hlcTimestamp: timestamp,
+              })
+              triggerFlush()
+            } else if (data?.[0]) {
+              set((state) => ({ 
+                notes: state.notes.map(n => n.id === noteId ? data[0] : n)
+              }))
+            }
+          } else {
+            await enqueueOperation({
+              entityType: 'note',
+              entityId: noteId,
+              operationType: 'insert',
+              payload: fullNote,
+              hlcTimestamp: timestamp,
+            })
           }
           
           console.log('[NotesStore] Note created successfully:', noteId);
@@ -148,6 +201,7 @@ export const useNotesStore = create<NotesState>()(
           return undefined;
         }
       },
+
       updateNote: async (id, updates) => {
         if (!supabase) return
 
@@ -170,21 +224,46 @@ export const useNotesStore = create<NotesState>()(
           updated_at: new Date().toISOString()
         }
 
+        // Mark as locally modified to prevent echo
+        markLocallyModified(id)
+
         // Optimistic local update
         get().updateNoteLocal(id, syncUpdates)
 
-        const { error } = await supabase.from(TABLES.NOTES).update(syncUpdates).eq(COLUMNS.ID, id)
-        if (error) {
-          console.error('Error updating note:', error)
-          // Re-fetch on error to ensure consistency
-          get().fetchNotes()
+        if (getOnlineStatus()) {
+          const { error } = await supabase.from(TABLES.NOTES).update(syncUpdates).eq(COLUMNS.ID, id)
+          if (error) {
+            console.error('Error updating note:', error)
+            await enqueueOperation({
+              entityType: 'note',
+              entityId: id,
+              operationType: 'update',
+              payload: syncUpdates,
+              hlcTimestamp: timestamp,
+            })
+            triggerFlush()
+          }
+        } else {
+          await enqueueOperation({
+            entityType: 'note',
+            entityId: id,
+            operationType: 'update',
+            payload: syncUpdates,
+            hlcTimestamp: timestamp,
+          })
         }
       },
+
       updateNoteLocal: (id, updates) => {
         set((state) => ({
           notes: state.notes.map((n) => (n.id === id ? { ...n, ...updates } : n))
         }))
       },
+
+      /**
+       * CRDT merge: merge a remote note into local state using per-field LWW.
+       * Also handles bidirectional mobile sync via body field.
+       */
       mergeNoteLocal: (remoteNote) => {
         // Sync our local clock with the incoming note to prevent drift
         hlc.receive(remoteNote.hlc_timestamp)
@@ -194,42 +273,65 @@ export const useNotesStore = create<NotesState>()(
           
           if (existingIndex === -1) {
             // New note arrived from remote
+            // Initialize Yjs doc from the body if it has text content
+            if (remoteNote.body) {
+              initYDocFromPlainText(remoteNote.id, remoteNote.body)
+            }
             return { notes: [sanitizeNote(remoteNote), ...state.notes] }
           }
 
           const existing = state.notes[existingIndex]
+          const isActivelyEditing =
+            state.activeEditNoteId === remoteNote.id &&
+            (Date.now() - state.activeEditAt) < ACTIVE_NOTE_EDIT_GRACE_MS
           
-          // If the whole record is newer, or we don't have field versions, just merge it
+          // If the whole record is newer, or we don't have field versions, merge it
           if (HLC.compare(remoteNote.hlc_timestamp, existing.hlc_timestamp) > 0) {
-            // Combine fields selectively
             const mergedNode = { ...existing }
             const remoteFields = remoteNote.field_versions || {}
             const localFields = existing.field_versions || {}
+            const hasRemoteFieldVersions = Object.keys(remoteFields).length > 0
+            const mergedFieldVersions: Record<string, string> = { ...localFields }
 
             Object.entries(remoteNote).forEach(([key, value]) => {
+              if (key === 'field_versions' || key === 'hlc_timestamp') return
+
+              // For content/body, check if this came from mobile and update Yjs
+              if (key === 'body' && !isActivelyEditing) {
+                const remoteV = remoteFields[key]
+                const localV = localFields[key]
+                if (remoteV && (!localV || HLC.compare(remoteV, localV) > 0)) {
+                  // This body change came from mobile — bridge to Yjs
+                  const remoteNodeId = HLC.extractNodeId(remoteNote.hlc_timestamp)
+                  if (!remoteNodeId.startsWith('web')) {
+                    // Mobile edit detected — update Yjs doc
+                    applyMobileBodyUpdate(remoteNote.id, value as string)
+                  }
+                }
+              }
+
+              if (isActivelyEditing && (key === 'content' || key === 'body' || key === 'excerpt')) {
+                return
+              }
+
               const remoteV = remoteFields[key]
               const localV = localFields[key]
 
-              // If remote field is newer or missing locally
-              if (remoteV && (!localV || HLC.compare(remoteV, localV) > 0)) {
+              if (hasRemoteFieldVersions) {
+                if (remoteV && (!localV || HLC.compare(remoteV, localV) > 0)) {
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  (mergedNode as any)[key] = value
+                  mergedFieldVersions[key] = remoteV
+                }
+              } else if (value !== undefined) {
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 (mergedNode as any)[key] = value
-                if (!mergedNode.field_versions) mergedNode.field_versions = {}
-                mergedNode.field_versions[key] = remoteV
+                mergedFieldVersions[key] = remoteNote.hlc_timestamp
               }
             })
-            
-            // Special handling for content/body syncing
-            // FOCUS GUARD: If this note is currently being focused (edited),
-            // skip updating the content to prevent cursor jumps.
-            const isFocused = get().focusedNoteId === remoteNote.id;
-
-            if (!isFocused && remoteFields['content'] && (!localFields['content'] || HLC.compare(remoteFields['content'], localFields['content']) > 0)) {
-              mergedNode.body = remoteNote.body
-              mergedNode.content = remoteNote.content
-            }
 
             mergedNode.hlc_timestamp = remoteNote.hlc_timestamp
+            mergedNode.field_versions = mergedFieldVersions
             
             const newNotes = [...state.notes]
             newNotes[existingIndex] = mergedNode
@@ -239,6 +341,26 @@ export const useNotesStore = create<NotesState>()(
           return state // No update needed
         })
       },
+
+      /**
+       * Save the current Yjs document state for a note to Supabase.
+       * This also extracts body/excerpt for Flutter compatibility.
+       */
+      saveNoteContent: async (id) => {
+        const userId = useUserStore.getState().user?.id
+        if (!userId) return
+
+        // Get body/excerpt from Yjs doc
+        const body = getPlainTextFromYDoc(id)
+        const excerpt = getExcerptFromYDoc(id)
+
+        // Update local note state with latest body/excerpt
+        get().updateNoteLocal(id, { body, excerpt })
+
+        // Save Yjs state to Supabase (also writes body/excerpt)
+        await saveYDocToSupabase(id, userId)
+      },
+
       deleteNote: async (id) => {
         if (!supabase) return console.warn('Supabase not configured')
         const now = new Date().toISOString()
@@ -255,19 +377,30 @@ export const useNotesStore = create<NotesState>()(
           notes: state.notes.map(n => n.id === id ? { ...n, deleted_at: now, is_deleted: true, field_versions: newFieldVersions } : n)
         }))
 
-        const { error } = await supabase.from(TABLES.NOTES).update({ 
+        // Clean up Yjs doc
+        destroyYDoc(id)
+
+        const payload = { 
           [COLUMNS.DELETED_AT]: now,
           [COLUMNS.IS_DELETED]: true,
           deleted_hlc: timestamp,
           hlc_timestamp: timestamp,
           field_versions: newFieldVersions,
           [COLUMNS.UPDATED_AT]: now
-        }).eq(COLUMNS.ID, id)
-        if (error) {
-          console.error('Error moving note to trash:', error)
-          get().fetchNotes()
+        }
+
+        if (getOnlineStatus()) {
+          const { error } = await supabase.from(TABLES.NOTES).update(payload).eq(COLUMNS.ID, id)
+          if (error) {
+            console.error('Error moving note to trash:', error)
+            await enqueueOperation({ entityType: 'note', entityId: id, operationType: 'update', payload, hlcTimestamp: timestamp })
+            triggerFlush()
+          }
+        } else {
+          await enqueueOperation({ entityType: 'note', entityId: id, operationType: 'update', payload, hlcTimestamp: timestamp })
         }
       },
+
       restoreNote: async (id) => {
         if (!supabase) return console.warn('Supabase not configured')
         const timestamp = hlc.increment()
@@ -283,73 +416,88 @@ export const useNotesStore = create<NotesState>()(
           notes: state.notes.map(n => n.id === id ? { ...n, deleted_at: undefined, is_deleted: false, field_versions: newFieldVersions } : n)
         }))
 
-        const { error } = await supabase.from(TABLES.NOTES).update({ 
+        const payload = { 
           [COLUMNS.DELETED_AT]: null,
           [COLUMNS.IS_DELETED]: false,
           deleted_hlc: null,
           hlc_timestamp: timestamp,
           field_versions: newFieldVersions,
           [COLUMNS.UPDATED_AT]: new Date().toISOString()
-        }).eq(COLUMNS.ID, id)
-        if (error) {
-          console.error('Error restoring note:', error)
-          get().fetchNotes()
+        }
+
+        if (getOnlineStatus()) {
+          const { error } = await supabase.from(TABLES.NOTES).update(payload).eq(COLUMNS.ID, id)
+          if (error) {
+            console.error('Error restoring note:', error)
+            await enqueueOperation({ entityType: 'note', entityId: id, operationType: 'update', payload, hlcTimestamp: timestamp })
+            triggerFlush()
+          }
+        } else {
+          await enqueueOperation({ entityType: 'note', entityId: id, operationType: 'update', payload, hlcTimestamp: timestamp })
         }
       },
+
       permanentlyDeleteNote: async (id) => {
         if (!supabase) return console.warn('Supabase not configured')
         
+        // Clean up Yjs doc
+        destroyYDoc(id)
+
         set(state => ({
           notes: state.notes.filter(n => n.id !== id),
           selectedNoteId: state.selectedNoteId === id ? null : state.selectedNoteId
         }))
 
-        const { error } = await supabase.from(TABLES.NOTES).delete().eq(COLUMNS.ID, id)
-        if (error) console.error('Error permanently deleting note:', error)
+        if (getOnlineStatus()) {
+          const { error } = await supabase.from(TABLES.NOTES).delete().eq(COLUMNS.ID, id)
+          if (error) {
+            console.error('Error permanently deleting note:', error)
+            await enqueueOperation({ entityType: 'note', entityId: id, operationType: 'hard_delete', payload: {}, hlcTimestamp: hlc.increment() })
+            triggerFlush()
+          }
+        } else {
+          await enqueueOperation({ entityType: 'note', entityId: id, operationType: 'hard_delete', payload: {}, hlcTimestamp: hlc.increment() })
+        }
       },
+
       setSelectedNoteId: (id) => set({ selectedNoteId: id }),
+
       fetchNotes: async (includeDeleted = false) => {
         if (!supabase) return
         
-        // 1. First fetch: Rapidly load the most recent 50 notes
-        const INITIAL_BATCH_SIZE = 50;
-        let query = supabase.from(TABLES.NOTES).select('*');
+        const userId = useUserStore.getState().user?.id
+        if (!userId) {
+          console.warn('[NotesStore] fetchNotes called without authenticated user')
+          return
+        }
+
+        // Fetch all notes in one query (up to 500)
+        let query = supabase.from(TABLES.NOTES).select('*').eq(COLUMNS.USER_ID, userId);
         if (!includeDeleted) {
           query = query.eq(COLUMNS.IS_DELETED, false);
         }
         
-        const { data: initialData, error: initialError } = await query
+        const { data, error } = await query
           .order('updated_at', { ascending: false })
-          .limit(INITIAL_BATCH_SIZE);
+          .limit(500);
         
-        if (initialError) {
-          console.error('Error fetching initial notes:', initialError);
+        if (error) {
+          console.error('Error fetching notes:', error);
           return;
         }
 
-        if (initialData) {
-          // Immediately update state with the first batch
-          set({ notes: initialData.map(sanitizeNote) });
+        if (data) {
+          set({ notes: data.map(sanitizeNote) });
 
-          // 2. Background catch-up: If we potentially have more notes, fetch the rest
-          if (initialData.length === INITIAL_BATCH_SIZE) {
-            // We fetch the next batch. In a production app with thousands of notes, 
-            // you'd use a loop or cursor, but for most note users, fetching the 
-            // next few hundred is sufficient for a single background pass.
-            const { data: remainingData, error: remainingError } = await query
-              .order('updated_at', { ascending: false })
-              .range(INITIAL_BATCH_SIZE, INITIAL_BATCH_SIZE + 450); // Fetch up to 500 total notes for now
-            
-            if (remainingError) {
-              console.error('Error in background note catch-up:', remainingError);
-            } else if (remainingData && remainingData.length > 0) {
-              set(state => ({
-                notes: [...state.notes, ...remainingData.map(sanitizeNote)]
-              }));
+          // Initialize Yjs docs for notes that have body content
+          for (const note of data) {
+            if (note.body) {
+              initYDocFromPlainText(note.id, note.body)
             }
           }
         }
       },
+
       pinNote: async (id, isPinned) => {
         const timestamp = hlc.increment()
         const now = new Date().toISOString()
@@ -364,17 +512,26 @@ export const useNotesStore = create<NotesState>()(
         }))
         
         if (!supabase) return
-        const { error } = await supabase.from(TABLES.NOTES).update({ 
+
+        const payload = { 
           [COLUMNS.PINNED]: isPinned,
           hlc_timestamp: timestamp,
           field_versions: newFieldVersions,
           [COLUMNS.UPDATED_AT]: now
-        }).eq(COLUMNS.ID, id)
-        if (error) {
-          console.error('Error pinning note:', error)
-          get().fetchNotes()
+        }
+
+        if (getOnlineStatus()) {
+          const { error } = await supabase.from(TABLES.NOTES).update(payload).eq(COLUMNS.ID, id)
+          if (error) {
+            console.error('Error pinning note:', error)
+            await enqueueOperation({ entityType: 'note', entityId: id, operationType: 'update', payload, hlcTimestamp: timestamp })
+            triggerFlush()
+          }
+        } else {
+          await enqueueOperation({ entityType: 'note', entityId: id, operationType: 'update', payload, hlcTimestamp: timestamp })
         }
       },
+
       addSubtask: async (noteId, title) => {
         const note = get().notes.find(n => n.id === noteId)
         if (!note) return
@@ -388,6 +545,7 @@ export const useNotesStore = create<NotesState>()(
         const updatedSubtasks = [...note.subtasks, newSubtask]
         await get().updateNote(noteId, { subtasks: updatedSubtasks })
       },
+
       updateSubtask: async (noteId, subtaskId, updates) => {
         const note = get().notes.find(n => n.id === noteId)
         if (!note) return
@@ -397,6 +555,7 @@ export const useNotesStore = create<NotesState>()(
         )
         await get().updateNote(noteId, { subtasks: updatedSubtasks })
       },
+
       deleteSubtask: async (noteId, subtaskId) => {
         const note = get().notes.find(n => n.id === noteId)
         if (!note) return
@@ -404,6 +563,16 @@ export const useNotesStore = create<NotesState>()(
         const updatedSubtasks = note.subtasks.filter(st => st.id !== subtaskId)
         await get().updateNote(noteId, { subtasks: updatedSubtasks })
       },
+
+      clearStore: () => {
+        set({ 
+          notes: [], 
+          selectedNoteId: null, 
+          activeEditNoteId: null,
+          activeEditAt: 0,
+          focusedNoteId: null 
+        })
+      }
     }),
     { name: 'synq-notes' }
   )

@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import Image from "next/image"
 import { 
   Plus,
   Clock,
@@ -21,7 +22,9 @@ import { useNotesStore } from "@/lib/store/use-notes-store"
 import { useEventStore } from "@/lib/store/use-event-store"
 import { AnimatePresence } from "framer-motion"
 import { useUserStore } from "@/lib/store/use-user-store"
+import { getUserDisplayName, getUserInitials } from "@/lib/user-utils"
 import { RecurrenceModal } from "./recurrence-modal"
+import { buildExcerpt, createNoteContentFromText } from "@/lib/notes/note-content"
 
 export function QuickCreateModal({ 
   trigger, 
@@ -41,11 +44,14 @@ export function QuickCreateModal({
   const [recurrence, setRecurrence] = useState("Does not repeat")
   const [recurrenceModalOpen, setRecurrenceModalOpen] = useState(false)
   const [selectedProjectId, setSelectedProjectId] = useState<string | undefined>(undefined)
-
+  const { user } = useUserStore()
   const { addTask } = useTaskStore()
   const { addProject, projects } = useProjectStore()
   const { addNote } = useNotesStore()
   const { addEvent } = useEventStore()
+
+  const name = getUserDisplayName(user)
+  const initials = getUserInitials(user)
 
   const handleCreate = () => {
     if (!title) return
@@ -68,11 +74,12 @@ export function QuickCreateModal({
         is_favorite: false,
       })
     } else if (type === 'note') {
+      const plainText = description || ""
       addNote({
         title,
-        content: description || "No content yet...",
-        excerpt: (description || "No content yet...").substring(0, 100),
-        body: description || "No content yet...",
+        content: createNoteContentFromText(plainText),
+        excerpt: buildExcerpt(plainText),
+        body: plainText || null,
         tags: ["quick"],
         pinned: false,
         is_task: false,
@@ -119,6 +126,7 @@ export function QuickCreateModal({
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger
         render={trigger || defaultTrigger}
+        nativeButton={true}
       />
       
       <AnimatePresence>
@@ -239,13 +247,23 @@ export function QuickCreateModal({
                 {/* Row: Profile/Visibility */}
                 <div className="flex gap-6 items-center group">
                   <div className="text-[#c4c7c5]">
-                    <div className="w-5 h-5 rounded-full bg-[#4285f4] flex items-center justify-center text-[8px] font-bold text-white uppercase">
-                      {useUserStore.getState().user?.email?.[0] || 'U'}
+                    <div className="w-5 h-5 rounded-full bg-[#4285f4] flex items-center justify-center text-[8px] font-bold text-white uppercase overflow-hidden">
+                      {user?.user_metadata?.avatar_url ? (
+                        <Image 
+                          src={user.user_metadata.avatar_url} 
+                          alt={name} 
+                          width={20} 
+                          height={20} 
+                          className="w-full h-full object-cover" 
+                        />
+                      ) : (
+                        initials
+                      )}
                     </div>
                   </div>
                   <div className="flex-1 text-sm">
                     <div className="flex items-center gap-2 font-medium text-[#e3e3e3]">
-                      <span>{useUserStore.getState().user?.user_metadata?.full_name || useUserStore.getState().user?.email?.split('@')[0] || "User"}</span>
+                      <span>{name}</span>
                     </div>
                     <div className="text-xs text-[#8e918f]">Personal • Private</div>
                   </div>

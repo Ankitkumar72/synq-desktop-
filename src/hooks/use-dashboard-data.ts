@@ -23,7 +23,6 @@ export function useDashboardData() {
     const todoTasks = activeTasks.filter(t => t.status !== 'done')
     const completedTasks = activeTasks.filter(t => t.status === 'done')
     const dueTodayTasks = todoTasks.filter(t => t.due_date && isToday(parseISO(t.due_date)))
-    const highPriorityTasks = todoTasks.filter(t => t.priority === 'high')
 
     // Event calculations
     const todayEvents = activeEvents.filter(e => {
@@ -33,9 +32,6 @@ export function useDashboardData() {
     
     // Notes calculations
     const pinnedNotes = activeNotes.filter(n => n.pinned)
-    const recentNotes = [...activeNotes].sort((a, b) => 
-      new Date(b.updated_at || b.created_at).getTime() - new Date(a.updated_at || a.created_at).getTime()
-    ).slice(0, 3)
 
     // Summary stats
     const stats = {
@@ -43,7 +39,6 @@ export function useDashboardData() {
         active: todoTasks.length,
         completed: completedTasks.length,
         dueToday: dueTodayTasks.length,
-        highPriority: highPriorityTasks.length,
       },
       events: {
         today: todayEvents.length,
@@ -58,25 +53,9 @@ export function useDashboardData() {
       }
     }
 
-    // Unified "Next Actions"
-    // Combining high priority tasks and upcoming events
-    const nextActions = [
-      ...highPriorityTasks.map(t => ({ ...t, type: 'task' as const })),
-      ...todayEvents.map(e => ({ ...e, type: 'event' as const }))
-    ].sort((a, b) => {
-      const aTime = 'start_date' in a ? new Date(a.start_date).getTime() : (a.due_date ? new Date(a.due_date).getTime() : Infinity)
-      const bTime = 'start_date' in b ? new Date(b.start_date).getTime() : (b.due_date ? new Date(b.due_date).getTime() : Infinity)
-      return aTime - bTime
-    }).slice(0, 6)
-
     return {
       stats,
-      nextActions,
-      recentNotes,
-      pinnedNotes,
-      todayEvents,
-      activeProjects: projects,
-      isLoading: false, // In a real app we might have a global loading state
+      isLoading: false,
     }
   }, [tasks, notes, events, projects])
 }

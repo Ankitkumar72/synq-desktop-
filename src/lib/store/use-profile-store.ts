@@ -11,6 +11,7 @@ interface ProfileState {
   isLoading: boolean
   error: string | null
   fetchProfile: () => Promise<void>
+  resetProfile: () => void
 }
 
 export const useProfileStore = create<ProfileState>((set) => ({
@@ -56,4 +57,11 @@ export const useProfileStore = create<ProfileState>((set) => ({
       set({ error: message, isLoading: false })
     }
   },
+  resetProfile: () => set({ 
+    planTier: 'free', 
+    isPro: false, 
+    isAdmin: false, 
+    isLoading: false, 
+    error: null 
+  })
 }))

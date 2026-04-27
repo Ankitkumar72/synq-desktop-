@@ -2,7 +2,9 @@
 
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
+import Collaboration from '@tiptap/extension-collaboration'
 import { Markdown } from 'tiptap-markdown'
+import * as Y from 'yjs'
 import { 
   Bold, 
   Italic, 
@@ -11,16 +13,30 @@ import {
   Quote, 
   Heading1, 
   Heading2, 
-  Code
+  Code,
+  Loader2
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
-import { useEffect, useRef, useState } from 'react'
+import { Skeleton } from "@/components/ui/skeleton"
+import { useEffect, useRef, useCallback, useMemo, useState } from 'react'
 import { Editor } from '@tiptap/react'
 import { useNotesStore } from '@/lib/store/use-notes-store'
+import { 
+  getOrCreateYDoc, 
+  setActiveEdit, 
+  getPlainTextFromYDoc, 
+  getExcerptFromYDoc,
+  markLocallyModified,
+  waitForPersistence,
+  applyRemoteUpdate,
+} from '@/lib/crdt/crdt-doc'
+import { saveYDocToSupabase, loadYDocFromSupabase } from '@/lib/crdt/sync-manager'
 import { useUserStore } from '@/lib/store/use-user-store'
-import { supabase } from '@/lib/supabase.client'
-import { hlc } from '@/lib/hlc'
+import type { NoteContent } from '@/types'
+import { getPlainTextFromStoredContent } from '@/lib/notes/note-content'
+
+const SAVE_DEBOUNCE_MS = 800
 
 const MenuBar = ({ editor }: { editor: Editor | null }) => {
   if (!editor) return null
@@ -61,27 +77,122 @@ const MenuBar = ({ editor }: { editor: Editor | null }) => {
 }
 
 
-
-
 export function NoteEditor({ 
   id,
   content, 
   onChange 
 }: { 
   id: string,
-  content?: string | null, 
-  onChange?: (content: string) => void 
+  content?: NoteContent,
+  onChange?: (snapshot: { content: NoteContent, body: string | null, excerpt: string | null }) => void
 }) {
-  const { setFocusedNoteId } = useNotesStore()
-  const { user } = useUserStore()
-  const [isIdle, setIsIdle] = useState(true)
+  const { setFocusedNoteId, markNoteActivity, clearActiveNoteActivity, updateNoteLocal } = useNotesStore()
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-  const broadcastTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-  const idleTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const ydoc = useMemo(() => getOrCreateYDoc(id), [id])
+
+  // Initialize the Yjs doc — if it's empty and we have TipTap content, seed it
+  useEffect(() => {
+    let mounted = true
+    // setIsLoading is initialized to true; re-entering means we need to reset it.
+    // We do this via a microtask to avoid synchronous setState in the effect body.
+    queueMicrotask(() => { if (mounted) setIsLoading(true) })
+
+    const init = async () => {
+      const doc = ydoc
+      const fragment = doc.getXmlFragment('content')
+      
+      // 1. Wait for IndexedDB persistence to finish loading
+      await waitForPersistence(id)
+      if (!mounted) return
+
+      // 2. If the doc is still empty, check if we need to fetch from Supabase
+      if (fragment.length === 0) {
+        console.log(`[NoteEditor] Doc ${id.slice(0, 8)} is empty locally, checking remote...`)
+        const remoteUpdate = await loadYDocFromSupabase(id)
+        if (remoteUpdate && mounted) {
+          console.log(`[NoteEditor] Found remote state for ${id.slice(0, 8)}, applying...`)
+          applyRemoteUpdate(id, remoteUpdate)
+        }
+      }
+
+      // 3. If STILL empty and we have legacy content, seed it (migration)
+      if (fragment.length === 0 && content && mounted) {
+        const plainText = typeof content === 'string' ? content : getPlainTextFromStoredContent(content)
+        if (plainText.trim()) {
+          doc.transact(() => {
+            const paragraphs = plainText.split('\n')
+            for (const para of paragraphs) {
+              const element = new Y.XmlElement('paragraph')
+              if (para.trim()) {
+                element.insert(0, [new Y.XmlText(para)])
+              }
+              fragment.push([element])
+            }
+          })
+        }
+      }
+
+      if (mounted) setIsLoading(false)
+    }
+
+    init()
+
+    return () => {
+      mounted = false
+    }
+  }, [id, content, ydoc])
+
+  // Debounced save to Supabase
+  const debouncedSave = useCallback(() => {
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current)
+    saveTimeoutRef.current = setTimeout(() => {
+      const userId = useUserStore.getState().user?.id
+      if (!userId) return
+
+      const body = getPlainTextFromYDoc(id)
+      const excerpt = getExcerptFromYDoc(id)
+
+      // Mark as locally modified to prevent echo
+      markLocallyModified(id)
+
+      // Update local note state with body/excerpt
+      updateNoteLocal(id, { body, excerpt, updated_at: new Date().toISOString() })
+
+      // Persist: save Yjs state + body/excerpt to Supabase
+      onChange?.({ content: null, body, excerpt })
+      saveYDocToSupabase(id, userId).catch(err => {
+        console.error('[NoteEditor] Failed to save Yjs state:', err)
+      })
+    }, SAVE_DEBOUNCE_MS)
+  }, [id, onChange, updateNoteLocal])
+
+  // Monitor Yjs document updates to trigger saves
+  useEffect(() => {
+    const handleUpdate = (update: Uint8Array, origin: string | null) => {
+      // If the update came from a 'remote' transaction (via applyRemoteUpdate),
+      // we skip scheduling a save to prevent a loop.
+      if (origin !== 'remote') {
+        debouncedSave()
+      }
+    }
+
+    ydoc.on('update', handleUpdate)
+    return () => {
+      ydoc.off('update', handleUpdate)
+    }
+  }, [ydoc, debouncedSave])
   
   const editor = useEditor({
     extensions: [
-      StarterKit,
+      StarterKit.configure({
+        // Disable the built-in undo/redo — Yjs Collaboration handles it
+        undoRedo: false,
+      }),
+      Collaboration.configure({
+        document: ydoc,
+        field: 'content',
+      }),
       Markdown.configure({
         html: true,
         tightLists: true,
@@ -91,56 +202,42 @@ export function NoteEditor({
         breaks: true,
       }),
     ],
-    content: content,
     immediatelyRender: false,
-    onUpdate: ({ editor }) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const markdown = (editor.storage as any).markdown.getMarkdown()
-      const body = editor.getText().split('\n')[0] || '' // Simple excerpt
-      const title = editor.getText().split('\n')[0] || 'Untitled'
-
-      // Mark as NOT idle immediately on user input
-      setIsIdle(false)
-      if (idleTimeoutRef.current) clearTimeout(idleTimeoutRef.current)
-      idleTimeoutRef.current = setTimeout(() => setIsIdle(true), 3000)
+    onUpdate: () => {
+      // Mark as actively editing
+      markNoteActivity(id)
+      setActiveEdit(id, true)
       
-      // 1. INSTANT BROADCAST (200ms) - Sub-perceptual feedback for peers
-      if (broadcastTimeoutRef.current) clearTimeout(broadcastTimeoutRef.current)
-      broadcastTimeoutRef.current = setTimeout(() => {
-        if (!user?.id) return
-        const channel = supabase.channel(`synq:notes:${user.id}`)
-        channel.send({
-          type: 'broadcast',
-          event: 'note-update',
-          payload: { 
-            id, 
-            content: markdown, 
-            body,
-            title,
-            hlc_timestamp: hlc.increment() 
-          }
-        })
-      }, 200)
-
-      // 2. PERSISTENCE SAVE (500ms) - Commit to database
-      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current)
-      saveTimeoutRef.current = setTimeout(() => {
-        onChange?.(markdown)
-      }, 500)
+      // We don't call debouncedSave here anymore. 
+      // It's handled by the ydoc update listener below to avoid remote-echo loops.
     },
     onFocus: () => {
       setFocusedNoteId(id)
+      setActiveEdit(id, true)
     },
     onBlur: () => {
       setFocusedNoteId(null)
-      // Immediate save on blur
+      clearActiveNoteActivity(id)
+      setActiveEdit(id, false)
+
+      // Immediate save on blur — only if it was a local change
+      // (Wait, blur is usually user-initiated, so it's safe to save)
       if (saveTimeoutRef.current) {
         clearTimeout(saveTimeoutRef.current)
         saveTimeoutRef.current = null
       }
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const markdown = (editor?.storage as any)?.markdown?.getMarkdown() || ''
-      onChange?.(markdown)
+      
+      const userId = useUserStore.getState().user?.id
+      if (userId) {
+        const body = getPlainTextFromYDoc(id)
+        const excerpt = getExcerptFromYDoc(id)
+        markLocallyModified(id)
+        updateNoteLocal(id, { body, excerpt, updated_at: new Date().toISOString() })
+        onChange?.({ content: null, body, excerpt })
+        saveYDocToSupabase(id, userId).catch(err => {
+          console.error('[NoteEditor] Failed to save on blur:', err)
+        })
+      }
     },
     editorProps: {
       attributes: {
@@ -149,27 +246,31 @@ export function NoteEditor({
     },
   })
 
-  // Sync content when it changes externally (e.g. switching notes)
+  // Cleanup on unmount
   useEffect(() => {
-    if (!editor) return
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const currentMarkdown = (editor.storage as any).markdown?.getMarkdown()
-    
-    // FOCUS GUARD: Only update editor content if it's different.
-    // We allow updates if:
-    // 1. Editor is not focused OR
-    // 2. User is idle (hasn't typed for 3s)
-    if (content !== undefined && content !== currentMarkdown) {
-      if (!editor.isFocused || isIdle) {
-        // preserve selection if possible or just reset
-        const { from, to } = editor.state.selection
-        editor.commands.setContent(content || '')
-        // Selection might be invalid if content changed significantly, but try to restore
-        try { editor.commands.setTextSelection({ from, to }) } catch { /* ignore */ }
-      }
+    return () => {
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current)
+      clearActiveNoteActivity(id)
+      setFocusedNoteId(null)
+      setActiveEdit(id, false)
     }
-  }, [content, editor, isIdle])
+  }, [clearActiveNoteActivity, id, setFocusedNoteId])
+
+  if (isLoading) {
+    return (
+      <div className="flex flex-col h-full max-w-4xl mx-auto w-full pt-12 gap-8">
+        <Skeleton className="h-12 w-3/4 bg-white/[0.03]" />
+        <div className="space-y-4">
+          <Skeleton className="h-4 w-full bg-white/[0.03]" />
+          <Skeleton className="h-4 w-full bg-white/[0.03]" />
+          <Skeleton className="h-4 w-2/3 bg-white/[0.03]" />
+        </div>
+        <div className="flex items-center justify-center pt-20">
+          <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="flex flex-col h-full bg-transparent max-w-4xl mx-auto w-full group">

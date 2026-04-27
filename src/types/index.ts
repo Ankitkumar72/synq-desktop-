@@ -1,5 +1,8 @@
+import type { JSONContent } from '@tiptap/core'
+
 export type Priority = 'low' | 'medium' | 'high' | 'none'
 export type Status = 'todo' | 'in-progress' | 'done'
+export type NoteContent = JSONContent | string | null
 
 export interface SubTask {
   id: string
@@ -18,15 +21,20 @@ export interface Task {
   project_id?: string
   assignee_id?: string
   hlc_timestamp?: string
+  field_versions?: Record<string, string>
   is_deleted?: boolean
   deleted_hlc?: string
   created_at: string
   updated_at?: string
   deleted_at?: string
+  order?: number
+  recurrence_rule?: string | null
+  parent_recurring_id?: string | null
 }
 
 export interface Project {
   id: string
+  user_id?: string
   name: string
   description?: string
   color: string
@@ -35,7 +43,13 @@ export interface Project {
   task_count: number
   completed_task_count: number
   is_favorite: boolean
+  hlc_timestamp?: string
+  field_versions?: Record<string, string>
+  is_deleted?: boolean
+  deleted_hlc?: string | null
   created_at: string
+  updated_at?: string
+  deleted_at?: string | null
 }
 
 export interface Activity {
@@ -53,7 +67,7 @@ export interface Note {
   id: string
   user_id?: string
   title: string
-  content?: string | null // JSON for Tiptap (Web) or Markdown
+  content?: NoteContent
   body?: string | null // Plain text for Flutter (Mobile)
   excerpt?: string | null
   tags: string[]
@@ -95,6 +109,7 @@ export interface CalendarEvent {
   location?: string
   color: string
   hlc_timestamp?: string
+  field_versions?: Record<string, string>
   is_deleted?: boolean
   deleted_hlc?: string
   created_at: string

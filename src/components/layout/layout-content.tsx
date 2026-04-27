@@ -1,10 +1,10 @@
 "use client"
 
-import { Sidebar } from "@/components/layout/sidebar";
-import { Navbar } from "@/components/layout/navbar";
+import { LinearSidebar } from "@/components/layout/sidebar";
 import { useUserStore } from "@/lib/store/use-user-store";
 import { usePathname } from "next/navigation";
 import { useState, useEffect } from "react";
+import { SettingsModal } from "@/components/layout/settings-modal";
 
 export function LayoutContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -33,7 +33,7 @@ export function LayoutContent({ children }: { children: React.ReactNode }) {
         {showTimeoutMessage && (
           <div className="space-y-4 max-w-sm animate-in fade-in slide-in-from-bottom-4 duration-1000">
             <p className="text-sm text-muted-foreground font-medium">
-              Initialization is taking longer than expected. This could be due to a slow network or server connection.
+              Initialization is taking longer than expected.
             </p>
             <button 
               onClick={() => setInitialized(true)}
@@ -48,14 +48,14 @@ export function LayoutContent({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="flex h-screen overflow-hidden bg-background">
-      <Sidebar />
-      <div className="flex-1 flex flex-col overflow-hidden min-w-0 relative">
-        <Navbar />
-        <main className="flex-1 overflow-hidden flex flex-col">
+    <div className="flex h-screen bg-sidebar overflow-hidden select-none">
+      <LinearSidebar />
+      <div className="flex-1 flex flex-col min-w-0 relative h-full overflow-hidden">
+        <main className="flex-1 overflow-hidden bg-background flex flex-col">
           {children}
         </main>
       </div>
+      <SettingsModal />
     </div>
   )
 }

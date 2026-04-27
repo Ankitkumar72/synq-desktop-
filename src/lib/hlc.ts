@@ -6,15 +6,42 @@
  * 
  * - timestamp: ISO 8601 or milliseconds (we use milliseconds for compactness)
  * - counter: hex value for events in the same millisecond
- * - nodeId: identifier for the client (e.g. 'web', 'ios', 'android')
+ * - nodeId: identifier for the client — unique per browser tab for CRDT correctness
  */
+
+/**
+ * Generate a unique node ID per browser tab.
+ * Uses sessionStorage to ensure stability within a tab, but uniqueness across tabs.
+ */
+function getTabNodeId(): string {
+  if (typeof window === 'undefined') return 'server'
+  
+  const storageKey = 'synq-hlc-node-id'
+  let nodeId = sessionStorage.getItem(storageKey)
+  
+  if (!nodeId) {
+    // Generate a unique ID: 'web-XXXX' where XXXX is a random hex
+    nodeId = `web-${Math.random().toString(16).slice(2, 6)}`
+    sessionStorage.setItem(storageKey, nodeId)
+  }
+  
+  return nodeId
+}
+
 export class HLC {
   private lastTimestamp: number = 0;
   private counter: number = 0;
-  private nodeId: string = 'web';
+  private nodeId: string;
 
-  constructor(nodeId: string = 'web') {
-    this.nodeId = nodeId;
+  constructor(nodeId?: string) {
+    this.nodeId = nodeId ?? getTabNodeId();
+  }
+
+  /**
+   * Get the node ID for this clock instance.
+   */
+  getNodeId(): string {
+    return this.nodeId;
   }
 
   /**
@@ -77,15 +104,29 @@ export class HLC {
   static compare(a: string, b: string): number {
     if (a === b) return 0;
     
-    const [aTime, aCounter] = a.split(':');
-    const [bTime, bCounter] = b.split(':');
+    const [aTime, aCounter, aNode] = a.split(':');
+    const [bTime, bCounter, bNode] = b.split(':');
     
     const timeDiff = parseInt(aTime, 10) - parseInt(bTime, 10);
     if (timeDiff !== 0) return timeDiff;
     
-    return parseInt(aCounter, 10) - parseInt(bCounter, 10);
+    const counterDiff = parseInt(aCounter, 10) - parseInt(bCounter, 10);
+    if (counterDiff !== 0) return counterDiff;
+
+    // Deterministic tie-break: higher node ID wins (lexicographic)
+    if (aNode && bNode) return aNode.localeCompare(bNode);
+    
+    return 0;
+  }
+
+  /**
+   * Extract the node ID from an HLC string.
+   */
+  static extractNodeId(hlcString: string): string {
+    const parts = hlcString.split(':');
+    return parts[2] || 'unknown';
   }
 }
 
-// Global instance for convenience
-export const hlc = new HLC('web');
+// Global instance — uses a unique per-tab node ID
+export const hlc = new HLC();

@@ -67,13 +67,15 @@ CREATE POLICY "Users can manage own tasks"
 -- ============ NOTES ============
 -- Shared between Flutter (mobile) and Web.
 -- Flutter uses: body, category, priority, is_task, CRDT fields, etc.
--- Web uses: content (jsonb), pinned, excerpt.
+-- Web uses: content (Tiptap/ProseMirror JSON in jsonb), pinned, excerpt.
 CREATE TABLE notes (
   id UUID DEFAULT extensions.uuid_generate_v4() PRIMARY KEY,
   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
   title TEXT NOT NULL,
 
   -- Web-specific fields
+  -- `content` stores structured Tiptap JSON for the desktop/web editor.
+  -- Legacy rows may still contain a JSON string until migrated.
   content JSONB,
   pinned BOOLEAN DEFAULT false,
   excerpt TEXT,
@@ -119,6 +121,8 @@ CREATE POLICY "Users can manage own notes"
   ON notes FOR ALL
   USING (auth.uid() = user_id)
   WITH CHECK (auth.uid() = user_id);
+
+COMMENT ON COLUMN notes.content IS 'Structured Tiptap/ProseMirror JSON for the web editor. Legacy rows may contain a JSON string until migrated.';
 
 -- ============ FOLDERS ============
 -- Used by Flutter for note organization

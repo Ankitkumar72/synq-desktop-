@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Roboto, Roboto_Mono } from "next/font/google";
+import { Roboto, Roboto_Mono, Playfair_Display } from "next/font/google";
 import "./globals.css";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { LayoutContent } from "@/components/layout/layout-content";
@@ -14,6 +14,11 @@ const roboto = Roboto({
 const robotoMono = Roboto_Mono({
   subsets: ["latin"],
   variable: "--font-roboto-mono",
+});
+
+const playfair = Playfair_Display({
+  subsets: ["latin"],
+  variable: "--font-playfair",
 });
 
 export const metadata: Metadata = {
@@ -32,7 +37,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="h-full dark" suppressHydrationWarning>
-      <body className={`${roboto.variable} ${robotoMono.variable} antialiased font-sans h-full overflow-hidden bg-background text-foreground`}>
+      <body className={`${roboto.variable} ${robotoMono.variable} ${playfair.variable} antialiased font-sans h-full bg-background text-foreground`}>
         <TooltipProvider>
           <DatabaseProvider>
             <LayoutContent>{children}</LayoutContent>
