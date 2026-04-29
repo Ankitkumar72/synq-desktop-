@@ -63,7 +63,7 @@ function NoteCard({ note, initials }: { note: Note, initials: string }) {
   return (
     <Link 
       href={`/notes?id=${note.id}`}
-      className="bg-[#1E1E1E] rounded-[16px] flex flex-col flex-1 min-w-0 cursor-pointer hover:bg-[#252525] transition-all duration-200 border border-white/[0.06] group relative overflow-hidden"
+      className="bg-[#1E1E1E] rounded-[16px] flex flex-col flex-1 min-w-[240px] shrink-0 cursor-pointer hover:bg-[#252525] transition-all duration-200 border border-white/[0.06] group relative overflow-hidden"
     >
       {/* card-header: icon area */}
       <div className="h-[52px] px-4 flex items-center shrink-0">
@@ -153,7 +153,7 @@ export default function DashboardPage() {
         const isScratch = n.category === 'scratchpad' || n.title?.toLowerCase() === 'scratch pad'
         return !isDeleted && !isScratch
       })
-      .slice(0, 5)
+      .slice(0, 15)
     const filteredEvents = events.filter(e => !e.is_deleted && isSameDay(parseISO(e.start_date), today))
 
     return {
@@ -260,7 +260,7 @@ export default function DashboardPage() {
         <motion.div variants={itemVariants} className="grid grid-cols-1 gap-6 mb-6">
           <DashboardCard title="Notes" href="/notes">
             {notesOnly.length > 0 ? (
-              <div className="flex gap-3">
+              <div className="flex gap-3 overflow-x-auto no-scrollbar pb-1 -mx-1 px-1">
                 {notesOnly.map((note) => (
                   <NoteCard
                     key={note.id}

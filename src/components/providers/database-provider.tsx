@@ -462,13 +462,16 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
           // *** SPEED FIX: Fire EVERYTHING in parallel ***
           // Profile, device check, data fetch, and realtime all start at once.
           // Only device registration can block the UI (if limit exceeded).
+          
+          // Fire data fetch in the background to not block the UI from rendering instantly using persisted local state.
+          fetchData().catch(err => console.error('[DatabaseProvider] Initial fetch failed:', err))
+
           const [profileResult, deviceResult] = await Promise.allSettled([
             useProfileStore.getState().fetchProfile(),
             registerDevice().catch(err => {
               console.error('[DatabaseProvider] Device registration failed:', err)
               return { allowed: true }
             }),
-            fetchData(),  // data streams into stores as it arrives
           ])
 
           // Log any profile failure (non-blocking)
