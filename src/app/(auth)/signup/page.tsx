@@ -26,7 +26,7 @@ function SignupContent() {
   return (
     <div className="min-h-screen flex flex-col lg:flex-row bg-white">
       {/* Left Pane - Branding (Desktop only) */}
-      <div className="hidden lg:flex lg:w-1/2 bg-[#0d1117] p-16 flex-col justify-between relative overflow-hidden">
+      <div className="hidden lg:flex lg:w-1/2 bg-[#0d1117] p-10 lg:p-14 flex-col justify-between relative overflow-hidden">
         {/* Decorative Background Elements */}
         <div className="absolute inset-0 opacity-20 pointer-events-none">
           <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-500 rounded-full blur-[120px]" />
@@ -39,7 +39,7 @@ function SignupContent() {
           transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
           className="relative z-10"
         >
-          <div className="h-10 w-10 relative mb-12">
+          <div className="h-10 w-10 relative mb-8">
             <Image
               src="/brand-logo.png"
               alt="Synq Logo"
@@ -50,22 +50,22 @@ function SignupContent() {
             />
           </div>
           
-          <div className="space-y-6">
-            <h1 className="text-5xl font-bold tracking-tight text-white leading-[1.1] max-w-sm">
+          <div className="space-y-4">
+            <h1 className="text-4xl lg:text-5xl font-bold tracking-tight text-white leading-[1.1] max-w-sm">
               Build your workspace in seconds.
             </h1>
-            <p className="text-xl text-stone-400 font-medium max-w-md">
+            <p className="text-lg lg:text-xl text-stone-400 font-medium max-w-md">
               Join thousands of teams distilled for pure focus and minimalist productivity.
             </p>
           </div>
         </motion.div>
 
         {/* Central Space */}
-        <div className="flex-1 flex items-center justify-center py-20">
+        <div className="flex-1">
           {/* Currently Empty */}
         </div>
 
-        <div className="relative z-10 pt-8 border-t border-white/5">
+        <div className="relative z-10 pt-6 border-t border-white/5">
           <div className="flex gap-8 text-[12px] font-medium text-stone-500 uppercase tracking-widest">
             <span>© 2024 Synq Systems</span>
             <span className="cursor-pointer hover:text-white transition-colors">Security</span>
@@ -75,11 +75,11 @@ function SignupContent() {
       </div>
 
       {/* Right Pane - Auth Form */}
-      <div className="flex-1 flex flex-col items-center justify-center p-8 sm:p-12 md:p-20 bg-white">
-        <div className="w-full max-w-[440px] space-y-10">
+      <div className="flex-1 flex flex-col items-center justify-center p-6 sm:p-8 md:p-10 lg:p-12 bg-white">
+        <div className="w-full max-w-[440px] space-y-8">
           {/* Logo above the form */}
           <div className="flex justify-center">
-            <div className="h-16 w-16 relative">
+            <div className="h-12 w-12 relative">
               <Image
                 src="/brand-logo.png"
                 alt="Synq Logo"
@@ -97,8 +97,8 @@ function SignupContent() {
             transition={{ duration: 0.6, delay: 0.2 }}
             className="space-y-2 text-center"
           >
-            <h2 className="text-3xl font-bold tracking-tight text-stone-900">Create your account</h2>
-            <p className="text-[15px] text-stone-500">
+            <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-stone-900">Create your account</h2>
+            <p className="text-[14px] sm:text-[15px] text-stone-500">
               Already have an account?{' '}
               <Link href="/login" className="text-blue-600 hover:text-blue-700 font-semibold transition-colors">
                 Sign in to your team
@@ -110,7 +110,7 @@ function SignupContent() {
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.3 }}
-            className="space-y-6"
+            className="space-y-5"
           >
             {/* Social Signups */}
             <form action={signInWithGoogle}>
@@ -136,9 +136,9 @@ function SignupContent() {
             </div>
 
             {/* Email Form */}
-            <form action={signup} className="space-y-6">
-              <div className="space-y-4">
-                <div className="space-y-2">
+            <form action={signup} className="space-y-5">
+              <div className="space-y-3">
+                <div className="space-y-1.5">
                   <label htmlFor="full_name" className="text-sm font-bold text-stone-700 ml-1">Full Name</label>
                   <Input
                     id="full_name"
@@ -146,10 +146,10 @@ function SignupContent() {
                     type="text"
                     placeholder="John Doe"
                     required
-                    className="bg-white border-stone-200 h-13 px-4 rounded-xl focus-visible:ring-2 focus-visible:ring-blue-600/10 focus-visible:border-blue-600 text-[15px] transition-all"
+                    className="bg-white border-stone-200 h-12 px-4 rounded-xl focus-visible:ring-2 focus-visible:ring-blue-600/10 focus-visible:border-blue-600 text-[15px] transition-all"
                   />
                 </div>
-                <div className="space-y-2">
+                <div className="space-y-1.5">
                   <label htmlFor="email" className="text-sm font-bold text-stone-700 ml-1">Email address</label>
                   <Input
                     id="email"
@@ -158,10 +158,10 @@ function SignupContent() {
                     placeholder="name@company.com"
                     autoComplete="email"
                     required
-                    className="bg-white border-stone-200 h-13 px-4 rounded-xl focus-visible:ring-2 focus-visible:ring-blue-600/10 focus-visible:border-blue-600 text-[15px] transition-all"
+                    className="bg-white border-stone-200 h-12 px-4 rounded-xl focus-visible:ring-2 focus-visible:ring-blue-600/10 focus-visible:border-blue-600 text-[15px] transition-all"
                   />
                 </div>
-                <div className="space-y-2">
+                <div className="space-y-1.5">
                   <label htmlFor="password" className="text-sm font-bold text-stone-700 ml-1">Password</label>
                   <Input
                     id="password"
@@ -170,7 +170,7 @@ function SignupContent() {
                     placeholder="Create a secure password"
                     autoComplete="new-password"
                     required
-                    className="bg-white border-stone-200 h-13 px-4 rounded-xl focus-visible:ring-2 focus-visible:ring-blue-600/10 focus-visible:border-blue-600 text-[15px] transition-all"
+                    className="bg-white border-stone-200 h-12 px-4 rounded-xl focus-visible:ring-2 focus-visible:ring-blue-600/10 focus-visible:border-blue-600 text-[15px] transition-all"
                   />
                   <p className="text-[12px] text-stone-400 ml-1 italic">Minimum 8 characters with a mix of letters and numbers.</p>
                 </div>
@@ -188,15 +188,15 @@ function SignupContent() {
 
               <Button 
                 type="submit" 
-                className="w-full h-14 bg-stone-900 text-white hover:bg-stone-800 transition-all font-bold rounded-xl text-[16px] shadow-lg shadow-stone-200 active:scale-[0.98]"
+                className="w-full h-12 bg-stone-900 text-white hover:bg-stone-800 transition-all font-bold rounded-xl text-[16px] shadow-lg shadow-stone-200 active:scale-[0.98]"
               >
                 Create Account
               </Button>
             </form>
           </motion.div>
           
-          <div className="pt-8 text-center border-t border-stone-100">
-             <p className="text-[12px] text-stone-400 font-medium leading-relaxed">
+          <div className="pt-6 text-center border-t border-stone-100">
+             <p className="text-[11px] sm:text-[12px] text-stone-400 font-medium leading-relaxed">
                By creating an account, you agree to our <span className="underline cursor-pointer">Terms of Service</span> and <span className="underline cursor-pointer">Privacy Policy</span>.
              </p>
           </div>
