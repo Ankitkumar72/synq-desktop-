@@ -12,7 +12,7 @@ import { AnimatePage } from "@/components/layout/animate-page"
 import { useNotesStore } from "@/lib/store/use-notes-store"
 import { useUIStore } from "@/lib/store/use-ui-store"
 import { Note } from "@/types"
-import { useSearchParams, useRouter } from "next/navigation"
+import { useSearchParams } from "next/navigation"
 import { Suspense } from "react"
 import { formatRelativeDate } from "@/lib/utils/date-utils"
 import { useDebounce } from "@/hooks/use-debounce"
@@ -61,7 +61,6 @@ function NoteSidebarItem({
 
 
 function NotesPageContent() {
-  const router = useRouter()
   const { notes, selectedNoteId, setSelectedNoteId, addNote, updateNote, deleteNote, pinNote, updateNoteLocal } = useNotesStore()
   const { isSidebarOpen } = useUIStore()
   const searchParams = useSearchParams()
