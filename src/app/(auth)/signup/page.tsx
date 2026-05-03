@@ -146,7 +146,7 @@ function SignupContent() {
                     type="text"
                     placeholder="John Doe"
                     required
-                    className="bg-white border-stone-200 h-12 px-4 rounded-xl focus-visible:ring-2 focus-visible:ring-blue-600/10 focus-visible:border-blue-600 text-[15px] transition-all"
+                    className="!bg-white text-black placeholder:text-stone-400 border-stone-200 h-12 px-4 rounded-xl focus-visible:ring-2 focus-visible:ring-blue-600/10 focus-visible:border-blue-600 text-[15px] transition-all"
                   />
                 </div>
                 <div className="space-y-1.5">
@@ -158,7 +158,7 @@ function SignupContent() {
                     placeholder="name@company.com"
                     autoComplete="email"
                     required
-                    className="bg-white border-stone-200 h-12 px-4 rounded-xl focus-visible:ring-2 focus-visible:ring-blue-600/10 focus-visible:border-blue-600 text-[15px] transition-all"
+                    className="!bg-white text-black placeholder:text-stone-400 border-stone-200 h-12 px-4 rounded-xl focus-visible:ring-2 focus-visible:ring-blue-600/10 focus-visible:border-blue-600 text-[15px] transition-all"
                   />
                 </div>
                 <div className="space-y-1.5">
@@ -170,7 +170,7 @@ function SignupContent() {
                     placeholder="Create a secure password"
                     autoComplete="new-password"
                     required
-                    className="bg-white border-stone-200 h-12 px-4 rounded-xl focus-visible:ring-2 focus-visible:ring-blue-600/10 focus-visible:border-blue-600 text-[15px] transition-all"
+                    className="!bg-white text-black placeholder:text-stone-400 border-stone-200 h-12 px-4 rounded-xl focus-visible:ring-2 focus-visible:ring-blue-600/10 focus-visible:border-blue-600 text-[15px] transition-all"
                   />
                   <p className="text-[12px] text-stone-400 ml-1 italic">Minimum 8 characters with a mix of letters and numbers.</p>
                 </div>
