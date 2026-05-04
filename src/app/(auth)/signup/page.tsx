@@ -32,7 +32,7 @@ function SignupContent() {
           <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-500 rounded-full blur-[120px]" />
           <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-purple-500 rounded-full blur-[120px]" />
         </div>
-        
+
         <motion.div
           initial={{ opacity: 0, x: -20 }}
           animate={{ opacity: 1, x: 0 }}
@@ -49,7 +49,7 @@ function SignupContent() {
               unoptimized
             />
           </div>
-          
+
           <div className="space-y-4">
             <h1 className="text-4xl lg:text-5xl font-bold tracking-tight text-white leading-[1.1] max-w-sm">
               Build your workspace in seconds.
@@ -67,7 +67,7 @@ function SignupContent() {
 
         <div className="relative z-10 pt-6 border-t border-white/5">
           <div className="flex gap-8 text-[12px] font-medium text-stone-500 uppercase tracking-widest">
-            <span>© 2024 Synq Systems</span>
+            <span>© 2026 Synq </span>
             <span className="cursor-pointer hover:text-white transition-colors">Security</span>
             <span className="cursor-pointer hover:text-white transition-colors">Privacy</span>
           </div>
@@ -114,8 +114,8 @@ function SignupContent() {
           >
             {/* Social Signups */}
             <form action={signInWithGoogle}>
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 type="submit"
                 className="w-full h-13 border-stone-200 bg-white hover:bg-stone-50 transition-all text-stone-700 font-bold rounded-xl text-[15px] shadow-sm flex items-center justify-center gap-3 active:scale-[0.98]"
               >
@@ -177,7 +177,7 @@ function SignupContent() {
               </div>
 
               {error && (
-                <motion.div 
+                <motion.div
                   initial={{ opacity: 0, scale: 0.95 }}
                   animate={{ opacity: 1, scale: 1 }}
                   className="text-red-600 text-[13px] bg-red-50 border border-red-100 p-4 rounded-xl text-center font-medium shadow-sm"
@@ -186,19 +186,19 @@ function SignupContent() {
                 </motion.div>
               )}
 
-              <Button 
-                type="submit" 
+              <Button
+                type="submit"
                 className="w-full h-12 bg-stone-900 text-white hover:bg-stone-800 transition-all font-bold rounded-xl text-[16px] shadow-lg shadow-stone-200 active:scale-[0.98]"
               >
                 Create Account
               </Button>
             </form>
           </motion.div>
-          
+
           <div className="pt-6 text-center border-t border-stone-100">
-             <p className="text-[11px] sm:text-[12px] text-stone-400 font-medium leading-relaxed">
-               By creating an account, you agree to our <span className="underline cursor-pointer">Terms of Service</span> and <span className="underline cursor-pointer">Privacy Policy</span>.
-             </p>
+            <p className="text-[11px] sm:text-[12px] text-stone-400 font-medium leading-relaxed">
+              By creating an account, you agree to our <span className="underline cursor-pointer">Terms of Service</span> and <span className="underline cursor-pointer">Privacy Policy</span>.
+            </p>
           </div>
         </div>
       </div>
