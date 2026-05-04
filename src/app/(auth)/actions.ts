@@ -63,17 +63,32 @@ export async function signup(formData: FormData) {
 }
 
 export async function signInWithGoogle() {
+  return signInWithOAuth('google')
+}
+
+export async function signInWithGithub() {
+  return signInWithOAuth('github')
+}
+
+export async function signInWithLinkedin() {
+  return signInWithOAuth('linkedin_oidc')
+}
+
+export async function signInWithFacebook() {
+  return signInWithOAuth('facebook')
+}
+
+async function signInWithOAuth(provider: 'google' | 'github' | 'linkedin_oidc' | 'facebook') {
   const supabase = await createClient()
   const headerList = await headers()
   const host = headerList.get('host')
   
-  // Construct the redirect URL dynamically
   const protocol = host?.includes('localhost') ? 'http' : 'https'
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || (host ? `${protocol}://${host}` : 'http://localhost:3000')
   const redirectTo = `${siteUrl}/auth/callback`
 
   const { data, error } = await supabase.auth.signInWithOAuth({
-    provider: 'google',
+    provider,
     options: {
       redirectTo,
     },
