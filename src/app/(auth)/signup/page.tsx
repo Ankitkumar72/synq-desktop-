@@ -118,7 +118,7 @@ function SignupContent() {
                 <Button
                   variant="outline"
                   type="submit"
-                  className="h-14 w-14 rounded-xl border-stone-200 bg-white text-stone-900 hover:bg-stone-900 hover:text-white hover:border-stone-900 transition-all p-0 flex items-center justify-center shadow-sm active:scale-[0.95] group"
+                  className="h-16 w-16 rounded-2xl border-stone-200 bg-white text-stone-900 hover:bg-stone-900 hover:text-white hover:border-stone-900 transition-all p-0 flex items-center justify-center shadow-sm active:scale-[0.95] group"
                   title="Continue with Google"
                 >
                    <svg className="h-7 w-7 group-hover:scale-110 transition-transform" viewBox="0 0 24 24">
@@ -133,7 +133,7 @@ function SignupContent() {
                 <Button
                   variant="outline"
                   type="submit"
-                  className="h-14 w-14 rounded-xl border-stone-200 bg-white text-stone-900 hover:bg-stone-900 hover:text-white hover:border-stone-900 transition-all p-0 flex items-center justify-center shadow-sm active:scale-[0.95] group"
+                  className="h-16 w-16 rounded-2xl border-stone-200 bg-white text-stone-900 hover:bg-[#181717] hover:text-white hover:border-[#181717] transition-all p-0 flex items-center justify-center shadow-sm active:scale-[0.95] group"
                   title="Continue with Github"
                 >
                   <svg className="h-7 w-7 group-hover:scale-110 transition-transform" fill="currentColor" viewBox="0 0 24 24">
@@ -145,7 +145,7 @@ function SignupContent() {
                 <Button
                   variant="outline"
                   type="submit"
-                  className="h-14 w-14 rounded-xl border-stone-200 bg-white text-stone-900 hover:bg-stone-900 hover:text-white hover:border-stone-900 transition-all p-0 flex items-center justify-center shadow-sm active:scale-[0.95] group"
+                  className="h-16 w-16 rounded-2xl border-stone-200 bg-white text-[#0A66C2] hover:bg-[#0A66C2] hover:text-white hover:border-[#0A66C2] transition-all p-0 flex items-center justify-center shadow-sm active:scale-[0.95] group"
                   title="Continue with LinkedIn"
                 >
                   <svg className="h-7 w-7 group-hover:scale-110 transition-transform" fill="currentColor" viewBox="0 0 24 24">
@@ -157,7 +157,7 @@ function SignupContent() {
                 <Button
                   variant="outline"
                   type="submit"
-                  className="h-14 w-14 rounded-xl border-stone-200 bg-white text-stone-900 hover:bg-stone-900 hover:text-white hover:border-stone-900 transition-all p-0 flex items-center justify-center shadow-sm active:scale-[0.95] group"
+                  className="h-16 w-16 rounded-2xl border-stone-200 bg-white text-[#1877F2] hover:bg-[#1877F2] hover:text-white hover:border-[#1877F2] transition-all p-0 flex items-center justify-center shadow-sm active:scale-[0.95] group"
                   title="Continue with Facebook"
                 >
                   <svg className="h-7 w-7 group-hover:scale-110 transition-transform" fill="currentColor" viewBox="0 0 24 24">
@@ -187,7 +187,7 @@ function SignupContent() {
                     type="text"
                     placeholder="John Doe"
                     required
-                    className="!bg-white text-black placeholder:text-stone-400 border-stone-200 h-14 px-4 rounded-xl focus-visible:ring-2 focus-visible:ring-blue-600/10 focus-visible:border-blue-600 text-[15px] transition-all"
+                    className="!bg-white text-black placeholder:text-stone-400 border-stone-200 h-16 px-5 rounded-2xl focus-visible:ring-2 focus-visible:ring-blue-600/10 focus-visible:border-blue-600 text-[16px] transition-all"
                   />
                 </div>
                 <div className="space-y-1.5">
@@ -199,7 +199,7 @@ function SignupContent() {
                     placeholder="name@company.com"
                     autoComplete="email"
                     required
-                    className="!bg-white text-black placeholder:text-stone-400 border-stone-200 h-14 px-4 rounded-xl focus-visible:ring-2 focus-visible:ring-blue-600/10 focus-visible:border-blue-600 text-[15px] transition-all"
+                    className="!bg-white text-black placeholder:text-stone-400 border-stone-200 h-16 px-5 rounded-2xl focus-visible:ring-2 focus-visible:ring-blue-600/10 focus-visible:border-blue-600 text-[16px] transition-all"
                   />
                 </div>
                 <div className="space-y-1.5">
@@ -211,7 +211,7 @@ function SignupContent() {
                     placeholder="Create a secure password"
                     autoComplete="new-password"
                     required
-                    className="!bg-white text-black placeholder:text-stone-400 border-stone-200 h-14 px-4 rounded-xl focus-visible:ring-2 focus-visible:ring-blue-600/10 focus-visible:border-blue-600 text-[15px] transition-all"
+                    className="!bg-white text-black placeholder:text-stone-400 border-stone-200 h-16 px-5 rounded-2xl focus-visible:ring-2 focus-visible:ring-blue-600/10 focus-visible:border-blue-600 text-[16px] transition-all"
                   />
                   <p className="text-[12px] text-stone-400 ml-1 italic">Minimum 8 characters with a mix of letters and numbers.</p>
                 </div>
@@ -229,7 +229,7 @@ function SignupContent() {
 
               <Button
                 type="submit"
-                className="w-full h-14 bg-stone-900 text-white hover:bg-stone-800 transition-all font-bold rounded-xl text-[16px] shadow-lg shadow-stone-200 active:scale-[0.98]"
+                className="w-full h-16 bg-stone-900 text-white hover:bg-stone-800 transition-all font-bold rounded-2xl text-[17px] shadow-lg shadow-stone-200 active:scale-[0.98]"
               >
                 Create Account
               </Button>
