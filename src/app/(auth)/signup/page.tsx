@@ -197,7 +197,7 @@ function SignupContent() {
 
           <div className="pt-6 text-center border-t border-stone-100">
             <p className="text-[11px] sm:text-[12px] text-stone-400 font-medium leading-relaxed">
-              By creating an account, you agree to our <span className="underline cursor-pointer">Terms of Service</span> and <span className="underline cursor-pointer">Privacy Policy</span>.
+              By creating an account, you agree to our <Link href="https://synqweb-five.vercel.app/terms" className="underline cursor-pointer" target="_blank" rel="noopener noreferrer">Terms of Service</Link> and <Link href="https://synqweb-five.vercel.app/privacy" className="underline cursor-pointer" target="_blank" rel="noopener noreferrer">Privacy Policy</Link>.
             </p>
           </div>
         </div>
