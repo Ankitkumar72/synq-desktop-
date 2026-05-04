@@ -69,8 +69,8 @@ function LoginContent() {
         <div className="relative z-10 pt-6 border-t border-white/5">
           <div className="flex gap-8 text-[12px] font-medium text-stone-500 uppercase tracking-widest">
             <span>© 2026 Synq</span>
-            <span className="cursor-pointer hover:text-white transition-colors">Security</span>
-            <span className="cursor-pointer hover:text-white transition-colors">Privacy</span>
+            <Link href="https://synqweb-five.vercel.app/security" className="cursor-pointer hover:text-white transition-colors">Security</Link>
+            <Link href="https://synqweb-five.vercel.app/privacy" className="cursor-pointer hover:text-white transition-colors">Privacy</Link>
           </div>
         </div>
       </div>
