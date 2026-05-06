@@ -95,6 +95,12 @@ export function NoteEditor({
   const [isLoading, setIsLoading] = useState(true)
   const ydoc = useMemo(() => getOrCreateYDoc(id), [id])
 
+  // Store initial content in a ref to avoid re-triggering initialization if it changes
+  const contentRef = useRef(content)
+  useEffect(() => {
+    contentRef.current = content
+  }, [content])
+
   const persistNow = useCallback(async (broadcast: boolean) => {
     const userId = useUserStore.getState().user?.id
     if (!userId || isSavingRef.current) return
@@ -147,38 +153,61 @@ export function NoteEditor({
     // We do this via a microtask to avoid synchronous setState in the effect body.
     queueMicrotask(() => { if (mounted) setIsLoading(true) })
 
+    // Helper to prevent promises from hanging indefinitely
+    const withTimeout = <T,>(promise: Promise<T>, ms: number, errorMessage: string = 'Timeout'): Promise<T> => {
+      return Promise.race([
+        promise,
+        new Promise<T>((_, reject) => setTimeout(() => reject(new Error(errorMessage)), ms))
+      ])
+    }
+
     const init = async () => {
-      const doc = ydoc
-      const fragment = doc.getXmlFragment('content')
-      
-      // 1. Wait for IndexedDB persistence to finish loading
-      await waitForPersistence(id)
-      if (!mounted) return
-
-      // 2. Always merge remote Yjs state to avoid stale local IndexedDB snapshots after refresh.
-      const remoteUpdate = await loadYDocFromSupabase(id)
-      if (remoteUpdate && mounted) {
-        applyRemoteUpdate(id, remoteUpdate)
-      }
-
-      // 3. If STILL empty and we have legacy content, seed it (migration)
-      if (fragment.length === 0 && content && mounted) {
-        const plainText = typeof content === 'string' ? content : getPlainTextFromStoredContent(content)
-        if (plainText.trim()) {
-          doc.transact(() => {
-            const paragraphs = plainText.split('\n')
-            for (const para of paragraphs) {
-              const element = new Y.XmlElement('paragraph')
-              if (para.trim()) {
-                element.insert(0, [new Y.XmlText(para)])
-              }
-              fragment.push([element])
-            }
-          })
+      try {
+        const doc = ydoc
+        const fragment = doc.getXmlFragment('content')
+        
+        // 1. Wait for IndexedDB persistence to finish loading
+        try {
+          await withTimeout(waitForPersistence(id), 3000, 'waitForPersistence timeout')
+        } catch (err) {
+          console.warn('[NoteEditor] Persistence wait failed or timed out:', err)
         }
-      }
+        
+        if (!mounted) return
 
-      if (mounted) setIsLoading(false)
+        // 2. Always merge remote Yjs state to avoid stale local IndexedDB snapshots after refresh.
+        try {
+          const remoteUpdate = await withTimeout(loadYDocFromSupabase(id), 5000, 'loadYDocFromSupabase timeout')
+          if (remoteUpdate && mounted) {
+            applyRemoteUpdate(id, remoteUpdate)
+          }
+        } catch (err) {
+          console.warn('[NoteEditor] Failed to load remote Yjs state:', err)
+        }
+
+        if (!mounted) return
+
+        // 3. If STILL empty and we have legacy content, seed it (migration)
+        if (fragment.length === 0 && contentRef.current && mounted) {
+          const plainText = typeof contentRef.current === 'string' ? contentRef.current : getPlainTextFromStoredContent(contentRef.current)
+          if (plainText.trim()) {
+            doc.transact(() => {
+              const paragraphs = plainText.split('\n')
+              for (const para of paragraphs) {
+                const element = new Y.XmlElement('paragraph')
+                if (para.trim()) {
+                  element.insert(0, [new Y.XmlText(para)])
+                }
+                fragment.push([element])
+              }
+            })
+          }
+        }
+      } catch (err) {
+        console.error('[NoteEditor] Fatal error during initialization:', err)
+      } finally {
+        if (mounted) setIsLoading(false)
+      }
     }
 
     init()
@@ -186,7 +215,7 @@ export function NoteEditor({
     return () => {
       mounted = false
     }
-  }, [id, content, ydoc])
+  }, [id, ydoc])
 
   // Debounced save to Supabase
   const debouncedSave = useCallback(() => {
