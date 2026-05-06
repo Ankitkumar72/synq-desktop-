@@ -1,70 +1,44 @@
-import * as fs from 'fs';
-import * as path from 'path';
-import { fileURLToPath } from 'url';
+/*
+ * This script intentionally does NOT execute SQL over `/rest/v1`.
+ * Supabase PostgREST endpoints are not a migration engine.
+ *
+ * Use one of the supported paths instead:
+ * 1) Supabase CLI (recommended): `supabase db push` / `supabase migration up`
+ * 2) Supabase SQL Editor (manual run for a specific migration file)
+ */
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+import * as fs from 'fs'
+import * as path from 'path'
+import { fileURLToPath } from 'url'
 
-async function runMigration() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const defaultMigration = path.join(__dirname, 'supabase', 'migrations', '20260506_production_hardening.sql')
 
-  if (!supabaseUrl) {
-    console.error('❌ Missing NEXT_PUBLIC_SUPABASE_URL');
-    return false;
+function main() {
+  const migrationPath = process.argv[2] ? path.resolve(process.argv[2]) : defaultMigration
+
+  if (!fs.existsSync(migrationPath)) {
+    console.error(`Missing migration file: ${migrationPath}`)
+    process.exit(1)
   }
 
-  if (!serviceKey) {
-    console.error('❌ Missing SUPABASE_SERVICE_ROLE_KEY environment variable');
-    console.error('   You need to set this to run migrations. Get it from: https://app.supabase.com/project/[project-id]/settings/api');
-    return false;
-  }
+  const sql = fs.readFileSync(migrationPath, 'utf-8')
+  const statementCount = sql.split(';').filter((s) => s.trim().length > 0).length
 
-  try {
-    const migrationPath = path.join(__dirname, '003_add_crdt_documents_table.sql');
-    const sql = fs.readFileSync(migrationPath, 'utf-8');
-
-    console.log('🚀 Running migration: 003_add_crdt_documents_table.sql');
-
-    // Execute SQL directly through fetch API
-    const response = await fetch(`${supabaseUrl}/rest/v1/`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${serviceKey}`,
-        'apikey': serviceKey,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ query: sql })
-    });
-
-    if (!response.ok) {
-      const error = await response.text();
-      console.error('❌ Migration failed:', response.status, error);
-      
-      console.log('\n📌 Alternative: Run migration in Supabase Dashboard');
-      console.log('   1. Go to: https://app.supabase.com/project');
-      console.log('   2. Click "SQL Editor"');
-      console.log('   3. Click "New Query"');
-      console.log('   4. Copy and paste contents of: 003_add_crdt_documents_table.sql');
-      console.log('   5. Click "Run"');
-      
-      return false;
-    }
-
-    console.log('✅ Migration completed successfully!');
-    console.log('✅ CRDT documents table has been created.');
-    console.log('✅ The sync error should now be resolved.\n');
-    return true;
-
-  } catch (err) {
-    console.error('❌ Error:', err.message);
-    console.log('\n📌 Alternative: Run migration in Supabase Dashboard');
-    console.log('   1. Go to: https://app.supabase.com/project');
-    console.log('   2. Click "SQL Editor"');
-    console.log('   3. Click "New Query"');
-    console.log('   4. Copy and paste contents of: 003_add_crdt_documents_table.sql');
-    console.log('   5. Click "Run"');
-    return false;
-  }
+  console.error('Refusing to run migration via REST API.')
+  console.error('Supabase migrations must be applied via CLI or SQL Editor.')
+  console.error('')
+  console.error(`Migration file: ${migrationPath}`)
+  console.error(`Approx statements: ${statementCount}`)
+  console.error('')
+  console.error('Recommended:')
+  console.error('  1) supabase login')
+  console.error('  2) supabase link --project-ref <project-ref>')
+  console.error('  3) supabase db push')
+  console.error('')
+  console.error('Manual fallback:')
+  console.error('  Open Supabase Dashboard > SQL Editor > paste migration SQL > Run')
+  process.exit(1)
 }
 
-runMigration().then(success => process.exit(success ? 0 : 1));
+main()

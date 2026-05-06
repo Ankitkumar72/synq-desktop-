@@ -46,7 +46,8 @@ function SignupContent() {
               fill
               className="object-contain opacity-80"
               quality={100}
-              unoptimized
+              priority
+              sizes="40px"
             />
           </div>
 
@@ -75,18 +76,19 @@ function SignupContent() {
       </div>
 
       {/* Right Pane - Auth Form */}
-      <div className="flex-1 flex flex-col items-center justify-center p-6 sm:p-8 md:p-10 lg:p-12 bg-white">
-        <div className="w-full max-w-[440px] space-y-8">
+      <div className="flex-1 flex flex-col items-center justify-center px-6 py-12 sm:p-8 md:p-10 lg:p-12 bg-white">
+        <div className="w-full max-w-[440px] space-y-6 sm:space-y-8">
           {/* Logo above the form */}
           <div className="flex justify-center">
-            <div className="h-12 w-12 relative">
+            <div className="h-10 w-10 sm:h-12 sm:w-12 relative">
               <Image
                 src="/brand-logo.png"
                 alt="Synq Logo"
                 fill
                 className="object-contain"
                 quality={100}
-                unoptimized
+                priority
+                sizes="(max-width: 640px) 48px, 40px"
               />
             </div>
           </div>
@@ -97,7 +99,7 @@ function SignupContent() {
             transition={{ duration: 0.6, delay: 0.2 }}
             className="space-y-2 text-center"
           >
-            <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-stone-900">Create your account</h2>
+            <h2 className="text-[26px] sm:text-3xl font-bold tracking-tight text-stone-900">Create your account</h2>
             <p className="text-[14px] sm:text-[15px] text-stone-500">
               Already have an account?{' '}
               <Link href="/login" className="text-blue-600 hover:text-blue-700 font-semibold transition-colors">
@@ -110,18 +112,18 @@ function SignupContent() {
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.3 }}
-            className="space-y-5"
+            className="space-y-4 sm:space-y-5"
           >
             {/* Social Signups */}
-            <div className="flex justify-center gap-4">
+            <div className="flex justify-center gap-3 sm:gap-4">
               <form action={signInWithGoogle}>
                 <Button
                   variant="outline"
                   type="submit"
-                  className="h-16 w-16 rounded-2xl border-stone-200 bg-white text-stone-900 hover:bg-stone-900 hover:text-white hover:border-stone-900 transition-all p-0 flex items-center justify-center shadow-sm active:scale-[0.95] group"
+                  className="h-14 w-14 sm:h-16 sm:w-16 rounded-2xl border-stone-200 bg-white text-stone-900 hover:bg-stone-900 hover:text-white hover:border-stone-900 transition-all p-0 flex items-center justify-center shadow-sm active:scale-[0.95] group"
                   title="Continue with Google"
                 >
-                  <svg className="h-7 w-7 group-hover:scale-110 transition-transform" viewBox="0 0 24 24">
+                  <svg className="h-6 w-6 sm:h-7 sm:w-7 group-hover:scale-110 transition-transform" viewBox="0 0 24 24">
                     <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
                     <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
                     <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" />
@@ -133,10 +135,10 @@ function SignupContent() {
                 <Button
                   variant="outline"
                   type="submit"
-                  className="h-16 w-16 rounded-2xl border-stone-200 bg-white text-stone-900 hover:bg-[#181717] hover:text-white hover:border-[#181717] transition-all p-0 flex items-center justify-center shadow-sm active:scale-[0.95] group"
+                  className="h-14 w-14 sm:h-16 sm:w-16 rounded-2xl border-stone-200 bg-white text-stone-900 hover:bg-[#181717] hover:text-white hover:border-[#181717] transition-all p-0 flex items-center justify-center shadow-sm active:scale-[0.95] group"
                   title="Continue with Github"
                 >
-                  <svg className="h-7 w-7 group-hover:scale-110 transition-transform" fill="currentColor" viewBox="0 0 24 24">
+                  <svg className="h-6 w-6 sm:h-7 sm:w-7 group-hover:scale-110 transition-transform" fill="currentColor" viewBox="0 0 24 24">
                     <path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.43.372.823 1.102.823 2.222 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12" />
                   </svg>
                 </Button>
@@ -145,10 +147,10 @@ function SignupContent() {
                 <Button
                   variant="outline"
                   type="submit"
-                  className="h-16 w-16 rounded-2xl border-stone-200 bg-white text-[#0A66C2] hover:bg-[#0A66C2] hover:text-white hover:border-[#0A66C2] transition-all p-0 flex items-center justify-center shadow-sm active:scale-[0.95] group"
+                  className="h-14 w-14 sm:h-16 sm:w-16 rounded-2xl border-stone-200 bg-white text-[#0A66C2] hover:bg-[#0A66C2] hover:text-white hover:border-[#0A66C2] transition-all p-0 flex items-center justify-center shadow-sm active:scale-[0.95] group"
                   title="Continue with LinkedIn"
                 >
-                  <svg className="h-7 w-7 group-hover:scale-110 transition-transform" fill="currentColor" viewBox="0 0 24 24">
+                  <svg className="h-6 w-6 sm:h-7 sm:w-7 group-hover:scale-110 transition-transform" fill="currentColor" viewBox="0 0 24 24">
                     <path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z" />
                   </svg>
                 </Button>
@@ -157,10 +159,10 @@ function SignupContent() {
                 <Button
                   variant="outline"
                   type="submit"
-                  className="h-16 w-16 rounded-2xl border-stone-200 bg-white text-[#1877F2] hover:bg-[#1877F2] hover:text-white hover:border-[#1877F2] transition-all p-0 flex items-center justify-center shadow-sm active:scale-[0.95] group"
+                  className="h-14 w-14 sm:h-16 sm:w-16 rounded-2xl border-stone-200 bg-white text-[#1877F2] hover:bg-[#1877F2] hover:text-white hover:border-[#1877F2] transition-all p-0 flex items-center justify-center shadow-sm active:scale-[0.95] group"
                   title="Continue with Facebook"
                 >
-                  <svg className="h-7 w-7 group-hover:scale-110 transition-transform" fill="currentColor" viewBox="0 0 24 24">
+                  <svg className="h-6 w-6 sm:h-7 sm:w-7 group-hover:scale-110 transition-transform" fill="currentColor" viewBox="0 0 24 24">
                     <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.469h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.469h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
                   </svg>
                 </Button>
@@ -172,12 +174,12 @@ function SignupContent() {
                 <span className="w-full border-t border-stone-100" />
               </div>
               <div className="relative flex justify-center text-[12px] uppercase tracking-widest text-stone-400 font-bold">
-                <span className="bg-white px-6">or email signup</span>
+                <span className="bg-white px-6">or</span>
               </div>
             </div>
 
             {/* Email Form */}
-            <form action={signup} className="space-y-5">
+            <form action={signup} className="space-y-4 sm:space-y-5">
               <div className="space-y-3">
                 <div className="space-y-1.5">
                   <label htmlFor="full_name" className="text-sm font-bold text-stone-700 ml-1">Full Name</label>
@@ -187,7 +189,7 @@ function SignupContent() {
                     type="text"
                     placeholder="John Doe"
                     required
-                    className="!bg-white text-black placeholder:text-stone-400 border-stone-200 h-16 px-5 rounded-2xl focus-visible:ring-2 focus-visible:ring-blue-600/10 focus-visible:border-blue-600 text-[16px] transition-all"
+                    className="!bg-white text-black placeholder:text-stone-400 border-stone-200 h-14 sm:h-16 px-5 rounded-2xl focus-visible:ring-2 focus-visible:ring-blue-600/10 focus-visible:border-blue-600 text-[16px] transition-all"
                   />
                 </div>
                 <div className="space-y-1.5">
@@ -199,7 +201,7 @@ function SignupContent() {
                     placeholder="name@company.com"
                     autoComplete="email"
                     required
-                    className="!bg-white text-black placeholder:text-stone-400 border-stone-200 h-16 px-5 rounded-2xl focus-visible:ring-2 focus-visible:ring-blue-600/10 focus-visible:border-blue-600 text-[16px] transition-all"
+                    className="!bg-white text-black placeholder:text-stone-400 border-stone-200 h-14 sm:h-16 px-5 rounded-2xl focus-visible:ring-2 focus-visible:ring-blue-600/10 focus-visible:border-blue-600 text-[16px] transition-all"
                   />
                 </div>
                 <div className="space-y-1.5">
@@ -211,7 +213,7 @@ function SignupContent() {
                     placeholder="Create a secure password"
                     autoComplete="new-password"
                     required
-                    className="!bg-white text-black placeholder:text-stone-400 border-stone-200 h-16 px-5 rounded-2xl focus-visible:ring-2 focus-visible:ring-blue-600/10 focus-visible:border-blue-600 text-[16px] transition-all"
+                    className="!bg-white text-black placeholder:text-stone-400 border-stone-200 h-14 sm:h-16 px-5 rounded-2xl focus-visible:ring-2 focus-visible:ring-blue-600/10 focus-visible:border-blue-600 text-[16px] transition-all"
                   />
                   <p className="text-[12px] text-stone-400 ml-1 italic">Minimum 8 characters with a mix of letters and numbers.</p>
                 </div>
@@ -229,7 +231,7 @@ function SignupContent() {
 
               <Button
                 type="submit"
-                className="w-full h-16 bg-stone-900 text-white hover:bg-stone-800 transition-all font-bold rounded-2xl text-[17px] shadow-lg shadow-stone-200 active:scale-[0.98]"
+                className="w-full h-14 sm:h-16 bg-stone-900 text-white hover:bg-stone-800 transition-all font-bold rounded-2xl text-[17px] shadow-lg shadow-stone-200 active:scale-[0.98]"
               >
                 Create Account
               </Button>

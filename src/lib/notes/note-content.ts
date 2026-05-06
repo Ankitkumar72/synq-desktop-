@@ -63,10 +63,10 @@ export function createNoteContentFromText(text: string | null | undefined): JSON
 }
 
 export function getPlainTextFromStoredContent(content: NoteContent): string {
-  if (typeof content === 'string') return content.trim()
+  if (typeof content === 'string') return content
   if (!isStructuredNoteContent(content)) return ''
 
-  return extractTextFromNode(content).trim()
+  return extractTextFromNode(content)
 }
 
 function extractTextFromNode(node: JSONContent): string {

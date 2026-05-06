@@ -76,7 +76,7 @@ export async function dequeueOperation(id: string): Promise<void> {
 
 /**
  * Increment retry count for a failed operation.
- * Returns false if max retries exceeded (operation should be dead-lettered).
+ * For data durability we keep operations in queue even after retry cap.
  */
 export async function markRetry(id: string): Promise<boolean> {
   const op = await idbGet<QueuedOperation>(`${QUEUE_PREFIX}${id}`)
@@ -84,9 +84,8 @@ export async function markRetry(id: string): Promise<boolean> {
   
   op.retryCount++
   if (op.retryCount >= MAX_RETRIES) {
-    console.error(`[OfflineQueue] Operation ${id} exceeded max retries — dead-lettering`, op)
-    await idbDel(`${QUEUE_PREFIX}${id}`)
-    return false
+    op.retryCount = MAX_RETRIES
+    console.error(`[OfflineQueue] Operation ${id} reached retry cap; keeping for later retry`, op)
   }
   
   await idbSet(`${QUEUE_PREFIX}${id}`, op)
@@ -175,7 +174,7 @@ export async function flushQueue(
       console.error(`[OfflineQueue] Failed to flush operation:`, op.id, err)
       const canRetry = await markRetry(op.id)
       if (!canRetry) {
-        console.error(`[OfflineQueue] Operation dead-lettered:`, op.id)
+        console.error(`[OfflineQueue] Operation retry bookkeeping failed:`, op.id)
       }
       failed++
     }
@@ -194,3 +193,4 @@ export async function getQueueDepth(): Promise<number> {
 }
 
 export { RETRY_BACKOFF_MS }
+

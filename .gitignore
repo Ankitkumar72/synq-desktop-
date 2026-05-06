@@ -55,3 +55,6 @@ next-env.d.ts
 
 # specific build tools
 .turbo/
+
+# local scratch and editor state
+/scratch/

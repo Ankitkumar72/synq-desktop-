@@ -147,12 +147,17 @@ export const useNotesStore = create<NotesState>()(
             priority: note.priority || 'none'
           })
 
+          const optimisticNote = {
+            ...fullNote,
+            user_id: undefined,
+          }
+
           // Initialize a Y.Doc for this new note
           getOrCreateYDoc(noteId)
 
           // OPTIMISTIC UPDATE: Add to local state immediately
           set((state) => ({ 
-            notes: [fullNote, ...state.notes],
+            notes: [optimisticNote, ...state.notes],
             selectedNoteId: fullNote.id // Auto-select new note
           }))
 

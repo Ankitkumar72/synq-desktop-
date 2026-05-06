@@ -120,8 +120,10 @@ export const useTaskStore = create<TaskState>()(
           newFieldVersions[key] = timestamp
         })
 
+        const taskId = crypto.randomUUID()
         const taskPayload = { 
           ...t, 
+          id: taskId,
           due_date: formattedDate,
           user_id: userId,
           hlc_timestamp: timestamp,
@@ -129,11 +131,10 @@ export const useTaskStore = create<TaskState>()(
           updated_at: now
         }
 
-        // Optimistic insert with a temporary ID
-        const tempId = crypto.randomUUID()
+        // Optimistic insert (local-first). Keep user_id unset so comprehensive fetches don't drop unsynced rows.
         const optimisticTask: Task = {
           ...taskPayload,
-          id: tempId,
+          user_id: undefined,
           created_at: now,
         }
         set(state => ({ tasks: [optimisticTask, ...state.tasks] }))
@@ -153,26 +154,26 @@ export const useTaskStore = create<TaskState>()(
             })
             // Enqueue for retry
             await enqueueOperation({
-              entityType: 'task',
-              entityId: tempId,
-              operationType: 'insert',
-              payload: taskPayload,
-              hlcTimestamp: timestamp,
-            })
-            triggerFlush()
-          } else if (data?.[0]) {
-            // Replace temp task with real one
-            set(state => ({ 
-              tasks: state.tasks.map(task => 
-                task.id === tempId ? data[0] : task
-              )
-            }))
-          }
-        } else {
+                entityType: 'task',
+                entityId: taskId,
+                operationType: 'insert',
+                payload: taskPayload,
+                hlcTimestamp: timestamp,
+              })
+              triggerFlush()
+            } else if (data?.[0]) {
+              // Replace temp task with real one
+              set(state => ({ 
+                tasks: state.tasks.map(task => 
+                  task.id === taskId ? data[0] : task
+                )
+              }))
+            }
+          } else {
           // Offline: queue the insert
           await enqueueOperation({
             entityType: 'task',
-            entityId: tempId,
+            entityId: taskId,
             operationType: 'insert',
             payload: taskPayload,
             hlcTimestamp: timestamp,

@@ -9,6 +9,8 @@
  */
 
 import { supabase } from '@/lib/supabase.client'
+import { hlc } from '@/lib/hlc'
+import { applyNoteCrdtUpdate } from './oplog'
 import {
   flushQueue,
   getQueueDepth,
@@ -157,43 +159,64 @@ export async function saveYDocToSupabase(noteId: string, userId: string): Promis
   const state = getDocState(noteId)
   const body = getPlainTextFromYDoc(noteId)
   const excerpt = getExcerptFromYDoc(noteId)
+  const timestamp = hlc.increment()
+  const updatedAt = new Date().toISOString()
 
   // Mark as locally modified to prevent echo from Realtime
   markLocallyModified(noteId)
 
-  // Upsert the CRDT document state
+  // Preferred: atomic RPC (op-log append + metadata + optional snapshot)
+  try {
+    await applyNoteCrdtUpdate({
+      noteId,
+      userId,
+      clientId: hlc.getNodeId(),
+      opId: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+      updateData: state,
+      snapshot: state,
+      body,
+      excerpt,
+      updatedAt,
+    })
+    return
+  } catch (rpcError) {
+    // Backward compatibility: if migration/RPC is not present yet, fall back.
+    console.warn('[SyncManager] Atomic RPC unavailable, falling back to legacy save path:', rpcError)
+  }
+
+  // Fallback: legacy non-atomic dual write
   const { error: crdtError } = await supabase
     .from('crdt_documents')
     .upsert({
       entity_type: 'note',
       entity_id: noteId,
       user_id: userId,
-      state: Array.from(state), // Store as int array (Supabase doesn't support raw bytes in JSON)
-      updated_at: new Date().toISOString(),
+      state: Array.from(state),
+      updated_at: updatedAt,
     }, { onConflict: 'entity_type,entity_id' })
 
   if (crdtError) {
-    const errorMessage = crdtError instanceof Error 
-      ? crdtError.message 
+    const errorMessage = crdtError instanceof Error
+      ? crdtError.message
       : (crdtError && typeof crdtError === 'object' && Object.keys(crdtError).length > 0
         ? JSON.stringify(crdtError)
         : 'Unknown error (check crdt_documents table exists)')
     console.error('[SyncManager] Failed to save CRDT state:', errorMessage)
   }
 
-  // Also update the notes table body/excerpt for Flutter
   const { error: noteError } = await supabase
     .from('notes')
     .update({
       body,
       excerpt,
-      updated_at: new Date().toISOString(),
+      hlc_timestamp: timestamp,
+      updated_at: updatedAt,
     })
     .eq('id', noteId)
 
   if (noteError) {
-    const errorMessage = noteError instanceof Error 
-      ? noteError.message 
+    const errorMessage = noteError instanceof Error
+      ? noteError.message
       : (noteError && typeof noteError === 'object' && Object.keys(noteError).length > 0
         ? JSON.stringify(noteError)
         : 'Unknown error')

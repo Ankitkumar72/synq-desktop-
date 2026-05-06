@@ -50,18 +50,19 @@ export const useEventStore = create<EventState>()(
 
         const timestamp = hlc.increment()
         const now = new Date().toISOString()
+        const eventId = crypto.randomUUID()
         const eventPayload = { 
           ...e, 
+          id: eventId,
           user_id: userId,
           hlc_timestamp: timestamp,
           updated_at: now
         }
 
         // Optimistic insert
-        const tempId = crypto.randomUUID()
         const optimisticEvent: CalendarEvent = {
           ...eventPayload,
-          id: tempId,
+          user_id: undefined,
           created_at: now,
         }
         set(state => ({ events: [...state.events, optimisticEvent] }))
@@ -74,22 +75,22 @@ export const useEventStore = create<EventState>()(
           if (error) {
             console.error('Error adding event:', error)
             await enqueueOperation({
-              entityType: 'event',
-              entityId: tempId,
-              operationType: 'insert',
-              payload: eventPayload,
-              hlcTimestamp: timestamp,
-            })
-            triggerFlush()
+                entityType: 'event',
+                entityId: eventId,
+                operationType: 'insert',
+                payload: eventPayload,
+                hlcTimestamp: timestamp,
+              })
+              triggerFlush()
           } else if (data) {
             set(state => ({ 
-              events: state.events.map(ev => ev.id === tempId ? data[0] : ev)
+              events: state.events.map(ev => ev.id === eventId ? data[0] : ev)
             }))
           }
         } else {
           await enqueueOperation({
             entityType: 'event',
-            entityId: tempId,
+            entityId: eventId,
             operationType: 'insert',
             payload: eventPayload,
             hlcTimestamp: timestamp,

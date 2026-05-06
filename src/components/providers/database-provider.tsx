@@ -20,9 +20,10 @@ import { destroyAllYDocs, applyRemoteUpdate } from '@/lib/crdt/crdt-doc'
 // Realtime config
 const MAX_REALTIME_RETRIES = 5
 const RETRY_BASE_DELAY_MS = 2000
-const INITIAL_SUBSCRIBE_DELAY_MS = 1500  // Let the Realtime tenant warm up on first connect
+const INITIAL_SUBSCRIBE_DELAY_MS = 250
 // Poll intervals (ms)
 const POLL_INTERVAL_REALTIME_DOWN = 10_000  // 10s when realtime is down
+const POLL_INTERVAL_REALTIME_UP = 30_000    // 30s when realtime is healthy
 const HEALTH_CHECK_INTERVAL = 60_000        // 60s health check
 const HEALTH_CHECK_GRACE_MS = 30_000        // Don't health-check within 30s of a subscribe attempt
 
@@ -48,6 +49,7 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
   const channelRef = useRef<RealtimeChannel | null>(null)
   const retryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const lastPollAtRef = useRef(0)
   const healthCheckTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const realtimeConnectedRef = useRef(false)
   const isSubscribingRef = useRef(false)            // Lock: prevents concurrent subscriptions
@@ -68,12 +70,7 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
       useEventStore.getState().fetchEvents()
     ]
     
-    // Project store doesn't have a fetchProjects method yet, so we'll fetch it safely here
-    const fetchProj = async () => {
-      const { data } = await supabase.from('projects').select('*').order('created_at', { ascending: false })
-      if (data) useProjectStore.getState().setProjects(data)
-    }
-    promises.push(fetchProj())
+    promises.push(useProjectStore.getState().fetchProjects())
 
     await Promise.allSettled(promises)
   }, [])
@@ -255,12 +252,10 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
       await new Promise(resolve => setTimeout(resolve, 200))
     }
 
-    // On the first attempt, give the Realtime tenant time to warm up.
-    // The server-side tenant is stopped after periods of inactivity and needs
-    // ~2 seconds to re-initialize replication slots and DB connections.
-    if (attempt === 0) {
-      await new Promise(resolve => setTimeout(resolve, INITIAL_SUBSCRIBE_DELAY_MS))
-    }
+      // A tiny warmup delay smooths out cold starts without adding notable latency.
+      if (attempt === 0 && INITIAL_SUBSCRIBE_DELAY_MS > 0) {
+        await new Promise(resolve => setTimeout(resolve, INITIAL_SUBSCRIBE_DELAY_MS))
+      }
 
     // Verify session is still active
     const { data: { session } } = await supabase.auth.getSession()
@@ -400,15 +395,15 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
     if (pollTimerRef.current) clearInterval(pollTimerRef.current)
 
     pollTimerRef.current = setInterval(() => {
-      // Only poll when the timer fires at the right cadence
-      // Timer runs every 10s; skip if realtime is up and not enough time
+      const now = Date.now()
+
+      // When realtime is healthy, poll less frequently as a consistency safety net.
       if (realtimeConnectedRef.current) {
-        // When connected, only poll every 60s (skip 5 of every 6 ticks)
-        const now = Math.floor(Date.now() / 1000)
-        if (now % 60 > 10) return
+        if ((now - lastPollAtRef.current) < POLL_INTERVAL_REALTIME_UP) return
       }
 
       console.log(`[Poll] Refreshing data (realtime=${realtimeConnectedRef.current ? 'up' : 'down'})`)
+      lastPollAtRef.current = now
       fetchData().catch(err => console.error('[Poll] Error:', err))
     }, POLL_INTERVAL_REALTIME_DOWN)
   }, [fetchData])

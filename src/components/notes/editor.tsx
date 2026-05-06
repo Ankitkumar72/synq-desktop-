@@ -35,6 +35,8 @@ import { saveYDocToSupabase, loadYDocFromSupabase } from '@/lib/crdt/sync-manage
 import { useUserStore } from '@/lib/store/use-user-store'
 import type { NoteContent } from '@/types'
 import { getPlainTextFromStoredContent } from '@/lib/notes/note-content'
+import { sendNoteBroadcast } from '@/lib/realtime/note-sync'
+import { hlc } from '@/lib/hlc'
 
 const SAVE_DEBOUNCE_MS = 800
 
@@ -88,8 +90,55 @@ export function NoteEditor({
 }) {
   const { setFocusedNoteId, markNoteActivity, clearActiveNoteActivity, updateNoteLocal } = useNotesStore()
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const isSavingRef = useRef(false)
+  const hasPendingLocalChangeRef = useRef(false)
   const [isLoading, setIsLoading] = useState(true)
   const ydoc = useMemo(() => getOrCreateYDoc(id), [id])
+
+  const persistNow = useCallback(async (broadcast: boolean) => {
+    const userId = useUserStore.getState().user?.id
+    if (!userId || isSavingRef.current) return
+
+    isSavingRef.current = true
+    hasPendingLocalChangeRef.current = false
+    const now = new Date().toISOString()
+    const body = getPlainTextFromYDoc(id)
+    const excerpt = getExcerptFromYDoc(id)
+
+    markLocallyModified(id)
+    updateNoteLocal(id, { body, excerpt, updated_at: now })
+    onChange?.({ content: null, body, excerpt })
+
+    try {
+      await saveYDocToSupabase(id, userId)
+    } catch (err) {
+      console.error('[NoteEditor] Failed to persist note state:', err)
+      return
+    } finally {
+      isSavingRef.current = false
+    }
+
+    if (!broadcast) return
+
+    const note = useNotesStore.getState().notes.find(n => n.id === id)
+    const timestamp = hlc.increment()
+    const mergedVersions: Record<string, string> = {
+      ...(note?.field_versions || {}),
+      body: timestamp,
+      excerpt: timestamp,
+      updated_at: timestamp,
+    }
+
+    void sendNoteBroadcast({
+      id,
+      content: note?.content || null,
+      body,
+      excerpt,
+      hlc_timestamp: timestamp,
+      updated_at: now,
+      field_versions: mergedVersions,
+    })
+  }, [id, onChange, updateNoteLocal])
 
   // Initialize the Yjs doc — if it's empty and we have TipTap content, seed it
   useEffect(() => {
@@ -106,14 +155,10 @@ export function NoteEditor({
       await waitForPersistence(id)
       if (!mounted) return
 
-      // 2. If the doc is still empty, check if we need to fetch from Supabase
-      if (fragment.length === 0) {
-        console.log(`[NoteEditor] Doc ${id.slice(0, 8)} is empty locally, checking remote...`)
-        const remoteUpdate = await loadYDocFromSupabase(id)
-        if (remoteUpdate && mounted) {
-          console.log(`[NoteEditor] Found remote state for ${id.slice(0, 8)}, applying...`)
-          applyRemoteUpdate(id, remoteUpdate)
-        }
+      // 2. Always merge remote Yjs state to avoid stale local IndexedDB snapshots after refresh.
+      const remoteUpdate = await loadYDocFromSupabase(id)
+      if (remoteUpdate && mounted) {
+        applyRemoteUpdate(id, remoteUpdate)
       }
 
       // 3. If STILL empty and we have legacy content, seed it (migration)
@@ -147,25 +192,9 @@ export function NoteEditor({
   const debouncedSave = useCallback(() => {
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current)
     saveTimeoutRef.current = setTimeout(() => {
-      const userId = useUserStore.getState().user?.id
-      if (!userId) return
-
-      const body = getPlainTextFromYDoc(id)
-      const excerpt = getExcerptFromYDoc(id)
-
-      // Mark as locally modified to prevent echo
-      markLocallyModified(id)
-
-      // Update local note state with body/excerpt
-      updateNoteLocal(id, { body, excerpt, updated_at: new Date().toISOString() })
-
-      // Persist: save Yjs state + body/excerpt to Supabase
-      onChange?.({ content: null, body, excerpt })
-      saveYDocToSupabase(id, userId).catch(err => {
-        console.error('[NoteEditor] Failed to save Yjs state:', err)
-      })
+      void persistNow(true)
     }, SAVE_DEBOUNCE_MS)
-  }, [id, onChange, updateNoteLocal])
+  }, [persistNow])
 
   // Monitor Yjs document updates to trigger saves
   useEffect(() => {
@@ -173,6 +202,7 @@ export function NoteEditor({
       // If the update came from a 'remote' transaction (via applyRemoteUpdate),
       // we skip scheduling a save to prevent a loop.
       if (origin !== 'remote') {
+        hasPendingLocalChangeRef.current = true
         debouncedSave()
       }
     }
@@ -182,6 +212,34 @@ export function NoteEditor({
       ydoc.off('update', handleUpdate)
     }
   }, [ydoc, debouncedSave])
+
+  useEffect(() => {
+    const persistPending = () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current)
+        saveTimeoutRef.current = null
+      }
+      if (hasPendingLocalChangeRef.current) {
+        void persistNow(false)
+      }
+    }
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        persistPending()
+      }
+    }
+
+    window.addEventListener('pagehide', persistPending)
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    window.addEventListener('beforeunload', persistPending)
+
+    return () => {
+      window.removeEventListener('pagehide', persistPending)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      window.removeEventListener('beforeunload', persistPending)
+    }
+  }, [persistNow])
   
   const editor = useEditor({
     extensions: [
@@ -227,17 +285,7 @@ export function NoteEditor({
         saveTimeoutRef.current = null
       }
       
-      const userId = useUserStore.getState().user?.id
-      if (userId) {
-        const body = getPlainTextFromYDoc(id)
-        const excerpt = getExcerptFromYDoc(id)
-        markLocallyModified(id)
-        updateNoteLocal(id, { body, excerpt, updated_at: new Date().toISOString() })
-        onChange?.({ content: null, body, excerpt })
-        saveYDocToSupabase(id, userId).catch(err => {
-          console.error('[NoteEditor] Failed to save on blur:', err)
-        })
-      }
+      void persistNow(true)
     },
     editorProps: {
       attributes: {

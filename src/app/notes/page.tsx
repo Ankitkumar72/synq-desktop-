@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useMemo, useEffect, useRef } from "react";
-import { Plus, Clock, Search, FileText, ChevronRight } from "lucide-react"
+import { Plus, Clock, FileText, ChevronRight } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -66,7 +66,7 @@ function NotesPageContent() {
   const searchParams = useSearchParams()
   const urlNoteId = searchParams.get("id")
   
-  const [searchQuery, setSearchQuery] = useState("")
+
   const [expandedSections, setExpandedSections] = useState({
     pinned: true,
     all: true
@@ -122,12 +122,8 @@ function NotesPageContent() {
   const filteredNotes = useMemo(() => {
     return notes
       .filter(note => !note.deleted_at)
-      .filter(note =>
-        note.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        note.excerpt?.toLowerCase().includes(searchQuery.toLowerCase())
-      )
       .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
-  }, [notes, searchQuery])
+  }, [notes])
 
   const pinnedNotes = useMemo(() => filteredNotes.filter(n => n.pinned), [filteredNotes])
 
@@ -214,16 +210,7 @@ function NotesPageContent() {
               </Button>
             </div>
 
-            <div className="relative mb-2">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-600" />
-              <input
-                type="text"
-                placeholder="Search..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full h-9 pl-9 pr-3 text-[13px] bg-neutral-900/40 border-none focus:ring-1 focus:ring-neutral-800 focus:outline-none focus:bg-neutral-900/60 placeholder:text-neutral-700 transition-all rounded-lg text-neutral-300"
-              />
-            </div>
+
           </div>
 
           <ScrollArea className="flex-1">
@@ -246,7 +233,7 @@ function NotesPageContent() {
                       <motion.div
                         initial={{ height: 0, opacity: 0 }}
                         animate={{ height: "auto", opacity: 1 }}
-                        exit={{ height: 0, opacity: 0 }}
+                        exit={{ height: 0, opacity: 0, transition: { opacity: { duration: 0.1 } } }}
                         transition={{ duration: 0.2, ease: "easeInOut" }}
                         className="overflow-hidden"
                       >
@@ -284,7 +271,7 @@ function NotesPageContent() {
                     <motion.div
                       initial={{ height: 0, opacity: 0 }}
                       animate={{ height: "auto", opacity: 1 }}
-                      exit={{ height: 0, opacity: 0 }}
+                      exit={{ height: 0, opacity: 0, transition: { opacity: { duration: 0.1 } } }}
                       transition={{ duration: 0.2, ease: "easeInOut" }}
                       className="overflow-hidden"
                     >

@@ -14,7 +14,7 @@ CREATE TABLE profiles (
 );
 
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Public profiles are viewable by everyone." ON profiles FOR SELECT USING (true);
+CREATE POLICY "Users can view own profile." ON profiles FOR SELECT USING (auth.uid() = id);
 CREATE POLICY "Users can insert their own profile." ON profiles FOR INSERT WITH CHECK (auth.uid() = id);
 CREATE POLICY "Users can update own profile." ON profiles FOR UPDATE USING (auth.uid() = id);
 
@@ -28,10 +28,13 @@ CREATE TABLE projects (
   status TEXT DEFAULT 'on-track',
   workspace_id UUID,
   hlc_timestamp TEXT,
+  field_versions JSONB DEFAULT '{}',
+  is_favorite BOOLEAN DEFAULT false,
   deleted_hlc TEXT,
   is_deleted BOOLEAN DEFAULT false,
   deleted_at TIMESTAMPTZ,
-  created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now())
+  created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()),
+  updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now())
 );
 
 ALTER TABLE projects ENABLE ROW LEVEL SECURITY;
@@ -52,6 +55,7 @@ CREATE TABLE tasks (
   project_id UUID REFERENCES projects(id) ON DELETE SET NULL,
   assignee_id UUID REFERENCES profiles(id) ON DELETE SET NULL,
   is_deleted BOOLEAN DEFAULT false,
+  field_versions JSONB DEFAULT '{}',
   deleted_hlc TEXT,
   deleted_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()),
@@ -157,6 +161,8 @@ CREATE TABLE events (
   end_date TIMESTAMPTZ NOT NULL,
   location TEXT,
   color TEXT DEFAULT 'bg-blue-500',
+  hlc_timestamp TEXT,
+  field_versions JSONB DEFAULT '{}',
   is_deleted BOOLEAN DEFAULT false,
   deleted_hlc TEXT,
   deleted_at TIMESTAMPTZ,
@@ -277,7 +283,7 @@ begin;
   drop publication if exists supabase_realtime;
   create publication supabase_realtime;
 commit;
-alter publication supabase_realtime add table notes, tasks, projects, events, folders;
+alter publication supabase_realtime add table notes, tasks, projects, events, folders, crdt_documents;
 
 -- ============ TRASH & SOFT DELETE ============
 
@@ -389,6 +395,10 @@ CREATE OR REPLACE TRIGGER set_updated_at_notes
 
 CREATE OR REPLACE TRIGGER set_updated_at_tasks
   BEFORE UPDATE ON tasks FOR EACH ROW
+  EXECUTE FUNCTION extensions.moddatetime(updated_at);
+
+CREATE OR REPLACE TRIGGER set_updated_at_projects
+  BEFORE UPDATE ON projects FOR EACH ROW
   EXECUTE FUNCTION extensions.moddatetime(updated_at);
 
 CREATE OR REPLACE TRIGGER set_updated_at_events
