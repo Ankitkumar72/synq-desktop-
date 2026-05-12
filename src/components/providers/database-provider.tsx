@@ -12,7 +12,7 @@ import { registerDevice, type DeviceRegistrationResult } from '@/lib/device-mana
 import { DeviceLimitPage } from '@/components/device-limit-page'
 import { hlc } from '@/lib/hlc'
 import { Task, Project, Note, CalendarEvent } from '@/types'
-import { AuthChangeEvent, Session, RealtimePostgresChangesPayload, RealtimeChannel } from '@supabase/supabase-js'
+import { Session, RealtimePostgresChangesPayload, RealtimeChannel } from '@supabase/supabase-js'
 import { bindNoteBroadcastChannel, getNoteSyncClientId, NOTE_BROADCAST_EVENT, type NoteBroadcastPayload } from '@/lib/realtime/note-sync'
 import { initSyncManager, destroySyncManager } from '@/lib/crdt/sync-manager'
 import { destroyAllYDocs, applyRemoteUpdate, applyRemoteUpdateIfLoaded, hasYDoc } from '@/lib/crdt/crdt-doc'
@@ -28,17 +28,6 @@ const POLL_INTERVAL_REALTIME_UP = 30_000    // 30s when realtime is healthy
 const HEALTH_CHECK_INTERVAL = 60_000        // 60s health check
 const HEALTH_CHECK_GRACE_MS = 30_000        // Don't health-check within 30s of a subscribe attempt
 
-function describeRealtimeError(err: unknown) {
-  if (!err) return ''
-  if (err instanceof Error) return err.message
-  if (typeof err === 'string') return err
-
-  try {
-    return JSON.stringify(err)
-  } catch {
-    return String(err)
-  }
-}
 
 export function DatabaseProvider({ children }: { children: React.ReactNode }) {
   const [deviceLimitExceeded, setDeviceLimitExceeded] = useState(false)
@@ -364,7 +353,7 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
 
     channelRef.current = channel
 
-    channel.subscribe((status, err) => {
+    channel.subscribe((status) => {
       if (subscriptionGenRef.current !== currentGen) return
 
       if (status === 'SUBSCRIBED') {
@@ -453,9 +442,9 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
           initSyncManager()
           fetchData().catch(err => console.error('[DatabaseProvider] Initial fetch failed:', err))
 
-          const [profileResult, deviceResult] = await Promise.allSettled([
+          const [, deviceResult] = await Promise.allSettled([
             useProfileStore.getState().fetchProfile(),
-            registerDevice().catch(err => ({ allowed: true })),
+            registerDevice().catch(() => ({ allowed: true })),
           ])
 
           const result = deviceResult.status === 'fulfilled' ? deviceResult.value : { allowed: true }

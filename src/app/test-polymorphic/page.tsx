@@ -6,28 +6,25 @@ import { useNotesStore } from '@/lib/store/use-notes-store'
 import { useUserStore } from '@/lib/store/use-user-store'
 
 export default function TestPolymorphicPage() {
-  const [results, setResults] = useState<string[]>([])
   const { user } = useUserStore()
+  const [results, setResults] = useState<string[]>(user ? [] : ['❌ Waiting for user session...'])
   const eventStore = useEventStore()
   const notesStore = useNotesStore()
 
   useEffect(() => {
-    if (!user) {
-      setResults(prev => [...prev, '❌ Waiting for user session...'])
-      return
-    }
-
     async function runLiveTests() {
+      if (!user) return
+
       const logs: string[] = []
-      logs.push(`👤 Testing as user: ${user?.email}`)
+      logs.push(`👤 Testing as user: ${user.email}`)
 
       try {
         logs.push('--- Test 1: EventStore Dual-Fetch ---')
-        await eventStore.fetchEvents(user!.id)
+        await eventStore.fetchEvents()
         logs.push(`✅ Fetched ${eventStore.events.length} events (includes polymorphic notes).`)
 
         logs.push('--- Test 2: NotesStore Filtered Fetch ---')
-        await notesStore.fetchNotes(user!.id)
+        await notesStore.fetchNotes()
         logs.push(`✅ Fetched ${notesStore.notes.length} notes (excludes scheduled items via web_notes view).`)
 
         // Verification of overlap
@@ -41,15 +38,18 @@ export default function TestPolymorphicPage() {
           eventIdsInNotes.forEach(e => logs.push(`   - Overlap: ${e.title} (${e.id})`))
         }
 
-      } catch (err: any) {
-        logs.push(`💥 Error during tests: ${err.message}`)
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err)
+        logs.push(`💥 Error during tests: ${message}`)
       }
 
       setResults(logs)
     }
 
-    runLiveTests()
-  }, [user])
+    if (user) {
+      runLiveTests()
+    }
+  }, [user, eventStore, notesStore])
 
   return (
     <div className="p-8 font-mono bg-zinc-950 text-zinc-300 min-h-screen">
@@ -62,12 +62,13 @@ export default function TestPolymorphicPage() {
             {log}
           </div>
         ))}
+        {!user && (
+          <div className="mt-8 p-4 bg-zinc-900 border border-zinc-800 rounded">
+            Please log in to the app in another tab to run these tests.
+          </div>
+        )}
       </div>
-      {!user && (
-        <div className="mt-8 p-4 bg-zinc-900 border border-zinc-800 rounded">
-          Please log in to the app in another tab to run these tests.
-        </div>
-      )}
     </div>
   )
 }
+
