@@ -84,13 +84,19 @@ export function WeekView({ currentDate, events, tasks, onItemClick }: WeekViewPr
       isSameDay(new Date(event.start_date), date) && !event.deleted_at && !isAllDayEvent(event)
     )
     const dayTasks = tasks.filter(task => 
-      task.due_date && isSameDay(new Date(task.due_date), date) && !task.deleted_at
+      getTaskStart(task) && isSameDay(new Date(getTaskStart(task)!), date) && !task.deleted_at
     )
     
-    return [
+    const items = [
       ...dayEvents.map(e => ({ ...e, type: 'event' as const })),
       ...dayTasks.map(t => ({ ...t, type: 'task' as const }))
     ]
+
+    if (items.length > 0) {
+      console.log(`[WeekView] Items for ${date.toISOString()}:`, items)
+    }
+
+    return items
   }
 
   return (
@@ -173,7 +179,7 @@ export function WeekView({ currentDate, events, tasks, onItemClick }: WeekViewPr
                   return (
                     <QuickCreateModal
                       key={hour}
-                      defaultType="event"
+                      defaultType="task"
                       defaultDate={slotDate}
                       trigger={
                         <button 
@@ -195,8 +201,12 @@ export function WeekView({ currentDate, events, tasks, onItemClick }: WeekViewPr
               )}
 
               {getGridItems(day).map((item) => {
-                const start = item.type === 'event' ? new Date(item.start_date) : new Date(item.due_date!)
-                const end = item.type === 'event' ? new Date(item.end_date) : new Date(new Date(item.due_date!).getTime() + 30 * 60000)
+                const start = item.type === 'event'
+                  ? new Date(item.start_date)
+                  : new Date(item.start_at || item.due_date!)
+                const end = item.type === 'event'
+                  ? new Date(item.end_date)
+                  : new Date(item.end_at || new Date(start.getTime() + 30 * 60000))
                 
                 const startMinutes = start.getHours() * 60 + start.getMinutes()
                 const durationMinutes = Math.max(30, (end.getTime() - start.getTime()) / 60000)
@@ -247,3 +257,4 @@ export function WeekView({ currentDate, events, tasks, onItemClick }: WeekViewPr
     </div>
   )
 }
+  const getTaskStart = (task: Task) => task.start_at || task.due_date

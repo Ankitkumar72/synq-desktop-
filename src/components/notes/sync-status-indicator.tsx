@@ -2,13 +2,14 @@
 
 import { useEffect, useState } from "react"
 import { RefreshCw } from "lucide-react"
-import { getOnlineStatus, onQueueDepthChange } from "@/lib/crdt/sync-manager"
+import { getOnlineStatus, getTotalQueueDepth, onQueueDepthChange } from "@/lib/crdt/sync-manager"
 
 export function SyncStatusIndicator() {
   const [isOnline, setIsOnline] = useState(() => getOnlineStatus())
   const [queueDepth, setQueueDepth] = useState(0)
 
   useEffect(() => {
+    void getTotalQueueDepth().then(setQueueDepth).catch(() => setQueueDepth(0))
 
     // Listen for online/offline events
     const handleStatusChange = () => setIsOnline(navigator.onLine)

@@ -37,8 +37,8 @@ export function ItemDetail({ item, open, onOpenChange, onEdit }: ItemDetailProps
   const isTask = item.type === 'task'
   const isEvent = item.type === 'event'
   
-  const startDate = isEvent ? new Date(item.start_date) : new Date(item.due_date!)
-  const endDate = isEvent ? new Date(item.end_date) : null
+  const startDate = isEvent ? new Date(item.start_date) : new Date(item.start_at || item.due_date!)
+  const endDate = isEvent ? new Date(item.end_date) : (isTask && item.end_at ? new Date(item.end_at) : null)
   const isCompleted = isTask && item.status === 'done'
   
   const project = isTask && item.project_id ? projects.find(p => p.id === item.project_id) : null

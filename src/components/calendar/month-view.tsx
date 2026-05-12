@@ -27,6 +27,7 @@ export function MonthView({
   onItemClick,
 }: MonthViewProps) {
   const grid = useMemo(() => generateCalendarGrid(currentMonth), [currentMonth])
+  const getTaskStart = (task: Task) => task.start_at || task.due_date
 
   const daysOfWeek = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"]
 
@@ -38,15 +39,21 @@ export function MonthView({
     )
     const dayTasks = tasks.filter(
       (task) =>
-        task.due_date &&
-        isSameDay(new Date(task.due_date), date) &&
+        getTaskStart(task) &&
+        isSameDay(new Date(getTaskStart(task)!), date) &&
         !task.deleted_at
     )
 
-    return [
+    const items = [
       ...dayEvents.map((e) => ({ ...e, type: "event" as const })),
       ...dayTasks.map((t) => ({ ...t, type: "task" as const })),
     ]
+
+    if (items.length > 0) {
+      console.log(`[MonthView] Items for ${date.toDateString()}:`, items)
+    }
+
+    return items
   }
 
   return (

@@ -15,7 +15,8 @@ import { Task, Project, Note, CalendarEvent } from '@/types'
 import { AuthChangeEvent, Session, RealtimePostgresChangesPayload, RealtimeChannel } from '@supabase/supabase-js'
 import { bindNoteBroadcastChannel, getNoteSyncClientId, NOTE_BROADCAST_EVENT, type NoteBroadcastPayload } from '@/lib/realtime/note-sync'
 import { initSyncManager, destroySyncManager } from '@/lib/crdt/sync-manager'
-import { destroyAllYDocs, applyRemoteUpdate } from '@/lib/crdt/crdt-doc'
+import { destroyAllYDocs, applyRemoteUpdate, applyRemoteUpdateIfLoaded, hasYDoc } from '@/lib/crdt/crdt-doc'
+import { getLocalLastSeq, getNoteCrdtUpdates, setLocalLastSeq, toUint8Update, type NoteCrdtUpdateRow } from '@/lib/crdt/oplog'
 
 // Realtime config
 const MAX_REALTIME_RETRIES = 5
@@ -48,6 +49,7 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
   // Single realtime channel (all tables multiplexed on one channel)
   const channelRef = useRef<RealtimeChannel | null>(null)
   const retryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const lastPollAtRef = useRef(0)
   const healthCheckTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -56,22 +58,20 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
   const lastSubscribeAttemptRef = useRef<number>(0)  // Timestamp of last subscribe attempt
   const subscriptionGenRef = useRef(0)               // Generation counter — ignores stale callbacks
   const currentUserIdRef = useRef<string | null>(null)
+  const oplogBufferRef = useRef<Map<string, NoteCrdtUpdateRow[]>>(new Map())
+  const oplogDrainTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
 
   // -------------------------------------------------------------------------
   // Fetch data from Supabase
   // -------------------------------------------------------------------------
 
   const fetchData = useCallback(async () => {
-    // Rely on individual stores' optimized fetchers (handling chunking natively)
-    // We run these in parallel, but they internally limit the payloads
     const promises = [
       useTaskStore.getState().fetchTasks(),
       useNotesStore.getState().fetchNotes(),
-      useEventStore.getState().fetchEvents()
+      useEventStore.getState().fetchEvents(),
+      useProjectStore.getState().fetchProjects()
     ]
-    
-    promises.push(useProjectStore.getState().fetchProjects())
-
     await Promise.allSettled(promises)
   }, [])
 
@@ -84,15 +84,16 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
    */
   const handleRemoteNotes = useCallback((payload: RealtimePostgresChangesPayload<Note>) => {
     const { eventType, new: newRecord, old: oldRecord } = payload
-    const store = useNotesStore.getState()
+    const notesStore = useNotesStore.getState()
+    if (newRecord && 'is_task' in newRecord && (newRecord as Note).is_task) return
     if (newRecord && 'hlc_timestamp' in newRecord) hlc.receive(newRecord.hlc_timestamp || '')
     
-    if (eventType === 'INSERT' && 'id' in newRecord) {
-      store.mergeNoteLocal(newRecord as Note)
-    } else if (eventType === 'UPDATE' && 'id' in newRecord) {
-      store.mergeNoteLocal(newRecord as Note)
+    const note = newRecord as Note
+    
+    if ((eventType === 'INSERT' || eventType === 'UPDATE') && note?.id) {
+      notesStore.mergeNoteLocal(note)
     } else if (eventType === 'DELETE' && oldRecord && 'id' in oldRecord) {
-      store.setNotes(store.notes.filter(n => n.id !== oldRecord.id))
+      notesStore.setNotes(notesStore.notes.filter(n => n.id !== oldRecord.id))
     }
   }, [])
 
@@ -127,7 +128,6 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
 
   /**
    * Tasks handler — uses per-field LWW-Register CRDT merge.
-   * Delegates to mergeTaskLocal which performs field-level conflict resolution.
    */
   const handleRemoteTasks = useCallback((payload: RealtimePostgresChangesPayload<Task>) => {
     const { eventType, new: newRecord, old: oldRecord } = payload
@@ -135,7 +135,6 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
     if (newRecord && 'hlc_timestamp' in newRecord && newRecord.hlc_timestamp) hlc.receive(newRecord.hlc_timestamp)
 
     if (eventType === 'INSERT' && newRecord && 'id' in newRecord) {
-      // Check if we already have this task (optimistic insert)
       const existing = store.tasks.find(t => t.id === newRecord.id)
       if (!existing) {
         store.mergeTaskLocal(newRecord as Task)
@@ -149,7 +148,6 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
 
   /**
    * Projects handler — uses per-field LWW-Register CRDT merge.
-   * Delegates to mergeProjectLocal for field-level conflict resolution.
    */
   const handleRemoteProjects = useCallback((payload: RealtimePostgresChangesPayload<Project>) => {
     const { eventType, new: newRecord, old: oldRecord } = payload
@@ -169,7 +167,6 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
 
   /**
    * Events handler — uses per-field LWW-Register CRDT merge.
-   * Delegates to mergeEventLocal for field-level conflict resolution.
    */
   const handleRemoteEvents = useCallback((payload: RealtimePostgresChangesPayload<CalendarEvent>) => {
     const { eventType, new: newRecord, old: oldRecord } = payload
@@ -187,12 +184,6 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
-  // -------------------------------------------------------------------------
-  // Subscribe to realtime — uses a SINGLE multiplexed channel
-  // All four tables (tasks, projects, notes, events) share one channel.
-  // This eliminates partial-failure states and reduces connection overhead.
-  // -------------------------------------------------------------------------
-
   /**
    * CRDT Documents handler — for binary Yjs state updates.
    */
@@ -200,7 +191,6 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
     const { eventType, new: newRecord } = payload
     
     if ((eventType === 'INSERT' || eventType === 'UPDATE') && newRecord && newRecord.entity_id) {
-      // Apply the binary update to the local Yjs doc
       if (newRecord.state && Array.isArray(newRecord.state)) {
         const binaryState = new Uint8Array(newRecord.state)
         applyRemoteUpdate(newRecord.entity_id, binaryState)
@@ -208,38 +198,107 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
-  const subscribeToRealtime = useCallback(async (attempt = 0) => {
-    // LOCK: Prevent concurrent subscription attempts.
-    // Retries (attempt > 0) bypass the lock since they're continuing the same sequence.
-    if (isSubscribingRef.current && attempt === 0) {
-      console.log('[Realtime] Subscription already in progress — skipping')
-      return
+  const drainBufferedOplogRows = useCallback(async (noteId: string) => {
+    const buffered = oplogBufferRef.current.get(noteId) || []
+    oplogBufferRef.current.delete(noteId)
+    if (!buffered.length || !hasYDoc(noteId)) return
+
+    const sorted = [...buffered].sort((a, b) => Number(a.seq || 0) - Number(b.seq || 0))
+    let cursor = getLocalLastSeq(noteId)
+    let sawGap = false
+
+    for (const row of sorted) {
+      const seq = Number(row.seq || 0)
+      if (seq <= cursor) continue
+      if (seq > cursor + 1) {
+        sawGap = true
+        break
+      }
+      const update = toUint8Update(row.update_data)
+      if (update && applyRemoteUpdateIfLoaded(noteId, update)) {
+        cursor = seq
+      }
     }
+
+    if (cursor > 0) {
+      setLocalLastSeq(noteId, cursor)
+    }
+
+    if (!sawGap) return
+
+    try {
+      const catchUp = await getNoteCrdtUpdates(noteId, cursor, 500)
+      const catchUpSorted = [...catchUp].sort((a, b) => Number(a.seq || 0) - Number(b.seq || 0))
+      for (const row of catchUpSorted) {
+        const seq = Number(row.seq || 0)
+        if (seq <= cursor) continue
+        const update = toUint8Update(row.update_data)
+        if (update && applyRemoteUpdateIfLoaded(noteId, update)) {
+          cursor = seq
+        }
+      }
+      if (cursor > 0) {
+        setLocalLastSeq(noteId, cursor)
+      }
+    } catch (err) {
+      console.warn('[Realtime] Failed to catch up missing CRDT ops:', err)
+    }
+  }, [])
+
+  const scheduleOplogDrain = useCallback((noteId: string) => {
+    if (oplogDrainTimersRef.current.has(noteId)) return
+    const timer = setTimeout(() => {
+      oplogDrainTimersRef.current.delete(noteId)
+      void drainBufferedOplogRows(noteId)
+    }, 40)
+    oplogDrainTimersRef.current.set(noteId, timer)
+  }, [drainBufferedOplogRows])
+
+  const handleRemoteCrdtNoteUpdate = useCallback((payload: RealtimePostgresChangesPayload<{
+    seq?: number
+    entity_id?: string
+    entity_type?: string
+    op_id?: string
+    client_id?: string
+    update_data?: number[]
+    created_at?: string
+  }>) => {
+    const { eventType, new: newRecord } = payload
+    if (eventType !== 'INSERT' || !newRecord?.entity_id) return
+    if (newRecord.entity_type && newRecord.entity_type !== 'note') return
+
+    const noteId = newRecord.entity_id
+    if (!hasYDoc(noteId)) return
+
+    const existing = oplogBufferRef.current.get(noteId) || []
+    existing.push({
+      seq: Number(newRecord.seq || 0),
+      entity_id: noteId,
+      op_id: String(newRecord.op_id || ''),
+      client_id: String(newRecord.client_id || ''),
+      update_data: Array.isArray(newRecord.update_data) ? newRecord.update_data : [],
+      created_at: String(newRecord.created_at || new Date().toISOString()),
+    })
+    oplogBufferRef.current.set(noteId, existing)
+    scheduleOplogDrain(noteId)
+  }, [scheduleOplogDrain])
+
+  const subscribeToRealtime = useCallback(async (attempt = 0) => {
+    if (isSubscribingRef.current && attempt === 0) return
     
     const userId = currentUserIdRef.current
-    if (!userId) {
-      console.warn('[Realtime] No user ID — skipping subscription')
-      return
-    }
+    if (!userId) return
 
     isSubscribingRef.current = true
     lastSubscribeAttemptRef.current = Date.now()
-
-    // Increment generation — any callbacks from older generations will be ignored.
-    // This is critical because removeChannel() synchronously triggers the
-    // subscribe callback with CLOSED status, which would otherwise schedule a
-    // spurious retry while we're still mid-subscribe.
     const currentGen = ++subscriptionGenRef.current
 
-    // Cancel any pending retry timer
     if (retryTimeoutRef.current) {
       clearTimeout(retryTimeoutRef.current)
       retryTimeoutRef.current = null
     }
 
-    // Tear down existing channel first
     if (channelRef.current) {
-      console.log('[Realtime] Removing existing channel...')
       try {
         supabase.removeChannel(channelRef.current)
       } catch (e) {
@@ -248,39 +307,21 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
       channelRef.current = null
       bindNoteBroadcastChannel(null)
       realtimeConnectedRef.current = false
-      // Brief pause so the server can process the leave before we rejoin
       await new Promise(resolve => setTimeout(resolve, 200))
     }
 
-      // A tiny warmup delay smooths out cold starts without adding notable latency.
-      if (attempt === 0 && INITIAL_SUBSCRIBE_DELAY_MS > 0) {
-        await new Promise(resolve => setTimeout(resolve, INITIAL_SUBSCRIBE_DELAY_MS))
-      }
+    if (attempt === 0 && INITIAL_SUBSCRIBE_DELAY_MS > 0) {
+      await new Promise(resolve => setTimeout(resolve, INITIAL_SUBSCRIBE_DELAY_MS))
+    }
 
-    // Verify session is still active
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) {
-      console.warn('[Realtime] No active session — skipping channel setup')
       isSubscribingRef.current = false
       return
     }
 
-    // CRITICAL: Explicitly sync the user's JWT to the Realtime WebSocket.
-    // getSession() returns the session but does NOT propagate the access token
-    // to the Realtime transport — that normally happens via onAuthStateChange.
-    // If we subscribe before onAuthStateChange fires, the Realtime client
-    // connects with the anon key, and the server can't evaluate RLS filters,
-    // causing CHANNEL_ERROR.
     await supabase.realtime.setAuth(session.access_token)
 
-    console.log(`[Realtime] Subscribing (attempt ${attempt}, user ${userId.slice(0, 8)}…)`)
-
-    // SINGLE channel with ALL table listeners multiplexed.
-    // This means one subscribe() call, one status, one connection.
-    // NOTE: We intentionally omit the `filter` option on postgres_changes.
-    // RLS policies (auth.uid() = user_id) already protect data access server-side.
-    // Filters are an optional optimization, but they can cause CHANNEL_ERROR if the
-    // Realtime server fails to evaluate them during the channel join handshake.
     const channel = supabase
       .channel(`synq:${userId}`)
       .on(
@@ -305,6 +346,11 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
       )
       .on(
         'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'crdt_note_updates' },
+        handleRemoteCrdtNoteUpdate as (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => void
+      )
+      .on(
+        'postgres_changes',
         { event: '*', schema: 'public', table: 'events' },
         handleRemoteEvents as (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => void
       )
@@ -319,61 +365,41 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
     channelRef.current = channel
 
     channel.subscribe((status, err) => {
-      // CRITICAL: Ignore callbacks from stale subscriptions.
-      // When removeChannel() is called, it synchronously fires the callback
-      // with CLOSED — without this guard, that would schedule a spurious retry.
-      if (subscriptionGenRef.current !== currentGen) {
-        console.log(`[Realtime] Ignoring stale ${status} callback (gen ${currentGen}, current ${subscriptionGenRef.current})`)
-        return
-      }
+      if (subscriptionGenRef.current !== currentGen) return
 
       if (status === 'SUBSCRIBED') {
-        console.log('[Realtime] ✓ Connected — all tables listening (CRDT merge active)')
+        console.log('[Realtime] ✓ Connected — all tables listening')
         realtimeConnectedRef.current = true
         isSubscribingRef.current = false
         bindNoteBroadcastChannel(channel)
-        // Re-fetch data to pick up anything missed during the connection gap
         fetchData().catch(e => console.error('[Realtime] Sync fetch failed:', e))
       } else if (
         status === 'TIMED_OUT' ||
         status === 'CHANNEL_ERROR' ||
         status === 'CLOSED'
       ) {
-        const errorMessage = describeRealtimeError(err)
-        console.warn(`[Realtime] Channel ${status}${errorMessage ? ` — ${errorMessage}` : ''}`)
         realtimeConnectedRef.current = false
         bindNoteBroadcastChannel(null)
 
         if (attempt < MAX_REALTIME_RETRIES) {
           const delay = RETRY_BASE_DELAY_MS * Math.pow(2, attempt)
-          console.warn(`[Realtime] Retry ${attempt + 1}/${MAX_REALTIME_RETRIES} in ${delay}ms`)
           retryTimeoutRef.current = setTimeout(() => {
             subscribeToRealtime(attempt + 1)
           }, delay)
         } else {
-          console.error('[Realtime] Max retries reached — using poll fallback only')
           isSubscribingRef.current = false
         }
       }
-      // Ignore transitional statuses (JOINING, CHANNEL_INITIALIZED, etc.)
     })
-  }, [fetchData, handleRemoteTasks, handleRemoteProjects, handleRemoteNotes, handleRemoteCRDT, handleRemoteNoteBroadcast, handleRemoteEvents])
-
-  // -------------------------------------------------------------------------
-  // Tear down realtime channel (synchronous — safe for React cleanup)
-  // -------------------------------------------------------------------------
+  }, [fetchData, handleRemoteTasks, handleRemoteProjects, handleRemoteNotes, handleRemoteCRDT, handleRemoteCrdtNoteUpdate, handleRemoteNoteBroadcast, handleRemoteEvents])
 
   const teardownRealtime = useCallback(() => {
-    // Increment generation so any in-flight callbacks from the old channel are ignored
     subscriptionGenRef.current++
-
     if (retryTimeoutRef.current) {
       clearTimeout(retryTimeoutRef.current)
       retryTimeoutRef.current = null
     }
-    
     if (channelRef.current) {
-      console.log('[Realtime] Tearing down channel...')
       try {
         supabase.removeChannel(channelRef.current)
       } catch (e) {
@@ -381,100 +407,57 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
       }
       channelRef.current = null
     }
-    
     bindNoteBroadcastChannel(null)
     realtimeConnectedRef.current = false
     isSubscribingRef.current = false
+    for (const timer of oplogDrainTimersRef.current.values()) {
+      clearTimeout(timer)
+    }
+    oplogDrainTimersRef.current.clear()
+    oplogBufferRef.current.clear()
   }, [])
-
-  // -------------------------------------------------------------------------
-  // Poll fallback — keeps data fresh when realtime is unreliable
-  // -------------------------------------------------------------------------
 
   const startPollFallback = useCallback(() => {
     if (pollTimerRef.current) clearInterval(pollTimerRef.current)
-
     pollTimerRef.current = setInterval(() => {
       const now = Date.now()
-
-      // When realtime is healthy, poll less frequently as a consistency safety net.
       if (realtimeConnectedRef.current) {
         if ((now - lastPollAtRef.current) < POLL_INTERVAL_REALTIME_UP) return
       }
-
-      console.log(`[Poll] Refreshing data (realtime=${realtimeConnectedRef.current ? 'up' : 'down'})`)
       lastPollAtRef.current = now
       fetchData().catch(err => console.error('[Poll] Error:', err))
     }, POLL_INTERVAL_REALTIME_DOWN)
   }, [fetchData])
 
-  // -------------------------------------------------------------------------
-  // Health check — detects silently dropped channels and resubscribes.
-  // Has a grace period to avoid fighting with an in-progress connection.
-  // -------------------------------------------------------------------------
-
   const startHealthCheck = useCallback(() => {
     if (healthCheckTimerRef.current) clearInterval(healthCheckTimerRef.current)
-
     healthCheckTimerRef.current = setInterval(() => {
-      if (!currentUserIdRef.current) return // not authenticated
-
-      // Don't interfere if we're already subscribing
-      if (isSubscribingRef.current) return
-
-      // Don't interfere if we recently started a subscribe attempt (grace period)
+      if (!currentUserIdRef.current || isSubscribingRef.current) return
       const timeSinceLastAttempt = Date.now() - lastSubscribeAttemptRef.current
       if (timeSinceLastAttempt < HEALTH_CHECK_GRACE_MS) return
-
-      if (!realtimeConnectedRef.current) {
-        console.warn('[HealthCheck] Realtime not connected — resubscribing')
-        subscribeToRealtime()
-      }
+      if (!realtimeConnectedRef.current) subscribeToRealtime()
     }, HEALTH_CHECK_INTERVAL)
   }, [subscribeToRealtime])
-
-  // -------------------------------------------------------------------------
-  // Main effect: auth + data + realtime + CRDT sync manager
-  // -------------------------------------------------------------------------
 
   useEffect(() => {
     let mounted = true
 
-    // Extract the init routine so both methods (manual & event) can run it safely
     const executeInit = async (session: Session | null) => {
       if (initStarted.current) return
       initStarted.current = true
 
       try {
         if (session) {
-          const t0 = performance.now()
           currentUserIdRef.current = session.user.id
           useUserStore.getState().setUser(session.user)
-
-          // *** Initialize the CRDT Sync Manager ***
           initSyncManager()
-
-          // *** SPEED FIX: Fire EVERYTHING in parallel ***
-          // Profile, device check, data fetch, and realtime all start at once.
-          // Only device registration can block the UI (if limit exceeded).
-          
-          // Fire data fetch in the background to not block the UI from rendering instantly using persisted local state.
           fetchData().catch(err => console.error('[DatabaseProvider] Initial fetch failed:', err))
 
           const [profileResult, deviceResult] = await Promise.allSettled([
             useProfileStore.getState().fetchProfile(),
-            registerDevice().catch(err => {
-              console.error('[DatabaseProvider] Device registration failed:', err)
-              return { allowed: true }
-            }),
+            registerDevice().catch(err => ({ allowed: true })),
           ])
 
-          // Log any profile failure (non-blocking)
-          if (profileResult.status === 'rejected') {
-            console.error('[DatabaseProvider] Profile fetch failed:', profileResult.reason)
-          }
-
-          // Check device limit — the only blocking gate
           const result = deviceResult.status === 'fulfilled' ? deviceResult.value : { allowed: true }
           if (result && !result.allowed) {
             setDeviceLimitExceeded(true)
@@ -485,16 +468,12 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
           setDeviceLimitExceeded(false)
           setDeviceInfo(null)
 
-          // Start realtime + background systems (only if still mounted)
           if (mounted) {
             subscribeToRealtime()
             startPollFallback()
             startHealthCheck()
           }
-
-          console.log(`[DatabaseProvider] Init complete in ${Math.round(performance.now() - t0)}ms (CRDT sync active)`)
         } else {
-          // Clear data if logged out
           currentUserIdRef.current = null
           useUserStore.getState().setUser(null)
           useTaskStore.getState().setTasks([])
@@ -503,31 +482,20 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
           useEventStore.getState().setEvents([])
           setDeviceLimitExceeded(false)
           setDeviceInfo(null)
-
-          // Clean up CRDT state on sign-out
           destroyAllYDocs()
           destroySyncManager()
-
-          // Tear down realtime on sign-out
           teardownRealtime()
         }
       } catch (err) {
         console.error('[DatabaseProvider] Error handling auth change:', err)
       } finally {
-        // Always ensure isInitialized is true after any session init attempt
         useUserStore.getState().setInitialized(true)
       }
     }
 
-    // Manual initial check (critical for standalone Electron/desktop runtimes)
     supabase.auth.getSession().then(async ({ data: { session }, error }) => {
       if (error) {
-        console.error('[DatabaseProvider] getSession error:', error)
-        if (
-          error.message.includes('refresh_token_not_found') ||
-          error.message.includes('Invalid Refresh Token') ||
-          (error as { code?: string }).code === 'refresh_token_not_found'
-        ) {
+        if (error.message.includes('refresh_token_not_found')) {
           await supabase.auth.signOut()
           window.location.href = '/login'
           return
@@ -536,26 +504,16 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
       if (mounted) executeInit(session)
     })
 
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event: AuthChangeEvent, session: Session | null) => {
-      console.log(`[DatabaseProvider] Auth change: ${_event}`)
-      
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (_event === 'TOKEN_REFRESHED' && !session) {
-        // Session is gone — clean up and redirect
         await supabase.auth.signOut()
         window.location.href = '/login'
         return
       }
-
       if ((_event === 'SIGNED_IN' || _event === 'SIGNED_OUT') && initStarted.current) {
-         initStarted.current = false // lift exact lock so it can re-init
+         initStarted.current = false
          if (mounted) executeInit(session)
-      } else if (_event === 'TOKEN_REFRESHED' && session) {
-        // Supabase Realtime auto-handles JWT refresh internally.
-        // Do NOT tear down and rebuild channels — that causes CLOSED errors.
-        console.log('[DatabaseProvider] Token refreshed — Realtime will auto-update')
       } else if (!initStarted.current) {
-         // Fallback just in case getSession hasn't run yet
          if (mounted) executeInit(session)
       }
     })
@@ -570,7 +528,6 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
     }
   }, [fetchData, subscribeToRealtime, teardownRealtime, startPollFallback, startHealthCheck])
 
-  // Block the entire app if device limit is exceeded
   if (deviceLimitExceeded && deviceInfo) {
     return (
       <DeviceLimitPage

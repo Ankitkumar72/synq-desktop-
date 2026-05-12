@@ -80,6 +80,19 @@ export function applyRemoteUpdate(noteId: string, update: Uint8Array): void {
 }
 
 /**
+ * Apply remote update only if a Y.Doc is already loaded in-memory.
+ * This avoids eagerly instantiating docs for background notes.
+ */
+export function applyRemoteUpdateIfLoaded(noteId: string, update: Uint8Array): boolean {
+  const existing = docCache.get(noteId)
+  if (!existing) return false
+  existing.transact(() => {
+    Y.applyUpdate(existing, update)
+  }, 'remote')
+  return true
+}
+
+/**
  * Get the full Yjs state as a binary snapshot.
  * Used for persisting to Supabase crdt_documents table.
  */

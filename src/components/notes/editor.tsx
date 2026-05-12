@@ -32,6 +32,7 @@ import {
   applyRemoteUpdate,
 } from '@/lib/crdt/crdt-doc'
 import { saveYDocToSupabase, loadYDocFromSupabase } from '@/lib/crdt/sync-manager'
+import { getLocalLastSeq, getNoteCrdtUpdates, setLocalLastSeq, toUint8Update } from '@/lib/crdt/oplog'
 import { useUserStore } from '@/lib/store/use-user-store'
 import type { NoteContent } from '@/types'
 import { getPlainTextFromStoredContent } from '@/lib/notes/note-content'
@@ -39,6 +40,7 @@ import { sendNoteBroadcast } from '@/lib/realtime/note-sync'
 import { hlc } from '@/lib/hlc'
 
 const SAVE_DEBOUNCE_MS = 800
+const SNAPSHOT_EVERY_N_SAVES = 20
 
 const MenuBar = ({ editor }: { editor: Editor | null }) => {
   if (!editor) return null
@@ -92,6 +94,8 @@ export function NoteEditor({
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const isSavingRef = useRef(false)
   const hasPendingLocalChangeRef = useRef(false)
+  const pendingUpdatesRef = useRef<Uint8Array[]>([])
+  const saveSinceSnapshotRef = useRef(0)
   const [isLoading, setIsLoading] = useState(true)
   const ydoc = useMemo(() => getOrCreateYDoc(id), [id])
 
@@ -104,9 +108,11 @@ export function NoteEditor({
   const persistNow = useCallback(async (broadcast: boolean) => {
     const userId = useUserStore.getState().user?.id
     if (!userId || isSavingRef.current) return
+    if (pendingUpdatesRef.current.length === 0 && !hasPendingLocalChangeRef.current) return
 
     isSavingRef.current = true
-    hasPendingLocalChangeRef.current = false
+    const pendingBatch = pendingUpdatesRef.current
+    pendingUpdatesRef.current = []
     const now = new Date().toISOString()
     const body = getPlainTextFromYDoc(id)
     const excerpt = getExcerptFromYDoc(id)
@@ -116,8 +122,20 @@ export function NoteEditor({
     onChange?.({ content: null, body, excerpt })
 
     try {
-      await saveYDocToSupabase(id, userId)
+      const updateData = pendingBatch.length === 1
+        ? pendingBatch[0]
+        : Y.mergeUpdates(pendingBatch)
+      const includeSnapshot = (saveSinceSnapshotRef.current % SNAPSHOT_EVERY_N_SAVES) === 0
+      const snapshot = includeSnapshot ? Y.encodeStateAsUpdate(ydoc) : null
+      await saveYDocToSupabase(id, userId, {
+        updateData,
+        snapshot,
+      })
+      saveSinceSnapshotRef.current += 1
+      hasPendingLocalChangeRef.current = false
     } catch (err) {
+      pendingUpdatesRef.current = pendingBatch.concat(pendingUpdatesRef.current)
+      hasPendingLocalChangeRef.current = true
       console.error('[NoteEditor] Failed to persist note state:', err)
       return
     } finally {
@@ -144,7 +162,7 @@ export function NoteEditor({
       updated_at: now,
       field_versions: mergedVersions,
     })
-  }, [id, onChange, updateNoteLocal])
+  }, [id, onChange, updateNoteLocal, ydoc])
 
   // Initialize the Yjs doc — if it's empty and we have TipTap content, seed it
   useEffect(() => {
@@ -187,9 +205,34 @@ export function NoteEditor({
 
         if (!mounted) return
 
+        // 2.5 Replay missing incremental ops after local cursor.
+        try {
+          let cursor = getLocalLastSeq(id)
+          const pageSize = 500
+          for (let page = 0; page < 20; page++) {
+            const ops = await withTimeout(getNoteCrdtUpdates(id, cursor, pageSize), 5000, 'getNoteCrdtUpdates timeout')
+            if (!ops.length) break
+            for (const row of ops) {
+              const update = toUint8Update(row.update_data)
+              if (update) {
+                applyRemoteUpdate(id, update)
+              }
+              cursor = Math.max(cursor, Number(row.seq || 0))
+            }
+            if (cursor > 0) {
+              setLocalLastSeq(id, cursor)
+            }
+            if (ops.length < pageSize) break
+          }
+        } catch (err) {
+          console.warn('[NoteEditor] Failed to replay oplog catch-up:', err)
+        }
+
+        if (!mounted) return
+
         // 3. If STILL empty and we have legacy content, seed it (migration)
         if (fragment.length === 0 && contentRef.current && mounted) {
-          const plainText = typeof contentRef.current === 'string' ? contentRef.current : getPlainTextFromStoredContent(contentRef.current)
+          const plainText = getPlainTextFromStoredContent(contentRef.current)
           if (plainText.trim()) {
             doc.transact(() => {
               const paragraphs = plainText.split('\n')
@@ -231,6 +274,7 @@ export function NoteEditor({
       // If the update came from a 'remote' transaction (via applyRemoteUpdate),
       // we skip scheduling a save to prevent a loop.
       if (origin !== 'remote') {
+        pendingUpdatesRef.current.push(new Uint8Array(update))
         hasPendingLocalChangeRef.current = true
         debouncedSave()
       }

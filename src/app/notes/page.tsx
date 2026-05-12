@@ -121,7 +121,7 @@ function NotesPageContent() {
 
   const filteredNotes = useMemo(() => {
     return notes
-      .filter(note => !note.deleted_at)
+      .filter(note => !note.deleted_at && !note.is_task)
       .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
   }, [notes])
 

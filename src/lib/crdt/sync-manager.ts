@@ -10,7 +10,13 @@
 
 import { supabase } from '@/lib/supabase.client'
 import { hlc } from '@/lib/hlc'
-import { applyNoteCrdtUpdate } from './oplog'
+import {
+  applyNoteCrdtUpdate,
+  enqueueQueuedNoteCrdtUpdate,
+  flushQueuedNoteCrdtUpdates,
+  getQueuedNoteCrdtDepth,
+  setLocalLastSeq,
+} from './oplog'
 import {
   flushQueue,
   getQueueDepth,
@@ -97,17 +103,27 @@ function scheduleFlush(delayMs: number = 1000): void {
 async function performFlush(): Promise<void> {
   if (!isOnline) return
 
-  const depth = await getQueueDepth()
-  if (depth === 0) return
+  const [crudDepth, crdtDepth] = await Promise.all([
+    getQueueDepth(),
+    getQueuedNoteCrdtDepth(),
+  ])
+  if (crudDepth + crdtDepth === 0) return
 
-  const result = await flushQueue(executeOperation)
+  const [crudResult, crdtResult] = await Promise.all([
+    flushQueue(executeOperation),
+    flushQueuedNoteCrdtUpdates(),
+  ])
 
   // Notify listeners of new queue depth
-  const newDepth = await getQueueDepth()
+  const [newCrudDepth, newCrdtDepth] = await Promise.all([
+    getQueueDepth(),
+    getQueuedNoteCrdtDepth(),
+  ])
+  const newDepth = newCrudDepth + newCrdtDepth
   notifyQueueListeners(newDepth)
 
   // If there were failures, schedule a retry with backoff
-  if (result.failed > 0) {
+  if ((crudResult.failed + crdtResult.failed) > 0) {
     scheduleFlush(RETRY_BACKOFF_MS)
   }
 }
@@ -153,33 +169,92 @@ async function executeOperation(op: QueuedOperation): Promise<void> {
  * Save a Yjs document state to Supabase.
  * Also updates body/excerpt for Flutter compatibility.
  */
-export async function saveYDocToSupabase(noteId: string, userId: string): Promise<void> {
-  if (!isOnline) return
+function createOpId(): string {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID()
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
+}
 
+function isRpcUnavailableError(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false
+  const maybe = err as { code?: string; message?: string; details?: string }
+  const message = `${maybe.message || ''} ${maybe.details || ''}`.toLowerCase()
+  return maybe.code === '42883' || message.includes('function') && message.includes('does not exist')
+}
+
+interface SaveYDocOptions {
+  updateData?: Uint8Array
+  opId?: string
+  snapshot?: Uint8Array | null
+}
+
+export async function saveYDocToSupabase(noteId: string, userId: string, options: SaveYDocOptions = {}): Promise<void> {
   const state = getDocState(noteId)
+  const updateData = options.updateData && options.updateData.length > 0 ? options.updateData : state
   const body = getPlainTextFromYDoc(noteId)
   const excerpt = getExcerptFromYDoc(noteId)
   const timestamp = hlc.increment()
   const updatedAt = new Date().toISOString()
+  const opId = options.opId || createOpId()
+  const clientId = hlc.getNodeId()
+  const snapshot = options.snapshot === undefined ? null : options.snapshot
 
   // Mark as locally modified to prevent echo from Realtime
   markLocallyModified(noteId)
 
-  // Preferred: atomic RPC (op-log append + metadata + optional snapshot)
-  try {
-    await applyNoteCrdtUpdate({
+  if (!isOnline) {
+    await enqueueQueuedNoteCrdtUpdate({
       noteId,
       userId,
-      clientId: hlc.getNodeId(),
-      opId: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
-      updateData: state,
-      snapshot: state,
+      clientId,
+      opId,
+      updateData,
+      body,
+      excerpt,
+      snapshot: snapshot ?? undefined,
+      updatedAt,
+    })
+    return
+  }
+
+  // Preferred: atomic RPC (op-log append + metadata + optional snapshot)
+  try {
+    const result = await applyNoteCrdtUpdate({
+      noteId,
+      userId,
+      clientId,
+      opId,
+      updateData,
+      snapshot: snapshot ?? undefined,
       body,
       excerpt,
       updatedAt,
     })
+    if (result.seq > 0) {
+      setLocalLastSeq(noteId, result.seq)
+    }
     return
   } catch (rpcError) {
+    if (!isRpcUnavailableError(rpcError)) {
+      try {
+        await enqueueQueuedNoteCrdtUpdate({
+          noteId,
+          userId,
+          clientId,
+          opId,
+          updateData,
+          body,
+          excerpt,
+          snapshot: snapshot ?? undefined,
+          updatedAt,
+        })
+        triggerFlush()
+        return
+      } catch (queueErr) {
+        console.error('[SyncManager] Failed to enqueue CRDT op after RPC error:', queueErr)
+        throw rpcError
+      }
+    }
+
     // Backward compatibility: if migration/RPC is not present yet, fall back.
     console.warn('[SyncManager] Atomic RPC unavailable, falling back to legacy save path:', rpcError)
   }
@@ -267,4 +342,12 @@ function notifyQueueListeners(depth: number): void {
  */
 export function getOnlineStatus(): boolean {
   return isOnline
+}
+
+export async function getTotalQueueDepth(): Promise<number> {
+  const [crudDepth, crdtDepth] = await Promise.all([
+    getQueueDepth(),
+    getQueuedNoteCrdtDepth(),
+  ])
+  return crudDepth + crdtDepth
 }

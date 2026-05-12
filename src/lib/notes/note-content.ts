@@ -29,6 +29,10 @@ export function cloneNoteContent<T extends NoteContent>(content: T): T {
 
 export function getEditorContentValue(content: NoteContent): JSONContent | string {
   if (content == null) return createEmptyNoteContent()
+  if (typeof content === 'string') {
+    const parsed = parseStructuredContentFromString(content)
+    if (parsed) return parsed
+  }
   return cloneNoteContent(content)
 }
 
@@ -63,10 +67,37 @@ export function createNoteContentFromText(text: string | null | undefined): JSON
 }
 
 export function getPlainTextFromStoredContent(content: NoteContent): string {
-  if (typeof content === 'string') return content
+  if (typeof content === 'string') {
+    const parsed = parseStructuredContentFromString(content)
+    if (parsed) return extractTextFromNode(parsed)
+    return content
+  }
   if (!isStructuredNoteContent(content)) return ''
 
   return extractTextFromNode(content)
+}
+
+function parseStructuredContentFromString(value: string): JSONContent | null {
+  const trimmed = value.trim()
+  if (!trimmed) return null
+
+  const tryParse = (input: string): unknown => {
+    try {
+      return JSON.parse(input)
+    } catch {
+      return null
+    }
+  }
+
+  const first = tryParse(trimmed)
+  if (!first) return null
+
+  if (isStructuredNoteContent(first)) return first
+  if (typeof first === 'string') {
+    const second = tryParse(first)
+    if (isStructuredNoteContent(second)) return second
+  }
+  return null
 }
 
 function extractTextFromNode(node: JSONContent): string {

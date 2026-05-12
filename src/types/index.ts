@@ -18,6 +18,8 @@ export interface Task {
   status: Status
   priority: Priority
   due_date?: string
+  start_at?: string | null
+  end_at?: string | null
   project_id?: string
   assignee_id?: string
   hlc_timestamp?: string
@@ -80,6 +82,9 @@ export interface Note {
   field_versions?: Record<string, string>
   deleted_hlc?: string | null
   is_deleted: boolean
+  is_task?: boolean
+  scheduled_time?: string | null
+  end_time?: string | null
   pinned: boolean
   date?: string
   updated_at: string

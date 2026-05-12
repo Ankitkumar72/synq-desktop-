@@ -56,7 +56,7 @@ export function QuickCreateModal({
   )
   const [dueDate, setDueDate] = useState<Date>(
     editItem?.type === 'task' 
-      ? (editItem.due_date ? new Date(editItem.due_date) : defaultDate)
+      ? (editItem.start_at ? new Date(editItem.start_at) : (editItem.due_date ? new Date(editItem.due_date) : defaultDate))
       : (editItem?.type === 'event' ? new Date(editItem.start_date) : defaultDate)
   )
   const [recurrence, setRecurrence] = useState(
@@ -83,7 +83,7 @@ export function QuickCreateModal({
     
     if (editItem?.type === 'task') {
       setPriority(editItem.priority ? editItem.priority.charAt(0).toUpperCase() + editItem.priority.slice(1) : "Medium")
-      setDueDate(editItem.due_date ? new Date(editItem.due_date) : defaultDate)
+      setDueDate(editItem.start_at ? new Date(editItem.start_at) : (editItem.due_date ? new Date(editItem.due_date) : defaultDate))
       setRecurrence(editItem.recurrence_rule || "Does not repeat")
       setSelectedProjectId(editItem.project_id || undefined)
     } else if (editItem?.type === 'event') {
@@ -106,12 +106,16 @@ export function QuickCreateModal({
 
     if (editItem) {
       if (editItem.type === 'task') {
+        const taskStart = dueDate.toISOString()
+        const taskEnd = new Date(dueDate.getTime() + 3600000).toISOString()
         updateTask(editItem.id, {
           title,
           description,
           priority: priority.toLowerCase() as "low" | "medium" | "high",
           project_id: selectedProjectId,
-          due_date: dueDate.toISOString(),
+          due_date: taskStart.split('T')[0],
+          start_at: taskStart,
+          end_at: taskEnd,
           recurrence_rule: recurrence === "Does not repeat" ? undefined : recurrence
         })
       } else if (editItem.type === 'event') {
@@ -124,13 +128,17 @@ export function QuickCreateModal({
       }
     } else {
       if (type === 'task') {
+        const taskStart = dueDate.toISOString()
+        const taskEnd = new Date(dueDate.getTime() + 3600000).toISOString()
         addTask({
           title,
           description,
           status: 'todo',
           priority: priority.toLowerCase() as "low" | "medium" | "high",
           project_id: selectedProjectId,
-          due_date: dueDate.toISOString(),
+          due_date: taskStart.split('T')[0],
+          start_at: taskStart,
+          end_at: taskEnd,
           assignee_id: undefined,
           recurrence_rule: recurrence === "Does not repeat" ? undefined : recurrence
         })

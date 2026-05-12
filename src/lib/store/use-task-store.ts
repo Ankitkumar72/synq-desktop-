@@ -76,10 +76,13 @@ export const useTaskStore = create<TaskState>()(
             })
             set({ error: error.message, isLoading: false })
           } else {
+            console.group('[Sync Debug] Fetched Tasks')
+            console.log('Count:', data?.length || 0)
+            console.log('Data:', data)
+            console.groupEnd()
+
             // Merge each fetched task using CRDT merge to preserve local state
             const currentTasks = get().tasks
-            // If includeDeleted is true, we have the absolute state. 
-            // If false, we have the absolute state of active tasks.
             const merged = mergeTaskList(currentTasks, data || [], true, includeDeleted)
             set({ tasks: merged, isLoading: false })
           }
@@ -105,16 +108,24 @@ export const useTaskStore = create<TaskState>()(
           return console.warn('No authenticated user')
         }
 
-        // Format due_date to YYYY-MM-DD for Postgres date column if it's a full ISO string
+        // Keep date-only due_date for compatibility, but preserve precise time in start_at/end_at.
         let formattedDate = t.due_date
+        let startAt = t.start_at
+        let endAt = t.end_at
+        if (!startAt && formattedDate && formattedDate.includes('T')) {
+          startAt = formattedDate
+        }
         if (formattedDate && formattedDate.includes('T')) {
           formattedDate = formattedDate.split('T')[0]
+        }
+        if (!endAt && startAt) {
+          endAt = new Date(new Date(startAt).getTime() + 30 * 60000).toISOString()
         }
 
         const timestamp = hlc.increment()
         const now = new Date().toISOString()
         const newFieldVersions: Record<string, string> = {}
-        const defaultFields = ['title', 'description', 'status', 'priority', 'due_date', 'project_id', 'assignee_id', 'order', 'recurrence_rule', 'parent_recurring_id', 'updated_at', 'created_at']
+        const defaultFields = ['title', 'description', 'status', 'priority', 'due_date', 'start_at', 'end_at', 'project_id', 'assignee_id', 'order', 'recurrence_rule', 'parent_recurring_id', 'updated_at', 'created_at']
         
         defaultFields.forEach(key => {
           newFieldVersions[key] = timestamp
@@ -125,11 +136,17 @@ export const useTaskStore = create<TaskState>()(
           ...t, 
           id: taskId,
           due_date: formattedDate,
+          start_at: startAt,
+          end_at: endAt,
           user_id: userId,
           hlc_timestamp: timestamp,
           field_versions: newFieldVersions,
           updated_at: now
         }
+
+        console.group('[Sync Debug] Adding Task')
+        console.log('Payload:', taskPayload)
+        console.groupEnd()
 
         // Optimistic insert (local-first). Keep user_id unset so comprehensive fetches don't drop unsynced rows.
         const optimisticTask: Task = {
@@ -193,8 +210,17 @@ export const useTaskStore = create<TaskState>()(
         const existingVersions = currentTask?.field_versions || {}
         const newVersions = stampFields(existingVersions, updatedKeys, timestamp)
         
+        const normalizedUpdates = { ...updates }
+        if (normalizedUpdates.due_date && normalizedUpdates.due_date.includes('T')) {
+          normalizedUpdates.start_at = normalizedUpdates.start_at || normalizedUpdates.due_date
+          normalizedUpdates.due_date = normalizedUpdates.due_date.split('T')[0]
+        }
+        if (normalizedUpdates.start_at && !normalizedUpdates.end_at) {
+          normalizedUpdates.end_at = new Date(new Date(normalizedUpdates.start_at).getTime() + 30 * 60000).toISOString()
+        }
+
         const payload = {
-          ...updates,
+          ...normalizedUpdates,
           hlc_timestamp: timestamp,
           field_versions: newVersions,
           updated_at: now,
@@ -415,6 +441,9 @@ export const useTaskStore = create<TaskState>()(
 
           const newTasks = [...state.tasks]
           newTasks[localIdx] = merged
+
+          console.log('[Sync Debug] Merged Task Local:', merged.id)
+
           return { tasks: newTasks }
         })
       },

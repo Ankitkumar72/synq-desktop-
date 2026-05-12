@@ -25,10 +25,14 @@ interface DayViewProps {
 
 export function DayView({ currentDate, events, tasks, onItemClick }: DayViewProps) {
   const HOUR_HEIGHT = 80
+  const getTaskStart = (task: Task) => task.start_at || task.due_date
 
   const items = useMemo(() => {
     const dayEvents = events.filter(event => isSameDay(new Date(event.start_date), currentDate) && !event.deleted_at)
-    const dayTasks = tasks.filter(task => task.due_date && isSameDay(new Date(task.due_date), currentDate) && !task.deleted_at)
+    const dayTasks = tasks.filter(task => {
+      const start = getTaskStart(task)
+      return start && isSameDay(new Date(start), currentDate) && !task.deleted_at
+    })
     
     return [
       ...dayEvents.map(e => ({ ...e, type: 'event' as const })),
@@ -69,7 +73,7 @@ export function DayView({ currentDate, events, tasks, onItemClick }: DayViewProp
               return (
                 <QuickCreateModal
                   key={hour}
-                  defaultType="event"
+                  defaultType="task"
                   defaultDate={slotDate}
                   trigger={
                     <button 
@@ -84,8 +88,12 @@ export function DayView({ currentDate, events, tasks, onItemClick }: DayViewProp
           </div>
 
           {items.map((item) => {
-            const start = item.type === 'event' ? new Date(item.start_date) : new Date(item.due_date!)
-            const end = item.type === 'event' ? new Date(item.end_date) : new Date(new Date(item.due_date!).getTime() + 30 * 60000)
+            const start = item.type === 'event'
+              ? new Date(item.start_date)
+              : new Date(item.start_at || item.due_date!)
+            const end = item.type === 'event'
+              ? new Date(item.end_date)
+              : new Date(item.end_at || new Date(start.getTime() + 30 * 60000))
             
             const startMinutes = start.getHours() * 60 + start.getMinutes()
             const durationMinutes = Math.max(30, (end.getTime() - start.getTime()) / 60000)

@@ -17,19 +17,25 @@ import {
   initYDocFromPlainText,
   destroyYDoc,
 } from '@/lib/crdt/crdt-doc'
+import { getPlainTextFromStoredContent } from '@/lib/notes/note-content'
 
 export function sanitizeNote(note: Partial<Note>): Note {
+  const normalizedBody = typeof note.body === 'string'
+    ? getPlainTextFromStoredContent(note.body)
+    : (note.body ?? null)
+
   return {
     ...note,
     title: note.title ?? '',
     content: note.content || null,
-    body: note.body || null,
+    body: normalizedBody,
     excerpt: note.excerpt || null,
     tags: Array.isArray(note.tags) ? note.tags : [],
     category: note.category ?? 'personal',
     priority: note.priority ?? 'none',
     hlc_timestamp: note.hlc_timestamp || hlc.now(),
     is_deleted: note.is_deleted ?? false,
+    is_task: note.is_task ?? false,
     pinned: note.pinned ?? false,
     updated_at: note.updated_at ?? new Date().toISOString(),
     created_at: note.created_at ?? new Date().toISOString(),
@@ -275,7 +281,7 @@ export const useNotesStore = create<NotesState>()(
             // Initialize Yjs doc from the body if it has text content
             if (remoteNote.body) {
               // We don't await this as it's a background initialization
-              initYDocFromPlainText(remoteNote.id, remoteNote.body)
+              initYDocFromPlainText(remoteNote.id, getPlainTextFromStoredContent(remoteNote.body))
             }
             return { notes: [sanitizeNote(remoteNote), ...state.notes] }
           }
@@ -305,7 +311,7 @@ export const useNotesStore = create<NotesState>()(
                   const remoteNodeId = HLC.extractNodeId(remoteNote.hlc_timestamp)
                   if (!remoteNodeId.startsWith('web')) {
                     // Mobile edit detected — update Yjs doc
-                    applyMobileBodyUpdate(remoteNote.id, value as string)
+                    applyMobileBodyUpdate(remoteNote.id, getPlainTextFromStoredContent(value as string))
                   }
                 }
               }
@@ -475,7 +481,10 @@ export const useNotesStore = create<NotesState>()(
           set({ isLoading: true });
           
           // Fetch all notes in one query (up to 500)
-          let query = supabase.from(TABLES.NOTES).select('*').eq(COLUMNS.USER_ID, userId);
+          let query = supabase
+            .from(includeDeleted ? TABLES.WEB_NOTES : TABLES.WEB_NOTES_ACTIVE)
+            .select('*')
+            .eq(COLUMNS.USER_ID, userId);
           if (!includeDeleted) {
             query = query.eq(COLUMNS.IS_DELETED, false);
           }

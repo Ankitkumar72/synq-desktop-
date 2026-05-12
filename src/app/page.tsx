@@ -151,7 +151,8 @@ export default function DashboardPage() {
       .filter(n => {
         const isDeleted = !!n.deleted_at || n.is_deleted
         const isScratch = n.category === 'scratchpad' || n.title?.toLowerCase() === 'scratch pad'
-        return !isDeleted && !isScratch
+        const isTaskLike = !!n.is_task
+        return !isDeleted && !isScratch && !isTaskLike
       })
       .slice(0, 15)
     const filteredEvents = events.filter(e => !e.is_deleted && isSameDay(parseISO(e.start_date), today))

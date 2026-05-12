@@ -12,6 +12,8 @@ export const TABLES = {
   PROFILES: 'profiles',
   ACTIVITIES: 'activities',
   NOTE_CONTENT_WEB: 'note_content_web',
+  WEB_NOTES: 'web_notes',
+  WEB_NOTES_ACTIVE: 'web_notes_active',
 } as const;
 
 export const COLUMNS = {
