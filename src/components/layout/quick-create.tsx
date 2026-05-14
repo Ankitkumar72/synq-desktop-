@@ -35,7 +35,7 @@ export function QuickCreateModal({
   open: controlledOpen,
   onOpenChange: setControlledOpen
 }: { 
-  trigger?: React.ReactElement, 
+  trigger?: React.ReactElement | null, 
   defaultType?: 'task' | 'project' | 'note' | 'event',
   defaultDate?: Date,
   editItem?: (Task & { type: 'task' }) | (CalendarEvent & { type: 'event' }) | null,
@@ -79,6 +79,7 @@ export function QuickCreateModal({
     
     setType(editItem?.type || defaultType)
     setTitle(editItem?.title || "")
+    // Description should reset only if it's a new item or a different item
     setDescription(editItem?.description || "")
     
     if (editItem?.type === 'task') {
@@ -201,10 +202,12 @@ export function QuickCreateModal({
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger
-        render={trigger || defaultTrigger}
-        nativeButton={true}
-      />
+      {trigger !== null && (
+        <DialogTrigger
+          render={trigger || defaultTrigger}
+          nativeButton={true}
+        />
+      )}
       
       <AnimatePresence>
         {open && (

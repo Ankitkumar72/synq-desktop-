@@ -32,7 +32,7 @@ const NAV_ITEMS = [
 export function LinearSidebar() {
   const pathname = usePathname()
   const { user } = useUserStore()
-  const { openSettings } = useUIStore()
+  const { openSettings, openSearch } = useUIStore()
   const name = getUserDisplayName(user)
   const initials = getUserInitials(user)
 
@@ -55,11 +55,13 @@ export function LinearSidebar() {
       </div>
 
       {/* Search */}
-      <div className="flex items-center justify-between bg-[#1F1F1F] border border-[#2E2E2E] rounded-lg px-3 py-1.5 mb-4 text-[#999999] cursor-pointer hover:bg-white/[0.02] transition-colors">
+      <div 
+        onClick={openSearch}
+        className="flex items-center justify-between bg-[#1F1F1F] border border-[#2E2E2E] rounded-lg px-3 py-1.5 mb-4 text-[#999999] cursor-pointer hover:bg-white/[0.02] transition-colors"
+      >
         <div className="flex items-center gap-2 text-[13px]">
           <Search className="w-4 h-4" /> Quick Search
         </div>
-        <div className="border border-[#444444] rounded px-1.5 text-[10px] font-mono">⌘F</div>
       </div>
 
       {/* Navigation */}

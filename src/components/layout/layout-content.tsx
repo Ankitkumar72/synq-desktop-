@@ -5,12 +5,27 @@ import { useUserStore } from "@/lib/store/use-user-store";
 import { usePathname } from "next/navigation";
 import { useState, useEffect } from "react";
 import { SettingsModal } from "@/components/layout/settings-modal";
+import { SearchCommand } from "@/components/layout/search-command";
+import { useUIStore } from "@/lib/store/use-ui-store";
+import { QuickCreateModal } from "@/components/layout/quick-create";
 
 export function LayoutContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { isInitialized, setInitialized } = useUserStore();
   const [showTimeoutMessage, setShowTimeoutMessage] = useState(false);
+  const { openSearch, isCreateOpen, setCreateOpen, createType } = useUIStore();
   const isAuthPage = pathname === "/login" || pathname === "/signup";
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'f')) {
+        e.preventDefault();
+        openSearch();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [openSearch]);
 
   useEffect(() => {
     if (!isInitialized) {
@@ -56,6 +71,13 @@ export function LayoutContent({ children }: { children: React.ReactNode }) {
         </main>
       </div>
       <SettingsModal />
+      <SearchCommand />
+      <QuickCreateModal 
+        open={isCreateOpen} 
+        onOpenChange={setCreateOpen}
+        defaultType={createType}
+        trigger={null}
+      />
     </div>
   )
 }
