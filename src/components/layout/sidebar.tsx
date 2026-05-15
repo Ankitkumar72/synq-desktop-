@@ -1,7 +1,6 @@
 "use client"
 
 import {
-  Plus,
   Settings,
   LayoutDashboard,
   Calendar,
@@ -19,7 +18,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useUserStore } from "@/lib/store/use-user-store"
 import { useUIStore } from "@/lib/store/use-ui-store"
-import { QuickCreateModal } from "./quick-create"
+
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { getUserDisplayName, getUserInitials } from "@/lib/user-utils"
 
@@ -104,12 +103,7 @@ export function LinearSidebar() {
             <span className="text-[13px] font-medium">Trash</span>
           </div>
         </Link>
-        <QuickCreateModal trigger={
-          <button className="w-full flex items-center gap-3 px-4 py-2 text-[#999999] hover:bg-[#1F1F1F] hover:text-white rounded-lg transition-colors text-[13px] font-medium">
-            <Plus className="w-4 h-4" />
-            <span>New Page</span>
-          </button>
-        } />
+
         <button
           onClick={openSettings}
           className="w-full flex items-center gap-3 px-4 py-2 text-[#999999] hover:bg-[#1F1F1F] hover:text-white rounded-lg transition-colors text-[13px] font-medium"
