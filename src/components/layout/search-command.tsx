@@ -12,10 +12,49 @@ import { useTaskStore } from "@/lib/store/use-task-store"
 import { useNotesStore } from "@/lib/store/use-notes-store"
 import { useEventStore } from "@/lib/store/use-event-store"
 import { useFolderStore } from "@/lib/store/use-folder-store"
+import { useUserStore } from "@/lib/store/use-user-store"
 import { useRouter } from "next/navigation"
 import { Calendar as CalendarIcon } from "lucide-react"
+import { format } from "date-fns"
 
 type FilterType = "all" | "tasks" | "docs" | "events" | "folders" | "people" | "commands"
+
+// Utility to strip markdown and basic HTML
+function stripFormatting(text: string): string {
+  if (!text) return ""
+  return text
+    .replace(/<[^>]*>?/gm, "") // Strip HTML
+    .replace(/[#*`_~]/g, "") // Strip basic markdown
+    .trim()
+}
+
+// Extract a snippet around the first matched token
+function getSnippet(text: string, tokens: string[]): string {
+  if (!text || tokens.length === 0) return ""
+  const cleanText = stripFormatting(text)
+  const lowerText = cleanText.toLowerCase()
+  
+  let firstMatchIdx = -1
+  for (const token of tokens) {
+    const idx = lowerText.indexOf(token)
+    if (idx !== -1 && (firstMatchIdx === -1 || idx < firstMatchIdx)) {
+      firstMatchIdx = idx
+    }
+  }
+
+  if (firstMatchIdx === -1) {
+    return cleanText.substring(0, 100) + (cleanText.length > 100 ? "..." : "")
+  }
+
+  const start = Math.max(0, firstMatchIdx - 40)
+  const end = Math.min(cleanText.length, firstMatchIdx + 80)
+  
+  let snippet = cleanText.substring(start, end)
+  if (start > 0) snippet = "..." + snippet
+  if (end < cleanText.length) snippet = snippet + "..."
+  return snippet
+}
+
 
 export function SearchCommand() {
   const { isSearchOpen, closeSearch, recentSearches, addRecentSearch } = useUIStore()
@@ -28,6 +67,9 @@ export function SearchCommand() {
   const notes = useNotesStore((state) => state.notes)
   const events = useEventStore((state) => state.events)
   const folders = useFolderStore((state) => state.folders)
+  const user = useUserStore((state) => state.user)
+  
+  const authorName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || "Unknown User"
 
   // Derived search results
   const filteredResults = React.useMemo<{
@@ -35,6 +77,7 @@ export function SearchCommand() {
     results?: SearchResult[]
   }>(() => {
     const q = query.toLowerCase()
+    const tokens = q.split(/\s+/).filter(Boolean)
     const results: SearchResult[] = []
 
     if (!q) {
@@ -52,42 +95,80 @@ export function SearchCommand() {
       }
     }
 
+    // Helper to format date
+    const formatDate = (dateStr?: string) => {
+      if (!dateStr) return ""
+      try {
+        return format(new Date(dateStr), "MMM d, yyyy")
+      } catch {
+        return ""
+      }
+    }
+
     // Filter logic
     if (activeFilter === "all" || activeFilter === "tasks") {
       (tasks || []).filter(t =>
-        ((t.title && t.title.toLowerCase().includes(q)) ||
-          (t.description && t.description.toLowerCase().includes(q))) &&
+        (tokens.every(token => 
+          (t.title && t.title.toLowerCase().includes(token)) ||
+          (t.description && t.description.toLowerCase().includes(token))
+        )) &&
         !t.is_deleted
       ).forEach(t => {
-        results.push({ id: t.id, type: 'task', title: t.title || 'Untitled', metadata: 'Task', icon: CheckCircle, href: `/tasks/${t.id}` })
+        results.push({ 
+          id: t.id, type: 'task', title: t.title || 'Untitled', metadata: 'Task', icon: CheckCircle, href: `/tasks/${t.id}`,
+          snippet: getSnippet(t.description || "", tokens),
+          author: authorName,
+          updatedAt: formatDate(t.updated_at)
+        })
       })
     }
     if (activeFilter === "all" || activeFilter === "docs") {
       (notes || []).filter(n =>
-        ((n.title && n.title.toLowerCase().includes(q)) ||
-          (n.body && n.body.toLowerCase().includes(q))) &&
+        (tokens.every(token => 
+          (n.title && n.title.toLowerCase().includes(token)) ||
+          (n.body && n.body.toLowerCase().includes(token))
+        )) &&
         !n.is_deleted
       ).forEach(n => {
-        results.push({ id: n.id, type: 'doc', title: n.title || 'Untitled', metadata: 'Note', icon: FileText, href: `/notes/${n.id}` })
+        results.push({ 
+          id: n.id, type: 'doc', title: n.title || 'Untitled', metadata: 'Note', icon: FileText, href: `/notes/${n.id}`,
+          snippet: getSnippet(n.body || "", tokens),
+          author: authorName,
+          updatedAt: formatDate(n.updated_at)
+        })
       })
     }
     if (activeFilter === "all" || activeFilter === "events") {
       (events || []).filter(e =>
-        ((e.title && e.title.toLowerCase().includes(q)) ||
-          (e.description && e.description.toLowerCase().includes(q))) &&
+        (tokens.every(token => 
+          (e.title && e.title.toLowerCase().includes(token)) ||
+          (e.description && e.description.toLowerCase().includes(token))
+        )) &&
         !e.is_deleted
       ).forEach(e => {
-        results.push({ id: e.id, type: 'event', title: e.title || 'Untitled', metadata: 'Event', icon: CalendarIcon, href: `/calendar` })
+        results.push({ 
+          id: e.id, type: 'event', title: e.title || 'Untitled', metadata: 'Event', icon: CalendarIcon, href: `/calendar`,
+          snippet: getSnippet(e.description || "", tokens),
+          author: authorName,
+          updatedAt: formatDate(e.start_date)
+        })
       })
     }
     if (activeFilter === "all" || activeFilter === "folders") {
-      (folders || []).filter(f => f.name && f.name.toLowerCase().includes(q) && !f.is_deleted).forEach(f => {
-        results.push({ id: f.id, type: 'folder', title: f.name || 'Untitled', metadata: 'Folder', icon: Folder, href: `/notes` })
+      (folders || []).filter(f => 
+        tokens.every(token => f.name && f.name.toLowerCase().includes(token)) && !f.is_deleted
+      ).forEach(f => {
+        results.push({ 
+          id: f.id, type: 'folder', title: f.name || 'Untitled', metadata: 'Folder', icon: Folder, href: `/notes`,
+          snippet: "",
+          author: authorName,
+          updatedAt: formatDate(f.updated_at)
+        })
       })
     }
 
     return { results }
-  }, [query, activeFilter, tasks, notes, events, folders, recentSearches])
+  }, [query, activeFilter, tasks, notes, events, folders, recentSearches, authorName])
 
   // Reset selection when query or filter changes
   React.useEffect(() => {
@@ -198,6 +279,7 @@ export function SearchCommand() {
                           key={item.id}
                           item={item}
                           active={selectedIndex === i}
+                          query={query}
                           onClick={() => {
                             addRecentSearch(item)
                             if (item.href) router.push(item.href)
@@ -217,6 +299,7 @@ export function SearchCommand() {
                       key={item.id}
                       item={item}
                       active={selectedIndex === i}
+                      query={query}
                       onClick={() => {
                         addRecentSearch(item)
                         if (item.href) router.push(item.href)
@@ -234,23 +317,69 @@ export function SearchCommand() {
   )
 }
 
-function ResultItem({ item, active, onClick }: { item: SearchResult, active: boolean, onClick: () => void }) {
+function HighlightedText({ text, query }: { text: string, query: string }) {
+  if (!query || !text) return <>{text}</>
+
+  const tokens = query.toLowerCase().split(/\s+/).filter(Boolean)
+  if (tokens.length === 0) return <>{text}</>
+
+  // Escape special regex characters in tokens
+  const escapedTokens = tokens.map(t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+  
+  // Create a regex that matches any of the tokens, case-insensitive
+  const regex = new RegExp(`(${escapedTokens.join('|')})`, 'gi')
+  
+  const parts = text.split(regex)
+
+  return (
+    <span className="break-words">
+      {parts.map((part, i) => {
+        const isMatch = tokens.some(t => part.toLowerCase() === t)
+        return isMatch ? (
+          <span key={i} className="text-[#3b82f6] font-medium bg-[#3b82f6]/10 px-0.5 rounded">
+            {part}
+          </span>
+        ) : (
+          <span key={i}>{part}</span>
+        )
+      })}
+    </span>
+  )
+}
+
+function ResultItem({ item, active, query, onClick }: { item: SearchResult, active: boolean, query?: string, onClick: () => void }) {
   const Icon = item.icon
   return (
     <div
       onClick={onClick}
       className={cn(
-        "flex items-center justify-between px-3 py-2.5 rounded-lg cursor-pointer transition-colors",
+        "flex flex-col gap-1.5 px-3 py-3 rounded-lg cursor-pointer transition-colors",
         active ? "bg-white/10" : "hover:bg-white/5"
       )}
     >
-      <div className="flex items-center gap-3">
-        <Icon className={cn("w-4 h-4", active ? "text-white" : "text-[#888]")} />
-        <div>
-          <div className="text-sm text-white font-medium">{item.title}</div>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <Icon className={cn("w-4 h-4", active ? "text-white" : "text-[#888]")} />
+          <div className="text-sm text-white font-medium">
+            <HighlightedText text={item.title} query={query || ""} />
+          </div>
         </div>
+        <div className="text-xs text-[#666] font-medium px-2 py-0.5 rounded bg-white/5">{item.metadata}</div>
       </div>
-      <div className="text-xs text-[#666]">{item.metadata}</div>
+      
+      {(item.author || item.updatedAt) && (
+        <div className="flex items-center gap-2 text-[11px] text-[#666] pl-7">
+          {item.author && <span>{item.author}</span>}
+          {item.author && item.updatedAt && <span>•</span>}
+          {item.updatedAt && <span>Edited {item.updatedAt}</span>}
+        </div>
+      )}
+
+      {item.snippet && (
+        <div className="text-xs text-[#888] pl-7 mt-0.5 leading-relaxed line-clamp-2">
+          <HighlightedText text={item.snippet} query={query || ""} />
+        </div>
+      )}
     </div>
   )
 }
