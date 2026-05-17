@@ -13,7 +13,7 @@ import { get as idbGet, set as idbSet, del as idbDel, keys as idbKeys } from 'id
 
 export interface QueuedOperation {
   id: string              // Unique op ID
-  entityType: 'task' | 'project' | 'event' | 'note'
+  entityType: 'task' | 'project' | 'event' | 'note' | 'folder'
   entityId: string        // UUID of the record
   operationType: 'insert' | 'update' | 'delete' | 'hard_delete'
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
