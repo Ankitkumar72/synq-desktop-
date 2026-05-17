@@ -92,6 +92,21 @@ export interface Note {
   deleted_at?: string | null
 }
 
+export interface Folder {
+  id: string
+  user_id?: string
+  name: string
+  color?: number
+  parent_id?: string
+  order?: number
+  is_deleted?: boolean
+  hlc_timestamp?: string
+  deleted_hlc?: string
+  field_versions?: Record<string, string>
+  created_at: string
+  updated_at: string
+}
+
 export interface CalendarEvent {
   id: string
   user_id?: string

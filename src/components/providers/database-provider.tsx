@@ -8,6 +8,7 @@ import { useNotesStore } from '@/lib/store/use-notes-store'
 import { useUserStore } from '@/lib/store/use-user-store'
 import { useEventStore } from '@/lib/store/use-event-store'
 import { useProfileStore } from '@/lib/store/use-profile-store'
+import { useFolderStore } from '@/lib/store/use-folder-store'
 import { registerDevice, type DeviceRegistrationResult } from '@/lib/device-manager'
 import { DeviceLimitPage } from '@/components/device-limit-page'
 import { hlc } from '@/lib/hlc'
@@ -59,7 +60,8 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
       useTaskStore.getState().fetchTasks(),
       useNotesStore.getState().fetchNotes(),
       useEventStore.getState().fetchEvents(),
-      useProjectStore.getState().fetchProjects()
+      useProjectStore.getState().fetchProjects(),
+      useFolderStore.getState().fetchFolders()
     ]
     await Promise.allSettled(promises)
   }, [])
@@ -170,6 +172,25 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
       store.mergeEventLocal(newRecord as CalendarEvent)
     } else if (eventType === 'DELETE' && oldRecord && 'id' in oldRecord) {
       store.setEvents(store.events.filter(e => e.id !== oldRecord.id))
+    }
+  }, [])
+
+  /**
+   * Folders handler — uses per-field LWW-Register CRDT merge.
+   */
+  const handleRemoteFolders = useCallback((payload: RealtimePostgresChangesPayload<Folder>) => {
+    const { eventType, new: newRecord, old: oldRecord } = payload
+    const store = useFolderStore.getState()
+    
+    if (eventType === 'INSERT' && newRecord && 'id' in newRecord) {
+      const existing = store.folders.find(f => f.id === newRecord.id)
+      if (!existing) {
+        store.mergeFolderLocal(newRecord as Folder)
+      }
+    } else if (eventType === 'UPDATE' && newRecord && 'id' in newRecord) {
+      store.mergeFolderLocal(newRecord as Folder)
+    } else if (eventType === 'DELETE' && oldRecord && 'id' in oldRecord) {
+      store.setFolders(store.folders.filter(f => f.id !== oldRecord.id))
     }
   }, [])
 
@@ -344,6 +365,11 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
         handleRemoteEvents as (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => void
       )
       .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'folders' },
+        handleRemoteFolders as (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => void
+      )
+      .on(
         'broadcast',
         { event: NOTE_BROADCAST_EVENT },
         ({ payload }) => {
@@ -380,7 +406,7 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
         }
       }
     })
-  }, [fetchData, handleRemoteTasks, handleRemoteProjects, handleRemoteNotes, handleRemoteCRDT, handleRemoteCrdtNoteUpdate, handleRemoteNoteBroadcast, handleRemoteEvents])
+  }, [fetchData, handleRemoteTasks, handleRemoteProjects, handleRemoteNotes, handleRemoteCRDT, handleRemoteCrdtNoteUpdate, handleRemoteNoteBroadcast, handleRemoteEvents, handleRemoteFolders])
 
   const teardownRealtime = useCallback(() => {
     subscriptionGenRef.current++
@@ -469,6 +495,7 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
           useProjectStore.getState().setProjects([])
           useNotesStore.getState().setNotes([])
           useEventStore.getState().setEvents([])
+          useFolderStore.getState().setFolders([])
           setDeviceLimitExceeded(false)
           setDeviceInfo(null)
           destroyAllYDocs()

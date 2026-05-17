@@ -21,17 +21,14 @@ export function createClient() {
         try {
           const res = await fetch(url, options)
           return res
-        } catch (err) {
-          console.error('[Supabase Fetch Error]', {
+        } catch (err: unknown) {
+          const errorMessage = err instanceof Error ? err.message : String(err);
+          console.error(`[Supabase Fetch Error] ${errorMessage}`, {
             url,
             method: options?.method,
-            error: err instanceof Error ? {
-              message: err.message,
-              name: err.name,
-              stack: err.stack
-            } : err
-          })
-          throw err
+            error: err
+          });
+          throw err;
         }
       }
     }

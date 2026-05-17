@@ -469,7 +469,7 @@ export const useNotesStore = create<NotesState>()(
       setSelectedNoteId: (id) => set({ selectedNoteId: id }),
 
       fetchNotes: async (includeDeleted = false) => {
-        if (!supabase) return
+        if (!supabase || get().isLoading) return
         
         const userId = useUserStore.getState().user?.id
         if (!userId) {

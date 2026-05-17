@@ -33,7 +33,7 @@ export const useProjectStore = create<ProjectState>()(
       setProjects: (projects) => set({ projects }),
 
       fetchProjects: async (includeDeleted = false) => {
-        if (!supabase) return
+        if (!supabase || get().isLoading) return
         set({ isLoading: true, error: null })
 
         let userId = useUserStore.getState().user?.id

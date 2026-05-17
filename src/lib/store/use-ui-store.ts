@@ -4,14 +4,17 @@ import { LucideIcon } from 'lucide-react'
 
 export interface SearchResult {
   id: string
-  type: 'task' | 'project' | 'note' | 'doc' | 'event' | 'command'
+  type: 'task' | 'note' | 'doc' | 'event' | 'folder' | 'command'
   title: string
   metadata: string
   icon: LucideIcon
-  color: string
-  bgColor: string
+  color?: string
+  bgColor?: string
   href?: string
   time?: string
+  snippet?: string
+  author?: string
+  updatedAt?: string
 }
 
 interface UIState {
