@@ -26,7 +26,7 @@ const NAV_ITEMS = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard },
   { name: "Calendar", href: "/calendar", icon: Calendar },
   { name: "Notes", href: "/notes", icon: FileText },
-  { name: "Folders", href: "/projects", icon: Folder },
+  { name: "Folders", href: "/folders", icon: Folder },
 ]
 
 export function LinearSidebar() {
