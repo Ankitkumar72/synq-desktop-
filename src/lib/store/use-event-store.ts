@@ -227,55 +227,35 @@ export const useEventStore = create<EventState>()(
         }
 
         try {
-          // RLS automatically filters by user_id (auth.uid() = user_id)
-          const { data, error } = await supabase
+          let query = supabase
             .from('events')
             .select('*')
             .eq('user_id', userId)
-            .eq('is_deleted', includeDeleted ? true || false : false)
-            .order('start_date', { ascending: true })
+
+          if (!includeDeleted) {
+            query = query.eq('is_deleted', false)
+          }
+
+          const { data, error } = await query.order('start_date', { ascending: true })
           
-          if (error) throw error
-          
-          console.group('[Sync Debug] Fetched Events')
-          console.log('Count:', data?.length || 0)
-          console.log('Data:', data)
-          console.groupEnd()
+          if (error) {
+            console.error('[EventStore] Supabase error in fetchEvents:', {
+              message: error.message,
+              code: error.code,
+              details: error.details,
+              hint: error.hint,
+            })
+            set({ isLoading: false, error: error.message })
+            return
+          }
 
           const currentEvents = get().events
           const merged = mergeEventsList(currentEvents, data || [], true, includeDeleted)
           set({ events: merged, isLoading: false })
-          
-
-            
-            
-            
-          
-          
-            
-          
-          
-           
-            
-          
-          
-            
-              
-              
-              
-              
-              
-              
-            
-            
-          
-            
-            
-            
-          
         } catch (err) {
-          console.error('[EventStore] Unexpected error in fetchEvents:', err)
-          set({ isLoading: false, error: err instanceof Error ? err.message : String(err) })
+          const errMsg = err instanceof Error ? err.message : JSON.stringify(err)
+          console.error('[EventStore] Unexpected error in fetchEvents:', errMsg, err)
+          set({ isLoading: false, error: errMsg })
         }
       },
 

@@ -58,3 +58,4 @@ next-env.d.ts
 
 # local scratch and editor state
 /scratch/
+.obsidian/

@@ -63,8 +63,9 @@ export const useProjectStore = create<ProjectState>()(
               hint: error.hint,
               status,
               statusText,
+              raw: error,
             })
-            set({ error: error.message, isLoading: false })
+            set({ error: error.message || `Supabase error (${error.code || status})`, isLoading: false })
             return
           }
 
@@ -120,10 +121,16 @@ export const useProjectStore = create<ProjectState>()(
 
         set((state) => ({ projects: [optimisticProject, ...state.projects] }))
 
+        // Omit client-only properties from database insert payload
+        const dbPayload = { ...projectPayload } as Record<string, unknown>
+        delete dbPayload.task_count
+        delete dbPayload.completed_task_count
+        delete dbPayload.progress
+
         if (getOnlineStatus()) {
           const { data, error } = await supabase
             .from('projects')
-            .insert([projectPayload])
+            .insert([dbPayload])
             .select()
           if (error) {
             console.error('[ProjectStore] Error adding project:', {
@@ -136,7 +143,7 @@ export const useProjectStore = create<ProjectState>()(
               entityType: 'project',
               entityId: projectId,
               operationType: 'insert',
-              payload: projectPayload,
+              payload: dbPayload,
               hlcTimestamp: timestamp,
             })
             triggerFlush()
@@ -150,7 +157,7 @@ export const useProjectStore = create<ProjectState>()(
             entityType: 'project',
             entityId: projectId,
             operationType: 'insert',
-            payload: projectPayload,
+            payload: dbPayload,
             hlcTimestamp: timestamp,
           })
         }
@@ -177,15 +184,21 @@ export const useProjectStore = create<ProjectState>()(
           projects: state.projects.map((p) => (p.id === id ? { ...p, ...payload } : p)),
         }))
 
+        // Omit client-only properties from database update payload
+        const dbPayload = { ...payload } as Record<string, unknown>
+        delete dbPayload.task_count
+        delete dbPayload.completed_task_count
+        delete dbPayload.progress
+
         if (getOnlineStatus()) {
-          const { error } = await supabase.from('projects').update(payload).eq('id', id)
+          const { error } = await supabase.from('projects').update(dbPayload).eq('id', id)
           if (error) {
             console.error('Error updating project:', error)
-            await enqueueOperation({ entityType: 'project', entityId: id, operationType: 'update', payload, hlcTimestamp: timestamp })
+            await enqueueOperation({ entityType: 'project', entityId: id, operationType: 'update', payload: dbPayload, hlcTimestamp: timestamp })
             triggerFlush()
           }
         } else {
-          await enqueueOperation({ entityType: 'project', entityId: id, operationType: 'update', payload, hlcTimestamp: timestamp })
+          await enqueueOperation({ entityType: 'project', entityId: id, operationType: 'update', payload: dbPayload, hlcTimestamp: timestamp })
         }
       },
 

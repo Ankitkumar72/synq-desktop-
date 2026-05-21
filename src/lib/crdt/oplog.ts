@@ -12,6 +12,7 @@ export interface ApplyNoteCrdtUpdateInput {
   excerpt: string | null
   snapshot?: Uint8Array
   updatedAt?: string
+  content?: unknown
 }
 
 export interface ApplyNoteCrdtUpdateResult {
@@ -63,6 +64,18 @@ export async function applyNoteCrdtUpdate(input: ApplyNoteCrdtUpdateInput): Prom
   })
 
   if (error) throw error
+
+  // If rich content is provided, also persist it directly to the notes.content JSONB column
+  if (input.content !== undefined) {
+    const { error: contentError } = await supabase
+      .from('notes')
+      .update({ content: input.content })
+      .eq('id', input.noteId)
+    
+    if (contentError) {
+      console.warn('[Oplog] Failed to update notes.content column:', contentError)
+    }
+  }
 
   const row = Array.isArray(data) ? data[0] : data
   return {

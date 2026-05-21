@@ -4,28 +4,43 @@ import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Collaboration from '@tiptap/extension-collaboration'
 import { Markdown } from 'tiptap-markdown'
+import Link from '@tiptap/extension-link'
+import Underline from '@tiptap/extension-underline'
+import TaskList from '@tiptap/extension-task-list'
+import TaskItem from '@tiptap/extension-task-item'
+import Highlight from '@tiptap/extension-highlight'
+import Image from '@tiptap/extension-image'
+import { Table } from '@tiptap/extension-table'
+import { TableRow } from '@tiptap/extension-table-row'
+import { TableHeader } from '@tiptap/extension-table-header'
+import { TableCell } from '@tiptap/extension-table-cell'
 import * as Y from 'yjs'
-import { 
-  Bold, 
-  Italic, 
-  List as ListIcon, 
-  ListOrdered, 
-  Quote, 
-  Heading1, 
-  Heading2, 
+import {
+  Bold,
+  Italic,
+  List as ListIcon,
+  ListOrdered,
+  Quote,
+  Heading1,
+  Heading2,
   Code,
   Loader2
 } from "lucide-react"
+import Placeholder from '@tiptap/extension-placeholder'
+import { SlashCommand, suggestionConfig } from './slash-command'
+import { CalloutNode } from './callout-node'
+import { NoteBubbleMenu } from './bubble-menu'
+import { TableBubbleMenu } from './table-bubble-menu'
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useEffect, useRef, useCallback, useMemo, useState } from 'react'
 import { Editor } from '@tiptap/react'
 import { useNotesStore } from '@/lib/store/use-notes-store'
-import { 
-  getOrCreateYDoc, 
-  setActiveEdit, 
-  getPlainTextFromYDoc, 
+import {
+  getOrCreateYDoc,
+  setActiveEdit,
+  getPlainTextFromYDoc,
   getExcerptFromYDoc,
   markLocallyModified,
   waitForPersistence,
@@ -35,9 +50,17 @@ import { saveYDocToSupabase, loadYDocFromSupabase } from '@/lib/crdt/sync-manage
 import { getLocalLastSeq, getNoteCrdtUpdates, setLocalLastSeq, toUint8Update } from '@/lib/crdt/oplog'
 import { useUserStore } from '@/lib/store/use-user-store'
 import type { NoteContent } from '@/types'
-import { getPlainTextFromStoredContent } from '@/lib/notes/note-content'
+import { getEditorContentValue } from '@/lib/notes/note-content'
 import { sendNoteBroadcast } from '@/lib/realtime/note-sync'
 import { hlc } from '@/lib/hlc'
+import { TextStyle, Color, FontFamily, FontSize } from '@tiptap/extension-text-style'
+import TextAlign from '@tiptap/extension-text-align'
+import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight'
+import { common, createLowlight } from 'lowlight'
+import DOMPurify from 'dompurify'
+import GlobalDragHandle from 'tiptap-extension-global-drag-handle'
+
+const lowlight = createLowlight(common)
 
 const SAVE_DEBOUNCE_MS = 800
 const SNAPSHOT_EVERY_N_SAVES = 20
@@ -62,7 +85,7 @@ const MenuBar = ({ editor }: { editor: Editor | null }) => {
     <div className="flex items-center gap-0.5 transition-all duration-200">
       {items.map((item, idx) => {
         if (item.type === 'separator') return <Separator key={idx} orientation="vertical" className="h-4 mx-2 bg-white/[0.03]" />
-        
+
         const Icon = item.icon!
         return (
           <Button
@@ -81,16 +104,17 @@ const MenuBar = ({ editor }: { editor: Editor | null }) => {
 }
 
 
-export function NoteEditor({ 
+export function NoteEditor({
   id,
-  content, 
-  onChange 
-}: { 
+  content,
+  onChange
+}: {
   id: string,
   content?: NoteContent,
   onChange?: (snapshot: { content: NoteContent, body: string | null, excerpt: string | null }) => void
 }) {
   const { setFocusedNoteId, markNoteActivity, clearActiveNoteActivity, updateNoteLocal } = useNotesStore()
+  const editorRef = useRef<Editor | null>(null)
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const isSavingRef = useRef(false)
   const hasPendingLocalChangeRef = useRef(false)
@@ -117,9 +141,13 @@ export function NoteEditor({
     const body = getPlainTextFromYDoc(id)
     const excerpt = getExcerptFromYDoc(id)
 
+    // Retrieve latest Tiptap JSON content from the editor ref
+    const currentEditor = editorRef.current
+    const contentVal = currentEditor && !currentEditor.isDestroyed ? currentEditor.getJSON() : null
+
     markLocallyModified(id)
-    updateNoteLocal(id, { body, excerpt, updated_at: now })
-    onChange?.({ content: null, body, excerpt })
+    updateNoteLocal(id, { body, excerpt, content: contentVal || undefined, updated_at: now })
+    onChange?.({ content: contentVal, body, excerpt })
 
     try {
       const updateData = pendingBatch.length === 1
@@ -130,6 +158,7 @@ export function NoteEditor({
       await saveYDocToSupabase(id, userId, {
         updateData,
         snapshot,
+        content: contentVal || undefined,
       })
       saveSinceSnapshotRef.current += 1
       hasPendingLocalChangeRef.current = false
@@ -164,7 +193,7 @@ export function NoteEditor({
     })
   }, [id, onChange, updateNoteLocal, ydoc])
 
-  // Initialize the Yjs doc — if it's empty and we have TipTap content, seed it
+  // Initialize the Yjs doc from IndexedDB/Supabase
   useEffect(() => {
     let mounted = true
     // setIsLoading is initialized to true; re-entering means we need to reset it.
@@ -181,16 +210,13 @@ export function NoteEditor({
 
     const init = async () => {
       try {
-        const doc = ydoc
-        const fragment = doc.getXmlFragment('content')
-        
         // 1. Wait for IndexedDB persistence to finish loading
         try {
           await withTimeout(waitForPersistence(id), 3000, 'waitForPersistence timeout')
         } catch (err) {
           console.warn('[NoteEditor] Persistence wait failed or timed out:', err)
         }
-        
+
         if (!mounted) return
 
         // 2. Always merge remote Yjs state to avoid stale local IndexedDB snapshots after refresh.
@@ -226,25 +252,6 @@ export function NoteEditor({
           }
         } catch (err) {
           console.warn('[NoteEditor] Failed to replay oplog catch-up:', err)
-        }
-
-        if (!mounted) return
-
-        // 3. If STILL empty and we have legacy content, seed it (migration)
-        if (fragment.length === 0 && contentRef.current && mounted) {
-          const plainText = getPlainTextFromStoredContent(contentRef.current)
-          if (plainText.trim()) {
-            doc.transact(() => {
-              const paragraphs = plainText.split('\n')
-              for (const para of paragraphs) {
-                const element = new Y.XmlElement('paragraph')
-                if (para.trim()) {
-                  element.insert(0, [new Y.XmlText(para)])
-                }
-                fragment.push([element])
-              }
-            })
-          }
         }
       } catch (err) {
         console.error('[NoteEditor] Fatal error during initialization:', err)
@@ -313,32 +320,96 @@ export function NoteEditor({
       window.removeEventListener('beforeunload', persistPending)
     }
   }, [persistNow])
-  
+
+  const extensions = useMemo(() => [
+    StarterKit.configure({
+      // Disable the built-in undo/redo — Yjs Collaboration handles it
+      undoRedo: false,
+      link: false,
+      underline: false,
+      codeBlock: false, // Replaced by CodeBlockLowlight for syntax highlighting
+    }),
+    CodeBlockLowlight.configure({
+      lowlight,
+      defaultLanguage: 'typescript',
+      HTMLAttributes: {
+        class: 'hljs',
+      },
+    }),
+    Collaboration.configure({
+      document: ydoc,
+      field: 'content',
+    }),
+    Link.configure({
+      openOnClick: false,
+      HTMLAttributes: {
+        class: 'text-[#2eaadc] underline hover:text-[#2eaadc]/80 transition-colors cursor-pointer',
+      },
+    }),
+    Underline,
+    TaskList,
+    TaskItem.configure({
+      nested: true,
+    }),
+    Highlight.configure({
+      multicolor: true,
+    }),
+    Image.configure({
+      allowBase64: true,
+    }),
+    Table.configure({
+      resizable: true,
+    }),
+    TableRow,
+    TableHeader,
+    TableCell,
+    TextStyle,
+    Color,
+    FontFamily,
+    FontSize,
+    TextAlign.configure({
+      types: ['heading', 'paragraph', 'tableCell', 'tableHeader'],
+    }),
+    Markdown.configure({
+      html: true,
+      tightLists: true,
+      tightListClass: 'tight',
+      bulletListMarker: '-',
+      linkify: true,
+      breaks: true,
+      transformPastedText: false,
+      transformCopiedText: true,
+    }),
+    Placeholder.configure({
+      placeholder: ({ node }) => {
+        if (node.type.name === 'heading') {
+          return `Heading ${node.attrs.level}`
+        }
+        if (node.type.name === 'callout') {
+          return 'Callout content...'
+        }
+        return "Type '/' for commands..."
+      },
+      includeChildren: true,
+    }),
+    CalloutNode,
+    SlashCommand.configure({
+      suggestion: suggestionConfig,
+    }),
+    GlobalDragHandle.configure({
+      dragHandleWidth: 20,
+      scrollTreshold: 100,
+    }),
+  ], [ydoc])
+
   const editor = useEditor({
-    extensions: [
-      StarterKit.configure({
-        // Disable the built-in undo/redo — Yjs Collaboration handles it
-        undoRedo: false,
-      }),
-      Collaboration.configure({
-        document: ydoc,
-        field: 'content',
-      }),
-      Markdown.configure({
-        html: true,
-        tightLists: true,
-        tightListClass: 'tight',
-        bulletListMarker: '-',
-        linkify: true,
-        breaks: true,
-      }),
-    ],
+    extensions,
     immediatelyRender: false,
     onUpdate: () => {
       // Mark as actively editing
       markNoteActivity(id)
       setActiveEdit(id, true)
-      
+
       // We don't call debouncedSave here anymore. 
       // It's handled by the ydoc update listener below to avoid remote-echo loops.
     },
@@ -357,15 +428,73 @@ export function NoteEditor({
         clearTimeout(saveTimeoutRef.current)
         saveTimeoutRef.current = null
       }
-      
+
       void persistNow(true)
     },
     editorProps: {
       attributes: {
-        class: 'prose prose-invert max-w-none focus:outline-none min-h-[calc(100vh-300px)] pt-0 pb-32 text-[#E1E2E4] text-[15px] leading-[1.6] [&>*:first-child]:mt-0 font-sans selection:bg-[#4B7BFF]/30 selection:text-white prose-headings:font-semibold prose-headings:tracking-tight prose-headings:text-white prose-p:text-[#A1A3A7] prose-strong:text-white prose-blockquote:border-[#4B7BFF]/40 prose-blockquote:text-[#A1A3A7] prose-code:text-[#4B7BFF] prose-code:bg-[#4B7BFF]/5 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded-md prose-code:before:content-none prose-code:after:content-none',
+        class: 'prose prose-invert max-w-none focus:outline-none min-h-[calc(100vh-300px)] pt-0 pb-32 text-[#E1E2E4] text-[15px] leading-[1.6] [&>*:first-child]:mt-0 font-sans selection:bg-[#4B7BFF]/30 selection:text-white prose-headings:font-semibold prose-headings:tracking-tight prose-headings:text-white prose-strong:text-white prose-blockquote:border-[#4B7BFF]/40 prose-blockquote:text-[#A1A3A7] prose-code:before:content-none prose-code:after:content-none [&_.is-empty::before]:text-neutral-600 [&_.is-empty::before]:content-[attr(data-placeholder)] [&_.is-empty::before]:float-left [&_.is-empty::before]:pointer-events-none [&_.is-empty::before]:h-0 [&_ul[data-type="taskList"]]:list-none [&_ul[data-type="taskList"]]:pl-0 [&_ul[data-type="taskList"]_li]:flex [&_ul[data-type="taskList"]_li]:items-start [&_ul[data-type="taskList"]_li]:gap-2.5 [&_ul[data-type="taskList"]_li_label]:flex [&_ul[data-type="taskList"]_li_label]:items-center [&_ul[data-type="taskList"]_li_label]:select-none [&_ul[data-type="taskList"]_li_div]:flex-1 [&_ul[data-type="taskList"]_input[type="checkbox"]]:w-4 [&_ul[data-type="taskList"]_input[type="checkbox"]]:h-4 [&_ul[data-type="taskList"]_input[type="checkbox"]]:rounded-md [&_ul[data-type="taskList"]_input[type="checkbox"]]:border-neutral-700 [&_ul[data-type="taskList"]_input[type="checkbox"]]:bg-neutral-900 [&_ul[data-type="taskList"]_input[type="checkbox"]]:accent-blue-500 [&_ul[data-type="taskList"]_li[data-checked="true"]_div]:line-through [&_ul[data-type="taskList"]_li[data-checked="true"]_div]:text-neutral-500',
+      },
+      transformPastedHTML(html) {
+        if (!html) return html
+
+        // 1. Create a parser to manipulate nodes safely in memory
+        const parser = new DOMParser()
+        const doc = parser.parseFromString(html, 'text/html')
+
+        // 2. Locate all span elements with inline background-color styling
+        //    and wrap them in <mark> tags while preserving the span's other styles
+        doc.querySelectorAll('span[style*="background-color"]').forEach(span => {
+          const element = span as HTMLElement
+          const bg = element.style.backgroundColor
+          if (bg) {
+            const mark = doc.createElement('mark')
+            mark.setAttribute('data-color', bg)
+            mark.style.backgroundColor = bg
+            // Strip background-color from the original span to avoid duplication
+            element.style.removeProperty('background-color')
+            // Wrap the span (preserving its other styles like color, font-size) inside the mark
+            mark.innerHTML = element.outerHTML
+            element.replaceWith(mark)
+          }
+        })
+
+        // 3. Sanitize and return the sanitized markup
+        return DOMPurify.sanitize(doc.body.innerHTML, {
+          FORCE_BODY: true,
+          ALLOWED_TAGS: [
+            'p', 'span', 'div', 'br', 'strong', 'b', 'em', 'i', 'u', 's', 'strike', 'a',
+            'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+            'ul', 'ol', 'li', 'blockquote', 'code', 'pre',
+            'table', 'thead', 'tbody', 'tr', 'th', 'td', 'img', 'mark',
+            'label', 'input', 'hr', 'sub', 'sup'
+          ],
+          ALLOWED_ATTR: [
+            'href', 'target', 'rel', 'src', 'alt', 'title', 'class', 'style',
+            'data-type', 'data-checked', 'checked', 'disabled', 'type'
+          ],
+        })
       },
     },
   })
+
+  // Synchronize editor ref for persistNow callback
+  useEffect(() => {
+    editorRef.current = editor
+  }, [editor])
+
+  // Seed initial rich-text content if the Yjs document is empty and we have stored content
+  useEffect(() => {
+    if (!isLoading && editor && !editor.isDestroyed) {
+      const fragment = ydoc.getXmlFragment('content')
+      if (fragment.length === 0 && contentRef.current) {
+        const contentValue = getEditorContentValue(contentRef.current)
+        if (contentValue) {
+          editor.commands.setContent(contentValue)
+        }
+      }
+    }
+  }, [isLoading, editor, ydoc])
 
   // Cleanup on unmount
   useEffect(() => {
@@ -400,7 +529,9 @@ export function NoteEditor({
           <MenuBar editor={editor} />
         </div>
       </div>
-      <div className="flex-1">
+      <div className="flex-1 relative">
+        <NoteBubbleMenu editor={editor} />
+        <TableBubbleMenu editor={editor} />
         <EditorContent editor={editor} />
       </div>
     </div>

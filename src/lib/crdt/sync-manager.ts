@@ -134,16 +134,25 @@ async function performFlush(): Promise<void> {
 async function executeOperation(op: QueuedOperation): Promise<void> {
   const table = op.entityType === 'note' ? 'notes' : `${op.entityType}s`
 
+  let payload = op.payload
+  if (op.entityType === 'project') {
+    const rest = { ...op.payload } as Record<string, unknown>
+    delete rest.task_count
+    delete rest.completed_task_count
+    delete rest.progress
+    payload = rest
+  }
+
   switch (op.operationType) {
     case 'insert': {
-      const { error } = await supabase.from(table).insert(op.payload)
+      const { error } = await supabase.from(table).insert(payload)
       if (error) throw error
       break
     }
     case 'update': {
       const { error } = await supabase
         .from(table)
-        .update(op.payload)
+        .update(payload)
         .eq('id', op.entityId)
       if (error) throw error
       break
@@ -152,7 +161,7 @@ async function executeOperation(op: QueuedOperation): Promise<void> {
       // Soft delete — set deleted_at
       const { error } = await supabase
         .from(table)
-        .update({ deleted_at: new Date().toISOString(), ...op.payload })
+        .update({ deleted_at: new Date().toISOString(), ...payload })
         .eq('id', op.entityId)
       if (error) throw error
       break
@@ -185,6 +194,7 @@ interface SaveYDocOptions {
   updateData?: Uint8Array
   opId?: string
   snapshot?: Uint8Array | null
+  content?: unknown
 }
 
 export async function saveYDocToSupabase(noteId: string, userId: string, options: SaveYDocOptions = {}): Promise<void> {
@@ -197,6 +207,7 @@ export async function saveYDocToSupabase(noteId: string, userId: string, options
   const opId = options.opId || createOpId()
   const clientId = hlc.getNodeId()
   const snapshot = options.snapshot === undefined ? null : options.snapshot
+  const content = options.content
 
   // Mark as locally modified to prevent echo from Realtime
   markLocallyModified(noteId)
@@ -212,6 +223,7 @@ export async function saveYDocToSupabase(noteId: string, userId: string, options
       excerpt,
       snapshot: snapshot ?? undefined,
       updatedAt,
+      content,
     })
     return
   }
@@ -228,6 +240,7 @@ export async function saveYDocToSupabase(noteId: string, userId: string, options
       body,
       excerpt,
       updatedAt,
+      content,
     })
     if (result.seq > 0) {
       setLocalLastSeq(noteId, result.seq)
@@ -246,6 +259,7 @@ export async function saveYDocToSupabase(noteId: string, userId: string, options
           excerpt,
           snapshot: snapshot ?? undefined,
           updatedAt,
+          content,
         })
         triggerFlush()
         return
@@ -279,14 +293,19 @@ export async function saveYDocToSupabase(noteId: string, userId: string, options
     console.error('[SyncManager] Failed to save CRDT state:', errorMessage)
   }
 
+  const noteUpdate: Record<string, unknown> = {
+    body,
+    excerpt,
+    hlc_timestamp: timestamp,
+    updated_at: updatedAt,
+  }
+  if (content !== undefined) {
+    noteUpdate.content = content
+  }
+
   const { error: noteError } = await supabase
     .from('notes')
-    .update({
-      body,
-      excerpt,
-      hlc_timestamp: timestamp,
-      updated_at: updatedAt,
-    })
+    .update(noteUpdate)
     .eq('id', noteId)
 
   if (noteError) {

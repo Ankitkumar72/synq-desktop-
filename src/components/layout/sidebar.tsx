@@ -26,6 +26,7 @@ const NAV_ITEMS = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard },
   { name: "Calendar", href: "/calendar", icon: Calendar },
   { name: "Notes", href: "/notes", icon: FileText },
+  { name: "Folders", href: "/projects", icon: Folder },
 ]
 
 export function LinearSidebar() {
@@ -85,7 +86,6 @@ export function LinearSidebar() {
 
         <div className="my-4 border-t border-[#2E2E2E]"></div>
 
-        <SidebarItem icon={<Folder className="w-4 h-4" />} label="Folders" />
         <SidebarItem icon={<Layers className="w-4 h-4" />} label="Templates" />
         <SidebarItem icon={<BookOpen className="w-4 h-4" />} label="Notebooks" />
         <SidebarItem icon={<Tag className="w-4 h-4" />} label="Tags" />

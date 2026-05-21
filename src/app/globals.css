@@ -236,3 +236,354 @@
     letter-spacing: -0.02em;
   }
 }
+
+/* Premium Tiptap Elements Styling (Notion-like) */
+.ProseMirror {
+  ul[data-type="taskList"] {
+    list-style: none;
+    padding-left: 0 !important;
+    margin-top: 0.5rem;
+    margin-bottom: 0.5rem;
+
+    li {
+      display: flex;
+      align-items: flex-start;
+      margin-bottom: 0.35rem;
+
+      > label {
+        flex: 0 0 auto;
+        margin-right: 0.5rem;
+        user-select: none;
+        display: flex;
+        align-items: center;
+        padding-top: 0.15rem;
+
+        input[type="checkbox"] {
+          cursor: pointer;
+          width: 1.05rem;
+          height: 1.05rem;
+          accent-color: #2eaadc;
+          border-radius: 4px;
+          border: 1px solid rgba(255, 255, 255, 0.2);
+          background-color: transparent;
+        }
+      }
+
+      > div {
+        flex: 1 1 auto;
+        margin: 0;
+        
+        p {
+          margin: 0 !important;
+        }
+      }
+    }
+  }
+
+  /* Table styling */
+  table {
+    border-collapse: collapse;
+    table-layout: fixed;
+    width: 100%;
+    margin: 1.5rem 0 !important;
+    overflow: hidden;
+    border-radius: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+
+    td, th {
+      min-width: 1em;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      padding: 8px 10px;
+      vertical-align: top;
+      box-sizing: border-box;
+      position: relative;
+
+      > * {
+        margin-bottom: 0;
+      }
+    }
+
+    th {
+      font-weight: 600;
+      text-align: left;
+      background-color: rgba(255, 255, 255, 0.03);
+      color: #ffffff;
+    }
+
+    .selectedCell:after {
+      background: rgba(46, 170, 220, 0.1);
+      content: "";
+      left: 0; right: 0; top: 0; bottom: 0;
+      pointer-events: none;
+      position: absolute;
+      z-index: 2;
+    }
+
+    .column-resize-handle {
+      background-color: #2eaadc;
+      bottom: -2px;
+      position: absolute;
+      right: -2px;
+      top: 0;
+      width: 4px;
+      z-index: 20;
+      pointer-events: none;
+    }
+  }
+
+  /* Inline Marks styling */
+  u {
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 2px;
+  }
+
+  mark {
+    background-color: rgba(46, 170, 220, 0.2);
+    color: #ffffff;
+    padding: 0.1rem 0.25rem;
+    border-radius: 0.25rem;
+    border: 1px solid rgba(46, 170, 220, 0.3);
+  }
+
+  img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 8px;
+    margin: 1.5rem 0;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+  }
+
+  /* Code block (fenced / pre>code) styling */
+  pre {
+    background-color: #1a1a1e;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 8px;
+    padding: 1rem 1.25rem;
+    margin: 1rem 0 !important;
+    overflow-x: auto;
+    font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', 'Cascadia Code', ui-monospace, monospace;
+    font-size: 13.5px;
+    line-height: 1.7;
+    tab-size: 2;
+
+    code {
+      background: none !important;
+      border: none !important;
+      padding: 0 !important;
+      font-size: inherit;
+      color: #e1e2e4;
+      font-family: inherit;
+    }
+  }
+
+  /* Inline code styling */
+  :not(pre) > code {
+    background-color: rgba(75, 123, 255, 0.08);
+    color: #7ba4ff;
+    padding: 0.15rem 0.45rem;
+    border-radius: 5px;
+    font-size: 0.87em;
+    font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
+    font-weight: 500;
+    border: 1px solid rgba(75, 123, 255, 0.1);
+  }
+
+  /* Horizontal rule */
+  hr {
+    border: none;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    margin: 2rem 0 !important;
+  }
+
+  /* Blockquote enhancement */
+  blockquote {
+    border-left: 3px solid rgba(75, 123, 255, 0.4);
+    padding-left: 1rem;
+    margin: 1rem 0 !important;
+    color: #a1a3a7;
+    font-style: italic;
+  }
+
+  /* Preserve inline color & background on spans (from paste) */
+  span[style*="color"],
+  span[style*="background"] {
+    color: inherit;
+  }
+
+  /* Heading spacing */
+  h1, h2, h3, h4, h5, h6 {
+    color: #ffffff;
+    margin-top: 1.75rem !important;
+    margin-bottom: 0.5rem !important;
+  }
+
+  h1 { font-size: 1.75rem; }
+  h2 { font-size: 1.4rem; }
+  h3 { font-size: 1.15rem; }
+
+  /* Paragraph spacing */
+  p {
+    margin-top: 0.25rem !important;
+    margin-bottom: 0.25rem !important;
+    line-height: 1.65;
+  }
+
+  /* Lists */
+  ul, ol {
+    padding-left: 1.5rem;
+    margin: 0.5rem 0 !important;
+  }
+
+  li {
+    margin-bottom: 0.15rem;
+  }
+
+  li > p {
+    margin: 0 !important;
+  }
+
+  /* Let paragraphs inherit color from their parent or inline styles */
+  p {
+    color: #c8c9cb;
+  }
+
+  /* Inline styles from paste should win over defaults */
+  [style*="color"] {
+    color: unset;
+  }
+
+  /* Drag Handle */
+  .drag-handle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 24px;
+    border-radius: 4px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' width='16' height='16' fill='none' stroke='rgba(255, 255, 255, 0.3)' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='9' cy='12' r='1'/%3E%3Ccircle cx='9' cy='5' r='1'/%3E%3Ccircle cx='9' cy='19' r='1'/%3E%3Ccircle cx='15' cy='12' r='1'/%3E%3Ccircle cx='15' cy='5' r='1'/%3E%3Ccircle cx='15' cy='19' r='1'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: center;
+    cursor: grab;
+    transition: background-color 0.15s ease;
+    margin-left: -24px; /* Align to left of block */
+  }
+
+  .drag-handle:hover {
+    background-color: rgba(255, 255, 255, 0.08);
+  }
+
+  .drag-handle:active {
+    cursor: grabbing;
+  }
+}
+
+/* ─── Highlight.js / Lowlight – One Dark Theme ─── */
+.ProseMirror pre code.hljs {
+  display: block;
+  overflow-x: auto;
+  color: #abb2bf;
+}
+
+/* Keywords: if, const, return, import, export, function, class */
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-addition {
+  color: #c678dd;
+}
+
+/* Strings */
+.hljs-string,
+.hljs-template-variable,
+.hljs-selector-attr,
+.hljs-selector-pseudo {
+  color: #98c379;
+}
+
+/* Numbers */
+.hljs-number,
+.hljs-literal {
+  color: #d19a66;
+}
+
+/* Types, class names */
+.hljs-type,
+.hljs-title,
+.hljs-title.class_,
+.hljs-title.function_ {
+  color: #e5c07b;
+}
+
+/* Built-in objects/methods */
+.hljs-built_in {
+  color: #e06c75;
+}
+
+/* Comments */
+.hljs-comment,
+.hljs-meta,
+.hljs-quote {
+  color: #5c6370;
+  font-style: italic;
+}
+
+/* Variables, params */
+.hljs-variable,
+.hljs-params,
+.hljs-template-tag {
+  color: #e06c75;
+}
+
+/* Attributes (HTML, JSX) */
+.hljs-attr,
+.hljs-attribute {
+  color: #d19a66;
+}
+
+/* Tags (HTML, XML) */
+.hljs-tag {
+  color: #abb2bf;
+}
+
+.hljs-name {
+  color: #e06c75;
+}
+
+/* Symbols, bullets */
+.hljs-symbol,
+.hljs-bullet,
+.hljs-link {
+  color: #56b6c2;
+}
+
+/* Regex */
+.hljs-regexp {
+  color: #98c379;
+}
+
+/* Deletion (diff) */
+.hljs-deletion {
+  color: #e06c75;
+  background-color: rgba(224, 108, 117, 0.1);
+}
+
+/* Addition (diff) */
+.hljs-addition {
+  color: #98c379;
+  background-color: rgba(152, 195, 121, 0.1);
+}
+
+/* Section headers */
+.hljs-section {
+  color: #61afef;
+  font-weight: bold;
+}
+
+/* Emphasis */
+.hljs-emphasis {
+  font-style: italic;
+}
+
+.hljs-strong {
+  font-weight: bold;
+}

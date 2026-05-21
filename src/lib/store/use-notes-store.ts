@@ -65,7 +65,7 @@ interface NotesState {
   setFocusedNoteId: (id: string | null) => void
   markNoteActivity: (id: string) => void
   clearActiveNoteActivity: (id?: string) => void
-  saveNoteContent: (id: string) => Promise<void>
+  saveNoteContent: (id: string, content?: unknown) => Promise<void>
   clearStore: () => void
 }
 
@@ -352,7 +352,7 @@ export const useNotesStore = create<NotesState>()(
        * Save the current Yjs document state for a note to Supabase.
        * This also extracts body/excerpt for Flutter compatibility.
        */
-      saveNoteContent: async (id) => {
+      saveNoteContent: async (id, content?: unknown) => {
         const userId = useUserStore.getState().user?.id
         if (!userId) return
 
@@ -360,11 +360,16 @@ export const useNotesStore = create<NotesState>()(
         const body = getPlainTextFromYDoc(id)
         const excerpt = getExcerptFromYDoc(id)
 
-        // Update local note state with latest body/excerpt
-        get().updateNoteLocal(id, { body, excerpt })
+        const updates: Partial<Note> = { body, excerpt }
+        if (content !== undefined) {
+          updates.content = content
+        }
 
-        // Save Yjs state to Supabase (also writes body/excerpt)
-        await saveYDocToSupabase(id, userId)
+        // Update local note state with latest body/excerpt and content
+        get().updateNoteLocal(id, updates)
+
+        // Save Yjs state to Supabase (also writes body/excerpt and content)
+        await saveYDocToSupabase(id, userId, { content })
       },
 
       deleteNote: async (id) => {

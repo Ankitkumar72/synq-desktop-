@@ -358,6 +358,7 @@ function NotesPageContent() {
                     onChange={(snapshot) => {
                       // Only update local state. Persistence is handled by the editor's saveYDocToSupabase.
                       updateNoteLocal(selectedNote.id, {
+                        content: snapshot.content,
                         body: snapshot.body,
                         excerpt: snapshot.excerpt,
                       })
