@@ -561,6 +561,7 @@ export function NoteEditor({
           console.group('[NoteEditor] Self-healing repair triggered for note:', id)
           const cleanedMarkdown = convertCustomTagsToMarkdown(plainText)
           console.log('[NoteEditor] Translated mobile tags to standard Markdown:', cleanedMarkdown)
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const parsedNode = (editor.storage as any).markdown.parser.parse(cleanedMarkdown)
           editor.commands.setContent(parsedNode)
           console.log('[NoteEditor] Note self-healing successfully completed!')
@@ -579,6 +580,7 @@ export function NoteEditor({
               console.group('[NoteEditor] Initial markdown content seeding for note:', id)
               const cleanedMarkdown = convertCustomTagsToMarkdown(contentValue)
               console.log('[NoteEditor] Translated raw markdown content:', cleanedMarkdown)
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
               const parsedNode = (editor.storage as any).markdown.parser.parse(cleanedMarkdown)
               editor.commands.setContent(parsedNode)
               console.log('[NoteEditor] Markdown content successfully seeded!')
