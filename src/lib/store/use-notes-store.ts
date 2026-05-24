@@ -279,8 +279,8 @@ export const useNotesStore = create<NotesState>()(
           
           if (existingIndex === -1) {
             // New note arrived from remote
-            // Initialize Yjs doc from the body if it has text content
-            if (remoteNote.body) {
+            // Only initialize from body if structured content is missing
+            if (remoteNote.body && !remoteNote.content) {
               // We don't await this as it's a background initialization
               initYDocFromPlainText(remoteNote.id, getPlainTextFromStoredContent(remoteNote.body))
             }

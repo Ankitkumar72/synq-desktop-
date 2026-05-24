@@ -103,6 +103,68 @@ const MenuBar = ({ editor }: { editor: Editor | null }) => {
   )
 }
 
+function containsRawMarkdown(text: string): boolean {
+  if (!text) return false
+  
+  // 1. Headers: line starting with "# " through "###### "
+  if (/^#+\s+\S+/m.test(text)) return true
+  
+  // 2. Bold or Italic: **bold**, *italic*, __bold__, _italic_
+  if (/\*\*[^*`]+\*\*/.test(text)) return true
+  if (/\*[^*`]+\*/.test(text)) return true
+  if (/__[^_`]+__/.test(text)) return true
+  if (/_[^_`]+_/.test(text)) return true
+  
+  // 3. Inline code: `code`
+  if (/`[^`\n]+`/.test(text)) return true
+  
+  // 4. Bullet lists: line starting with "- " or "* " (excluding horizontal rules)
+  if (/^\s*[-*]\s+\S+/m.test(text)) {
+    if (!/^\s*(?:-{3,}|\*{3,})\s*$/m.test(text)) {
+      return true
+    }
+  }
+  
+  // 5. Numbered lists: line starting with "1. ", "2. ", etc.
+  if (/^\s*\d+\.\s+\S+/m.test(text)) return true
+  
+  // 6. Blockquotes: line starting with "> "
+  if (/^\s*>\s+\S+/m.test(text)) return true
+  
+  // 7. Links: [text](url)
+  if (/\[[^\]\n]+\]\([^)\n]+\)/.test(text)) return true
+
+  // 8. Custom HTML-like tags from Flutter mobile clobber (e.g. <bold>, <code>, <italic>, <underline>, <link>)
+  if (/<(?:bold|code|italic|underline|link)>/i.test(text)) return true
+  if (/<\/(?:bold|code|italic|underline|link)>/i.test(text)) return true
+  
+  return false
+}
+
+function convertCustomTagsToMarkdown(text: string): string {
+  if (!text) return text
+  
+  let result = text
+  
+  // 1. Convert <bold>text</bold> to **text**
+  result = result.replace(/<bold>([\s\S]*?)<\/bold>/gi, '**$1**')
+  
+  // 2. Convert <italic>text</italic> to *text*
+  result = result.replace(/<italic>([\s\S]*?)<\/italic>/gi, '*$1*')
+  
+  // 3. Convert <code>text</code> to `text`
+  result = result.replace(/<code>([\s\S]*?)<\/code>/gi, '`$1`')
+  
+  // 4. Convert <underline>text</underline> to <u>text</u>
+  result = result.replace(/<underline>([\s\S]*?)<\/underline>/gi, '<u>$1</u>')
+  
+  // 5. Convert <link ... href="URL" ...>TEXT</link> to [TEXT](URL)
+  result = result.replace(/<link[^>]*href=["']([^"']*)["'][^>]*>([\s\S]*?)<\/link>/gi, '[$2]($1)')
+  
+  return result
+}
+
+
 
 export function NoteEditor({
   id,
@@ -122,6 +184,7 @@ export function NoteEditor({
   const saveSinceSnapshotRef = useRef(0)
   const [isLoading, setIsLoading] = useState(true)
   const ydoc = useMemo(() => getOrCreateYDoc(id), [id])
+  const repairedNotesRef = useRef<Set<string>>(new Set())
 
   // Store initial content in a ref to avoid re-triggering initialization if it changes
   const contentRef = useRef(content)
@@ -483,18 +546,55 @@ export function NoteEditor({
     editorRef.current = editor
   }, [editor])
 
-  // Seed initial rich-text content if the Yjs document is empty and we have stored content
+  // Seed initial rich-text content if the Yjs document is empty and we have stored content,
+  // or self-heal/repair the document if it contains raw markdown characters.
   useEffect(() => {
     if (!isLoading && editor && !editor.isDestroyed) {
       const fragment = ydoc.getXmlFragment('content')
-      if (fragment.length === 0 && contentRef.current) {
-        const contentValue = getEditorContentValue(contentRef.current)
+      const plainText = getPlainTextFromYDoc(id)
+      const shouldRepair = fragment.length > 0 && containsRawMarkdown(plainText) && !repairedNotesRef.current.has(id)
+
+      if (shouldRepair && plainText) {
+        repairedNotesRef.current.add(id)
+        // If the note needs repair (contains raw markdown/tags), parse the Yjs plain text directly!
+        try {
+          console.group('[NoteEditor] Self-healing repair triggered for note:', id)
+          const cleanedMarkdown = convertCustomTagsToMarkdown(plainText)
+          console.log('[NoteEditor] Translated mobile tags to standard Markdown:', cleanedMarkdown)
+          const parsedNode = (editor.storage as any).markdown.parser.parse(cleanedMarkdown)
+          editor.commands.setContent(parsedNode)
+          console.log('[NoteEditor] Note self-healing successfully completed!')
+          console.groupEnd()
+        } catch (err) {
+          console.error('[NoteEditor] Failed to parse raw Yjs markdown plain text during repair:', err)
+          console.groupEnd()
+        }
+      } else if (fragment.length === 0) {
+        // Normal seeding when Yjs doc is empty
+        const contentValue = getEditorContentValue(contentRef.current ?? null)
         if (contentValue) {
-          editor.commands.setContent(contentValue)
+          if (typeof contentValue === 'string') {
+            // Raw markdown or custom tags string detected: Use the editor's markdown engine to parse it to rich-text JSON
+            try {
+              console.group('[NoteEditor] Initial markdown content seeding for note:', id)
+              const cleanedMarkdown = convertCustomTagsToMarkdown(contentValue)
+              console.log('[NoteEditor] Translated raw markdown content:', cleanedMarkdown)
+              const parsedNode = (editor.storage as any).markdown.parser.parse(cleanedMarkdown)
+              editor.commands.setContent(parsedNode)
+              console.log('[NoteEditor] Markdown content successfully seeded!')
+              console.groupEnd()
+            } catch (err) {
+              console.error('[NoteEditor] Failed to parse raw markdown content:', err)
+              editor.commands.setContent(contentValue)
+              console.groupEnd()
+            }
+          } else {
+            editor.commands.setContent(contentValue)
+          }
         }
       }
     }
-  }, [isLoading, editor, ydoc])
+  }, [isLoading, editor, ydoc, id])
 
   // Cleanup on unmount
   useEffect(() => {

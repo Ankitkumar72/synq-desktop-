@@ -27,11 +27,54 @@ export function cloneNoteContent<T extends NoteContent>(content: T): T {
   return JSON.parse(JSON.stringify(content)) as T
 }
 
+export function cleanDoubleSerializedString(str: string): string {
+  let cleaned = str.trim()
+  
+  // 1. Keep parsing as long as it is double-wrapped with quotes and parses to a string
+  while (
+    (cleaned.startsWith('"') && cleaned.endsWith('"')) || 
+    (cleaned.startsWith("'") && cleaned.endsWith("'"))
+  ) {
+    try {
+      const parsed = JSON.parse(cleaned)
+      if (typeof parsed === 'string') {
+        cleaned = parsed.trim()
+      } else {
+        break
+      }
+    } catch {
+      // Fallback: manually strip outer quotes
+      cleaned = cleaned.slice(1, -1).trim()
+      break
+    }
+  }
+  
+  // 2. Unescape common JSON escape characters if any literal escape patterns are left
+  try {
+    if (cleaned.includes('\\')) {
+      const parsed = JSON.parse('"' + cleaned.replace(/"/g, '\\"') + '"')
+      if (typeof parsed === 'string') {
+        cleaned = parsed
+      }
+    }
+  } catch {
+    cleaned = cleaned
+      .replace(/\\n/g, '\n')
+      .replace(/\\"/g, '"')
+      .replace(/\\'/g, "'")
+      .replace(/\\\\/g, '\\')
+  }
+  
+  return cleaned
+}
+
 export function getEditorContentValue(content: NoteContent): JSONContent | string {
   if (content == null) return createEmptyNoteContent()
   if (typeof content === 'string') {
-    const parsed = parseStructuredContentFromString(content)
+    const cleaned = cleanDoubleSerializedString(content)
+    const parsed = parseStructuredContentFromString(cleaned)
     if (parsed) return parsed
+    return cleaned
   }
   return cloneNoteContent(content)
 }
@@ -68,9 +111,10 @@ export function createNoteContentFromText(text: string | null | undefined): JSON
 
 export function getPlainTextFromStoredContent(content: NoteContent): string {
   if (typeof content === 'string') {
-    const parsed = parseStructuredContentFromString(content)
+    const cleaned = cleanDoubleSerializedString(content)
+    const parsed = parseStructuredContentFromString(cleaned)
     if (parsed) return extractTextFromNode(parsed)
-    return content
+    return cleaned
   }
   if (!isStructuredNoteContent(content)) return ''
 
