@@ -463,6 +463,13 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
 
       try {
         if (session) {
+          // Force reset any stale persisted loading states
+          useTaskStore.setState({ isLoading: false, error: null })
+          useNotesStore.setState({ isLoading: false, error: null })
+          useEventStore.setState({ isLoading: false, error: null })
+          useProjectStore.setState({ isLoading: false, error: null })
+          useFolderStore.setState({ isLoading: false, error: null })
+
           currentUserIdRef.current = session.user.id
           useUserStore.getState().setUser(session.user)
           initSyncManager()

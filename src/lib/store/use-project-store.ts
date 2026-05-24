@@ -303,7 +303,13 @@ export const useProjectStore = create<ProjectState>()(
 
       clearStore: () => set({ projects: [], isLoading: false, error: null }),
     }),
-    { name: 'synq-projects' }
+    {
+      name: 'synq-projects',
+      partialize: (state) =>
+        Object.fromEntries(
+          Object.entries(state).filter(([key]) => !['isLoading', 'error'].includes(key))
+        ) as ProjectState,
+    }
   )
 )
 

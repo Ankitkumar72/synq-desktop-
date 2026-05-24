@@ -450,7 +450,13 @@ export const useTaskStore = create<TaskState>()(
 
       clearStore: () => set({ tasks: [], isLoading: false, error: null }),
     }),
-    { name: 'synq-tasks' }
+    {
+      name: 'synq-tasks',
+      partialize: (state) =>
+        Object.fromEntries(
+          Object.entries(state).filter(([key]) => !['isLoading', 'error'].includes(key))
+        ) as TaskState,
+    }
   )
 )
 

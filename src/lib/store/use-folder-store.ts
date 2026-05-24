@@ -242,7 +242,13 @@ export const useFolderStore = create<FolderState>()(
 
       clearStore: () => set({ folders: [], isLoading: false, error: null }),
     }),
-    { name: 'synq-folders' }
+    {
+      name: 'synq-folders',
+      partialize: (state) =>
+        Object.fromEntries(
+          Object.entries(state).filter(([key]) => !['isLoading', 'error'].includes(key))
+        ) as FolderState,
+    }
   )
 )
 

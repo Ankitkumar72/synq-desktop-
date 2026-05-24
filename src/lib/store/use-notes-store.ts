@@ -570,7 +570,13 @@ export const useNotesStore = create<NotesState>()(
         })
       }
     }),
-    { name: 'synq-notes' }
+    {
+      name: 'synq-notes',
+      partialize: (state) =>
+        Object.fromEntries(
+          Object.entries(state).filter(([key]) => !['isLoading', 'error'].includes(key))
+        ) as NotesState,
+    }
   )
 )
 

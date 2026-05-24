@@ -308,7 +308,13 @@ export const useEventStore = create<EventState>()(
 
       clearStore: () => set({ events: [] })
     }),
-    { name: 'synq-events' }
+    {
+      name: 'synq-events',
+      partialize: (state) =>
+        Object.fromEntries(
+          Object.entries(state).filter(([key]) => !['isLoading', 'error'].includes(key))
+        ) as EventState,
+    }
   )
 )
 
