@@ -37,6 +37,7 @@ export function sanitizeNote(note: Partial<Note>): Note {
     is_deleted: note.is_deleted ?? false,
     is_task: note.is_task ?? false,
     pinned: note.pinned ?? false,
+    folder_id: note.folder_id ?? undefined,
     updated_at: note.updated_at ?? new Date().toISOString(),
     created_at: note.created_at ?? new Date().toISOString(),
     field_versions: note.field_versions || {}
@@ -135,7 +136,7 @@ export const useNotesStore = create<NotesState>()(
             : `local-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
           
           const newFieldVersions: Record<string, string> = {}
-          const defaultFields = ['title', 'content', 'body', 'excerpt', 'pinned', 'category', 'priority', 'updated_at', 'created_at']
+          const defaultFields = ['title', 'content', 'body', 'excerpt', 'pinned', 'category', 'priority', 'folder_id', 'updated_at', 'created_at']
           
           defaultFields.forEach(key => {
             newFieldVersions[key] = timestamp

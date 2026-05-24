@@ -14,6 +14,7 @@ import {
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { useRouter } from "next/navigation"
 import { 
   Card as UICard, 
   CardContent as UICardContent, 
@@ -46,6 +47,7 @@ const COLOR_OPTIONS = [
 ]
 
 export default function ProjectsPage() {
+  const router = useRouter()
   const { projects, deleteProject, addProject, toggleFavorite } = useProjectStore()
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedStatus, setSelectedStatus] = useState<string[]>([])
@@ -308,7 +310,11 @@ export default function ProjectsPage() {
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
           {filteredProjects.map((project) => (
-            <UICard key={project.id} className="border-white/5 shadow-2xl hover:shadow-blue-500/5 hover:-translate-y-1 transition-all group cursor-pointer bg-[#141414] rounded-3xl overflow-hidden border-none outline-none relative">
+            <UICard 
+              key={project.id} 
+              onClick={() => router.push(`/folders/${project.id}`)}
+              className="border-white/5 shadow-2xl hover:shadow-blue-500/5 hover:-translate-y-1 transition-all group cursor-pointer bg-[#141414] rounded-3xl overflow-hidden border-none outline-none relative"
+            >
               <UICardHeader className="p-8">
                 <div className="flex items-start justify-between">
                   <div className={cn(

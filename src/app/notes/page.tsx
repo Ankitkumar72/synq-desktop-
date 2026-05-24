@@ -11,6 +11,7 @@ import { SyncStatusIndicator } from "@/components/notes/sync-status-indicator"
 import { AnimatePage } from "@/components/layout/animate-page"
 import { useNotesStore } from "@/lib/store/use-notes-store"
 import { useUIStore } from "@/lib/store/use-ui-store"
+import { useProjectStore } from "@/lib/store/use-project-store"
 import { Note } from "@/types"
 import { useSearchParams } from "next/navigation"
 import { Suspense } from "react"
@@ -62,6 +63,7 @@ function NoteSidebarItem({
 
 function NotesPageContent() {
   const { notes, selectedNoteId, setSelectedNoteId, addNote, updateNote, deleteNote, pinNote, updateNoteLocal } = useNotesStore()
+  const { projects, fetchProjects } = useProjectStore()
   const { isSidebarOpen } = useUIStore()
   const searchParams = useSearchParams()
   const urlNoteId = searchParams.get("id")
@@ -92,6 +94,10 @@ function NotesPageContent() {
       hasSyncedFromUrl.current = true
     }
   }, [searchParams, notes, selectedNoteId, setSelectedNoteId])
+
+  useEffect(() => {
+    fetchProjects()
+  }, [fetchProjects])
 
   // Sync URL with selectedNoteId using silent history updates
   useEffect(() => {
@@ -251,6 +257,46 @@ function NotesPageContent() {
                       </motion.div>
                     )}
                   </AnimatePresence>
+                </div>
+              )}
+
+              {/* Folders Section */}
+              {projects.length > 0 && (
+                <div className="flex flex-col mt-4">
+                  <div className="px-3 py-2 text-[10px] font-bold uppercase tracking-[0.1em] text-neutral-500 mb-2">
+                    Folders
+                  </div>
+                  {projects.map(folder => {
+                    const folderNotes = filteredNotes.filter(n => n.folder_id === folder.id)
+                    return (
+                      <div key={folder.id} className="flex flex-col mb-4">
+                        <div className="flex items-center gap-2 px-3 py-1.5 text-[12px] font-semibold text-neutral-400">
+                          <div className={cn("w-2 h-2 rounded-full", folder.color?.includes('bg-') ? folder.color.split(' ')[0] : 'bg-blue-500')} />
+                          <span className="truncate flex-1">{folder.name}</span>
+                          {folderNotes.length > 0 && (
+                            <span className="text-[10px] bg-neutral-800 text-neutral-500 px-1.5 py-0.5 rounded-md">
+                              {folderNotes.length}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex flex-col gap-0.5 ml-4 mt-0.5 border-l border-neutral-800/50 pl-2">
+                          {folderNotes.length === 0 ? (
+                            <div className="px-3 py-1 text-[11px] text-neutral-600 italic">Empty</div>
+                          ) : (
+                            folderNotes.map((note) => (
+                              <NoteSidebarItem
+                                key={`folder-${folder.id}-${note.id}`}
+                                note={note}
+                                isSelected={selectedNoteId === note.id}
+                                onClick={() => setSelectedNoteId(note.id)}
+                                onAction={handleNoteAction}
+                              />
+                            ))
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
               )}
 
