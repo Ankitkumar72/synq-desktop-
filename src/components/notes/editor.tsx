@@ -15,24 +15,12 @@ import { TableRow } from '@tiptap/extension-table-row'
 import { TableHeader } from '@tiptap/extension-table-header'
 import { TableCell } from '@tiptap/extension-table-cell'
 import * as Y from 'yjs'
-import {
-  Bold,
-  Italic,
-  List as ListIcon,
-  ListOrdered,
-  Quote,
-  Heading1,
-  Heading2,
-  Code,
-  Loader2
-} from "lucide-react"
+import { Loader2 } from "lucide-react"
 import Placeholder from '@tiptap/extension-placeholder'
 import { SlashCommand, suggestionConfig } from './slash-command'
 import { CalloutNode } from './callout-node'
 import { NoteBubbleMenu } from './bubble-menu'
 import { TableBubbleMenu } from './table-bubble-menu'
-import { Button } from "@/components/ui/button"
-import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useEffect, useRef, useCallback, useMemo, useState } from 'react'
 import { Editor } from '@tiptap/react'
@@ -63,45 +51,7 @@ import GlobalDragHandle from 'tiptap-extension-global-drag-handle'
 const lowlight = createLowlight(common)
 
 const SAVE_DEBOUNCE_MS = 800
-const SNAPSHOT_EVERY_N_SAVES = 20
 
-const MenuBar = ({ editor }: { editor: Editor | null }) => {
-  if (!editor) return null
-
-  const items = [
-    { icon: Bold, action: () => editor.chain().focus().toggleBold().run(), active: 'bold', label: 'Bold' },
-    { icon: Italic, action: () => editor.chain().focus().toggleItalic().run(), active: 'italic', label: 'Italic' },
-    { icon: Code, action: () => editor.chain().focus().toggleCode().run(), active: 'code', label: 'Code' },
-    { type: 'separator' },
-    { icon: Heading1, action: () => editor.chain().focus().toggleHeading({ level: 1 }).run(), active: 'heading', activeOptions: { level: 1 }, label: 'H1' },
-    { icon: Heading2, action: () => editor.chain().focus().toggleHeading({ level: 2 }).run(), active: 'heading', activeOptions: { level: 2 }, label: 'H2' },
-    { type: 'separator' },
-    { icon: ListIcon, action: () => editor.chain().focus().toggleBulletList().run(), active: 'bulletList', label: 'Bullet' },
-    { icon: ListOrdered, action: () => editor.chain().focus().toggleOrderedList().run(), active: 'orderedList', label: 'Ordered' },
-    { icon: Quote, action: () => editor.chain().focus().toggleBlockquote().run(), active: 'blockquote', label: 'Quote' },
-  ]
-
-  return (
-    <div className="flex items-center gap-0.5 transition-all duration-200">
-      {items.map((item, idx) => {
-        if (item.type === 'separator') return <Separator key={idx} orientation="vertical" className="h-4 mx-2 bg-white/[0.03]" />
-
-        const Icon = item.icon!
-        return (
-          <Button
-            key={idx}
-            variant="ghost"
-            size="sm"
-            onClick={item.action}
-            title={item.label}
-          >
-            <Icon className="w-3.5 h-3.5" />
-          </Button>
-        )
-      })}
-    </div>
-  )
-}
 
 function containsRawMarkdown(text: string): boolean {
   if (!text) return false
@@ -216,8 +166,7 @@ export function NoteEditor({
       const updateData = pendingBatch.length === 1
         ? pendingBatch[0]
         : Y.mergeUpdates(pendingBatch)
-      const includeSnapshot = (saveSinceSnapshotRef.current % SNAPSHOT_EVERY_N_SAVES) === 0
-      const snapshot = includeSnapshot ? Y.encodeStateAsUpdate(ydoc) : null
+      const snapshot = Y.encodeStateAsUpdate(ydoc)
       await saveYDocToSupabase(id, userId, {
         updateData,
         snapshot,
@@ -283,13 +232,18 @@ export function NoteEditor({
         if (!mounted) return
 
         // 2. Always merge remote Yjs state to avoid stale local IndexedDB snapshots after refresh.
+        // We use a robust 15-second timeout to accommodate cold starts on free-tier database instances.
         try {
-          const remoteUpdate = await withTimeout(loadYDocFromSupabase(id), 5000, 'loadYDocFromSupabase timeout')
+          const remoteUpdate = await withTimeout(loadYDocFromSupabase(id), 15000, 'loadYDocFromSupabase timeout')
           if (remoteUpdate && mounted) {
             applyRemoteUpdate(id, remoteUpdate)
           }
         } catch (err) {
-          console.warn('[NoteEditor] Failed to load remote Yjs state:', err)
+          const isTimeout = err instanceof Error && err.message.includes('timeout')
+          console.warn(
+            `[NoteEditor] Failed to load remote Yjs state${isTimeout ? ' (timed out — database could be waking up)' : ''}:`,
+            err
+          )
         }
 
         if (!mounted) return
@@ -299,7 +253,7 @@ export function NoteEditor({
           let cursor = getLocalLastSeq(id)
           const pageSize = 500
           for (let page = 0; page < 20; page++) {
-            const ops = await withTimeout(getNoteCrdtUpdates(id, cursor, pageSize), 5000, 'getNoteCrdtUpdates timeout')
+            const ops = await withTimeout(getNoteCrdtUpdates(id, cursor, pageSize), 15000, 'getNoteCrdtUpdates timeout')
             if (!ops.length) break
             for (const row of ops) {
               const update = toUint8Update(row.update_data)
@@ -314,7 +268,11 @@ export function NoteEditor({
             if (ops.length < pageSize) break
           }
         } catch (err) {
-          console.warn('[NoteEditor] Failed to replay oplog catch-up:', err)
+          const isTimeout = err instanceof Error && err.message.includes('timeout')
+          console.warn(
+            `[NoteEditor] Failed to replay oplog catch-up${isTimeout ? ' (timed out — database could be waking up)' : ''}:`,
+            err
+          )
         }
       } catch (err) {
         console.error('[NoteEditor] Fatal error during initialization:', err)
@@ -496,7 +454,7 @@ export function NoteEditor({
     },
     editorProps: {
       attributes: {
-        class: 'prose prose-invert max-w-none focus:outline-none min-h-[calc(100vh-300px)] pt-0 pb-32 text-[#E1E2E4] text-[15px] leading-[1.6] [&>*:first-child]:mt-0 font-sans selection:bg-[#4B7BFF]/30 selection:text-white prose-headings:font-semibold prose-headings:tracking-tight prose-headings:text-white prose-strong:text-white prose-blockquote:border-[#4B7BFF]/40 prose-blockquote:text-[#A1A3A7] prose-code:before:content-none prose-code:after:content-none [&_.is-empty::before]:text-neutral-600 [&_.is-empty::before]:content-[attr(data-placeholder)] [&_.is-empty::before]:float-left [&_.is-empty::before]:pointer-events-none [&_.is-empty::before]:h-0 [&_ul[data-type="taskList"]]:list-none [&_ul[data-type="taskList"]]:pl-0 [&_ul[data-type="taskList"]_li]:flex [&_ul[data-type="taskList"]_li]:items-start [&_ul[data-type="taskList"]_li]:gap-2.5 [&_ul[data-type="taskList"]_li_label]:flex [&_ul[data-type="taskList"]_li_label]:items-center [&_ul[data-type="taskList"]_li_label]:select-none [&_ul[data-type="taskList"]_li_div]:flex-1 [&_ul[data-type="taskList"]_input[type="checkbox"]]:w-4 [&_ul[data-type="taskList"]_input[type="checkbox"]]:h-4 [&_ul[data-type="taskList"]_input[type="checkbox"]]:rounded-md [&_ul[data-type="taskList"]_input[type="checkbox"]]:border-neutral-700 [&_ul[data-type="taskList"]_input[type="checkbox"]]:bg-neutral-900 [&_ul[data-type="taskList"]_input[type="checkbox"]]:accent-blue-500 [&_ul[data-type="taskList"]_li[data-checked="true"]_div]:line-through [&_ul[data-type="taskList"]_li[data-checked="true"]_div]:text-neutral-500',
+        class: 'prose prose-invert max-w-none focus:outline-none min-h-[calc(100vh-300px)] pt-2 pb-32 text-[#E1E2E4] text-[15px] leading-[1.6] [&>*:first-child]:mt-0 font-sans selection:bg-[#4B7BFF]/30 selection:text-white prose-headings:font-semibold prose-headings:tracking-tight prose-headings:text-white prose-strong:text-white prose-blockquote:border-[#4B7BFF]/40 prose-blockquote:text-[#A1A3A7] prose-code:before:content-none prose-code:after:content-none [&_.is-empty::before]:text-neutral-600 [&_.is-empty::before]:content-[attr(data-placeholder)] [&_.is-empty::before]:float-left [&_.is-empty::before]:pointer-events-none [&_.is-empty::before]:h-0 [&_ul[data-type="taskList"]]:list-none [&_ul[data-type="taskList"]]:pl-0 [&_ul[data-type="taskList"]_li]:flex [&_ul[data-type="taskList"]_li]:items-start [&_ul[data-type="taskList"]_li]:gap-2.5 [&_ul[data-type="taskList"]_li_label]:flex [&_ul[data-type="taskList"]_li_label]:items-center [&_ul[data-type="taskList"]_li_label]:select-none [&_ul[data-type="taskList"]_li_div]:flex-1 [&_ul[data-type="taskList"]_input[type="checkbox"]]:w-4 [&_ul[data-type="taskList"]_input[type="checkbox"]]:h-4 [&_ul[data-type="taskList"]_input[type="checkbox"]]:rounded-md [&_ul[data-type="taskList"]_input[type="checkbox"]]:border-neutral-700 [&_ul[data-type="taskList"]_input[type="checkbox"]]:bg-neutral-900 [&_ul[data-type="taskList"]_input[type="checkbox"]]:accent-blue-500 [&_ul[data-type="taskList"]_li[data-checked="true"]_div]:line-through [&_ul[data-type="taskList"]_li[data-checked="true"]_div]:text-neutral-500',
       },
       transformPastedHTML(html) {
         if (!html) return html
@@ -601,12 +559,45 @@ export function NoteEditor({
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current)
+      // Get the latest content from the editor synchronously BEFORE it is destroyed!
+      if (editorRef.current && !editorRef.current.isDestroyed && hasPendingLocalChangeRef.current) {
+        const contentVal = editorRef.current.getJSON()
+        const body = getPlainTextFromYDoc(id)
+        const excerpt = getExcerptFromYDoc(id)
+        
+        // Save to Supabase immediately using a synchronous capture of the editor state!
+        const userId = useUserStore.getState().user?.id
+        if (userId) {
+          const pendingBatch = pendingUpdatesRef.current
+          pendingUpdatesRef.current = []
+          hasPendingLocalChangeRef.current = false
+          
+          const updateData = pendingBatch.length === 1
+            ? pendingBatch[0]
+            : Y.mergeUpdates(pendingBatch)
+          
+          const snapshot = Y.encodeStateAsUpdate(ydoc)
+          void saveYDocToSupabase(id, userId, {
+            updateData,
+            snapshot,
+            content: contentVal,
+          })
+          
+          // Also update the local store synchronously so the UI has the correct value when switching notes
+          updateNoteLocal(id, { body, excerpt, content: contentVal, updated_at: new Date().toISOString() })
+        }
+      }
+
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current)
+        saveTimeoutRef.current = null
+      }
       clearActiveNoteActivity(id)
       setFocusedNoteId(null)
       setActiveEdit(id, false)
     }
-  }, [clearActiveNoteActivity, id, setFocusedNoteId])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id])
 
   if (isLoading) {
     return (
@@ -626,11 +617,6 @@ export function NoteEditor({
 
   return (
     <div className="flex flex-col h-full bg-transparent max-w-4xl mx-auto w-full group">
-      <div className="flex items-center justify-center sticky top-4 py-2 z-20 pointer-events-none">
-        <div className="pointer-events-auto opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-all duration-300 transform translate-y-2 group-hover:translate-y-0">
-          <MenuBar editor={editor} />
-        </div>
-      </div>
       <div className="flex-1 relative">
         <NoteBubbleMenu editor={editor} />
         <TableBubbleMenu editor={editor} />

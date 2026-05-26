@@ -206,7 +206,7 @@ export async function saveYDocToSupabase(noteId: string, userId: string, options
   const updatedAt = new Date().toISOString()
   const opId = options.opId || createOpId()
   const clientId = hlc.getNodeId()
-  const snapshot = options.snapshot === undefined ? null : options.snapshot
+  const snapshot = options.snapshot === undefined ? state : options.snapshot
   const content = options.content
 
   // Mark as locally modified to prevent echo from Realtime

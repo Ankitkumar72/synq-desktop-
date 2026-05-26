@@ -7,10 +7,6 @@ import {
   FileText,
   Search,
   Folder,
-  Layers,
-  BookOpen,
-  Tag,
-  Users,
   Trash2
 } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -85,11 +81,6 @@ export function LinearSidebar() {
         })}
 
         <div className="my-4 border-t border-[#2E2E2E]"></div>
-
-        <SidebarItem icon={<Layers className="w-4 h-4" />} label="Templates" />
-        <SidebarItem icon={<BookOpen className="w-4 h-4" />} label="Notebooks" />
-        <SidebarItem icon={<Tag className="w-4 h-4" />} label="Tags" />
-        <SidebarItem icon={<Users className="w-4 h-4" />} label="Shared" />
       </nav>
 
       {/* Bottom Actions */}
