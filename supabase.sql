@@ -107,6 +107,63 @@ CREATE TABLE notes (
   completed_at TIMESTAMPTZ,
   recurrence_rule JSONB,
   device_last_edited TEXT,
+  -- CRDT sync fields (Flutter sync engine)
+  hlc_timestamp TEXT,
+  deleted_hlc TEXT,
+  field_versions JSONB DEFAULT '{}',
+
+  -- Shared fields
+  tags TEXT[],
+  deleted_at TIMESTAMPTZ,
+  updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()),
+  created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now())
+);
+
+ALTER TABLE tasks ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users can manage own tasks"
+  ON tasks FOR ALL
+  USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
+
+-- ============ NOTES ============
+-- Shared between Flutter (mobile) and Web.
+-- Flutter uses: body, category, priority, is_task, CRDT fields, etc.
+-- Web uses: content (Tiptap/ProseMirror JSON in jsonb), pinned, excerpt.
+CREATE TABLE notes (
+  id UUID DEFAULT extensions.uuid_generate_v4() PRIMARY KEY,
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+
+  -- Web-specific fields
+  -- `content` stores structured Tiptap JSON for the desktop/web editor.
+  -- Legacy rows may still contain a JSON string until migrated.
+  content JSONB,
+  pinned BOOLEAN DEFAULT false,
+  excerpt TEXT,
+
+  -- Flutter-specific fields
+  body TEXT,
+  category TEXT DEFAULT 'personal',
+  priority TEXT DEFAULT 'none',
+  is_task BOOLEAN DEFAULT false,
+  is_all_day BOOLEAN DEFAULT false,
+  is_completed BOOLEAN DEFAULT false,
+  is_recurring_instance BOOLEAN DEFAULT false,
+  is_deleted BOOLEAN DEFAULT false,
+  attachments TEXT[] DEFAULT '{}',
+  links TEXT[] DEFAULT '{}',
+  subtasks JSONB DEFAULT '[]',
+  color INTEGER,
+  "order" INTEGER DEFAULT 0,
+  folder_id TEXT,
+  parent_recurring_id TEXT,
+  scheduled_time TIMESTAMPTZ,
+  end_time TIMESTAMPTZ,
+  reminder_time TIMESTAMPTZ,
+  original_scheduled_time TIMESTAMPTZ,
+  completed_at TIMESTAMPTZ,
+  recurrence_rule JSONB,
+  device_last_edited TEXT,
 
   -- CRDT sync fields (Flutter sync engine)
   hlc_timestamp TEXT,
@@ -138,6 +195,7 @@ CREATE TABLE folders (
   parent_id UUID,
   "order" INTEGER DEFAULT 0,
   is_deleted BOOLEAN DEFAULT false,
+  deleted_at TIMESTAMPTZ,
   hlc_timestamp TEXT,
   deleted_hlc TEXT,
   field_versions JSONB DEFAULT '{}',
@@ -150,6 +208,49 @@ CREATE POLICY "Users can manage own folders"
   ON folders FOR ALL
   USING (auth.uid() = user_id)
   WITH CHECK (auth.uid() = user_id);
+
+CREATE INDEX IF NOT EXISTS idx_folders_user_active ON folders(user_id) WHERE is_deleted = false;
+CREATE INDEX IF NOT EXISTS idx_folders_parent_id ON folders(parent_id);
+
+-- Recursive Soft-Delete Cascade safety net
+CREATE OR REPLACE FUNCTION cascade_folder_soft_delete()
+RETURNS TRIGGER AS $$
+DECLARE
+  v_deleted_at TIMESTAMPTZ;
+  v_deleted_hlc TEXT;
+BEGIN
+  IF NEW.is_deleted = true AND OLD.is_deleted = false THEN
+    v_deleted_at := COALESCE(NEW.deleted_at, NOW());
+    v_deleted_hlc := COALESCE(NEW.deleted_hlc, NEW.hlc_timestamp);
+
+    -- 1. Cascade soft-delete to immediate child folders.
+    -- This will naturally fire this same trigger recursively for descendants.
+    UPDATE folders
+    SET
+      is_deleted = true,
+      deleted_at = v_deleted_at,
+      deleted_hlc = v_deleted_hlc,
+      hlc_timestamp = NEW.hlc_timestamp,
+      updated_at = NOW()
+    WHERE parent_id = OLD.id AND is_deleted = false;
+
+    -- 2. Soft-delete all notes inside this folder.
+    UPDATE notes
+    SET
+      is_deleted = true,
+      deleted_at = v_deleted_at,
+      deleted_hlc = v_deleted_hlc,
+      hlc_timestamp = NEW.hlc_timestamp,
+      updated_at = NOW()
+    WHERE folder_id = OLD.id AND is_deleted = false;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE TRIGGER trigger_cascade_folder_soft_delete
+  BEFORE UPDATE ON folders
+  FOR EACH ROW EXECUTE FUNCTION cascade_folder_soft_delete();
 
 -- ============ EVENTS (Calendar) ============
 CREATE TABLE events (

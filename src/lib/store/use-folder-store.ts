@@ -177,11 +177,25 @@ export const useFolderStore = create<FolderState>()(
         const now = new Date().toISOString()
         const timestamp = hlc.increment()
 
+        // 1. Find all descendant folder IDs recursively
+        const descendantFolderIds = getDescendantFolderIds(get().folders, id)
+        const allFolderIds = [id, ...descendantFolderIds]
+
+        // 2. Dynamically import useNotesStore to prevent circular dependency
+        const notesStore = (await import('./use-notes-store')).useNotesStore
+        
+        // Find active notes in these folders
+        const activeNotes = notesStore.getState().notes.filter(
+          (n) => n.folder_id && allFolderIds.includes(n.folder_id) && !n.is_deleted
+        )
+
+        // 3. Optimistically update local folders state
         set((state) => ({
-          folders: state.folders.filter((f) => f.id !== id),
+          folders: state.folders.filter((f) => !allFolderIds.includes(f.id)),
         }))
 
-        const payload = {
+        // 4. Soft-delete the folders in db or queue
+        const folderPayload = {
           deleted_at: now,
           is_deleted: true,
           deleted_hlc: timestamp,
@@ -190,14 +204,38 @@ export const useFolderStore = create<FolderState>()(
         }
 
         if (getOnlineStatus()) {
-          const { error } = await supabase.from(TABLES.FOLDERS).update(payload).eq('id', id)
+          const { error } = await supabase
+            .from(TABLES.FOLDERS)
+            .update(folderPayload)
+            .in('id', allFolderIds)
           if (error) {
-            console.error('Error deleting folder:', error)
-            await enqueueOperation({ entityType: 'folder', entityId: id, operationType: 'update', payload, hlcTimestamp: timestamp })
+            console.error('Error deleting folders:', error)
+            for (const folderId of allFolderIds) {
+              await enqueueOperation({
+                entityType: 'folder',
+                entityId: folderId,
+                operationType: 'update',
+                payload: folderPayload,
+                hlcTimestamp: timestamp,
+              })
+            }
             triggerFlush()
           }
         } else {
-          await enqueueOperation({ entityType: 'folder', entityId: id, operationType: 'update', payload, hlcTimestamp: timestamp })
+          for (const folderId of allFolderIds) {
+            await enqueueOperation({
+              entityType: 'folder',
+              entityId: folderId,
+              operationType: 'update',
+              payload: folderPayload,
+              hlcTimestamp: timestamp,
+            })
+          }
+        }
+
+        // 5. Cascade soft-delete to all active notes in these folders
+        for (const note of activeNotes) {
+          await notesStore.getState().deleteNote(note.id)
         }
       },
 
@@ -251,6 +289,16 @@ export const useFolderStore = create<FolderState>()(
     }
   )
 )
+
+function getDescendantFolderIds(folders: Folder[], parentId: string): string[] {
+  const children = folders.filter((f) => f.parent_id === parentId)
+  const childIds = children.map((c) => c.id)
+  const descendantIds = [...childIds]
+  for (const childId of childIds) {
+    descendantIds.push(...getDescendantFolderIds(folders, childId))
+  }
+  return descendantIds
+}
 
 function mergeFolderList(local: Folder[], remote: Folder[], isComprehensive = false, includesDeleted = false): Folder[] {
   const remoteMap = new Map(remote.map((f) => [f.id, f]))
