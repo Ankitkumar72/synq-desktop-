@@ -58,7 +58,7 @@ export default function FolderPage() {
   }
 
   return (
-    <AnimatePage>
+    <AnimatePage className="h-full w-full overflow-y-auto custom-scrollbar">
       <div className="p-8 space-y-6 max-w-7xl mx-auto">
         <div className="flex items-center gap-4 mb-8">
           <Button 

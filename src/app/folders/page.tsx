@@ -97,7 +97,7 @@ export default function ProjectsPage() {
   })
 
   return (
-    <AnimatePage>
+    <AnimatePage className="h-full w-full overflow-y-auto custom-scrollbar">
       <div className="p-8 space-y-6 max-w-7xl mx-auto">
         <div className="flex items-center justify-between">
           <div className="flex flex-col gap-1">

@@ -194,10 +194,10 @@ function NotesPageContent() {
 
   return (
     <AnimatePage className="h-full">
-      <div className="flex h-full bg-neutral-950 text-neutral-300 font-sans selection:bg-neutral-700">
+      <div className="flex h-full bg-transparent text-neutral-300 font-sans selection:bg-neutral-700">
         {/* Sidebar */}
         <div className={cn(
-          "flex flex-col bg-neutral-950 border-r border-neutral-800/50 transition-all duration-200 ease-out overflow-hidden shrink-0",
+          "flex flex-col bg-white/[0.025] border-r border-[#2E2E2E] transition-all duration-200 ease-out overflow-hidden shrink-0",
           isSidebarOpen ? "w-64" : "w-0 border-r-0"
         )}>
           {/* Sidebar Header */}
@@ -345,7 +345,7 @@ function NotesPageContent() {
         </div>
 
         {/* Main Editor Area */}
-        <div className="flex-1 flex flex-col bg-neutral-950 overflow-hidden">
+        <div className="flex-1 flex flex-col bg-transparent overflow-hidden min-h-0">
           {!selectedNote ? (
             <div className="flex-1 flex flex-col items-center justify-center p-12 text-center">
               <div className="w-12 h-12 rounded-xl bg-neutral-900 border border-neutral-800 flex items-center justify-center mb-4">
@@ -365,7 +365,7 @@ function NotesPageContent() {
               </Button>
             </div>
           ) : (
-            <div className="flex-1 flex flex-col overflow-hidden">
+            <div className="flex-1 flex flex-col overflow-hidden min-h-0">
               {/* Clean Header */}
               <header className="h-12 border-b border-neutral-800/50 flex items-center justify-between px-6 shrink-0">
                 <div className="flex items-center gap-3">
@@ -384,7 +384,7 @@ function NotesPageContent() {
               </header>
 
               {/* Editor Content */}
-              <div className="flex-1 overflow-y-auto overflow-x-hidden">
+              <div className="flex-1 overflow-y-auto overflow-x-hidden min-h-0">
                 <div className="max-w-3xl mx-auto w-full px-8 md:px-12 pt-10 pb-32">
                   <input
                     type="text"

@@ -66,8 +66,10 @@ export function LayoutContent({ children }: { children: React.ReactNode }) {
     <div className="flex h-screen bg-sidebar overflow-hidden select-none">
       <LinearSidebar />
       <div className="flex-1 flex flex-col min-w-0 relative h-full overflow-hidden">
-        <main className="flex-1 overflow-hidden bg-background flex flex-col">
-          {children}
+        <main className="flex-1 p-2 h-full overflow-hidden bg-sidebar flex flex-col min-h-0">
+          <div className="flex-1 h-full w-full bg-background border border-border/80 rounded-[12px] overflow-clip flex flex-col min-h-0">
+            {children}
+          </div>
         </main>
       </div>
       <SettingsModal />

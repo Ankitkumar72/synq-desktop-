@@ -33,7 +33,7 @@ export function LinearSidebar() {
   const initials = getUserInitials(user)
 
   return (
-    <aside className="w-[240px] bg-[#090909] border-r border-[#2E2E2E] flex flex-col p-3 shrink-0 relative z-40">
+    <aside className="w-[240px] bg-[#090909] flex flex-col p-3 shrink-0 relative z-40">
 
       {/* User Profile */}
       <div className="flex items-center gap-3 mb-4 p-2">
@@ -79,12 +79,10 @@ export function LinearSidebar() {
             </Link>
           )
         })}
-
-        <div className="my-4 border-t border-[#2E2E2E]"></div>
       </nav>
 
       {/* Bottom Actions */}
-      <div className="pt-4 border-t border-[#2E2E2E] space-y-1">
+      <div className="pt-2 space-y-1">
         <Link href="/trash">
           <div className={cn(
             "flex items-center gap-3 px-4 py-2 rounded-lg cursor-pointer transition-colors mb-1",
@@ -105,22 +103,4 @@ export function LinearSidebar() {
       </div>
     </aside>
   )
-}
-
-function SidebarItem({ icon, label, href, isActive }: { icon: React.ReactNode; label: string; href?: string; isActive?: boolean }) {
-  const content = (
-    <div className={cn(
-      "flex items-center gap-3 px-4 py-2 rounded-lg cursor-pointer transition-colors",
-      isActive ? "bg-[#1F1F1F] text-white" : "text-[#999999] hover:bg-[#1F1F1F] hover:text-white"
-    )}>
-      <span className="w-4 h-4 flex items-center justify-center">{icon}</span>
-      <span className="text-[13px] font-medium">{label}</span>
-    </div>
-  )
-
-  if (href) {
-    return <Link href={href}>{content}</Link>
-  }
-
-  return content
-}
+}

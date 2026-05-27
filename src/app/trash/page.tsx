@@ -185,13 +185,13 @@ export default function TrashPage() {
   }
 
   return (
-    <AnimatePage className="h-full bg-[#030303] flex flex-col font-sans overflow-hidden">
+    <AnimatePage className="h-full bg-transparent flex flex-col font-sans overflow-hidden min-h-0">
       {/* Subtle Background Glow */}
       <div className="absolute inset-0 pointer-events-none">
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-[300px] bg-gradient-to-b from-white/[0.01] to-transparent" />
       </div>
 
-      <header className="relative z-10 py-10 border-b border-white/[0.04] bg-[#030303]/80 backdrop-blur-md">
+      <header className="relative z-10 py-10 border-b border-white/[0.04] bg-transparent backdrop-blur-md">
         <div className="max-w-5xl mx-auto px-10 flex items-center justify-between">
           <div className="space-y-2">
             <h1 className="text-4xl font-semibold text-white tracking-tight">Trash</h1>
@@ -234,7 +234,7 @@ export default function TrashPage() {
         </div>
       </header>
 
-      <main className="relative z-10 flex-1 overflow-auto custom-scrollbar py-12">
+      <main className="relative z-10 flex-1 overflow-auto custom-scrollbar py-12 min-h-0">
         <div className="max-w-5xl mx-auto px-10">
           <AnimatePresence mode="wait">
             {currentItems.length === 0 ? (

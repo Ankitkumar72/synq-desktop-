@@ -233,7 +233,7 @@ export default function DashboardPage() {
         variants={containerVariants}
         initial="hidden"
         animate="visible"
-        className="flex-1 flex flex-col p-8 overflow-y-auto no-scrollbar bg-[#101011]"
+        className="flex-1 flex flex-col p-8 overflow-y-auto no-scrollbar bg-transparent"
       >
 
         {/* Header Area */}

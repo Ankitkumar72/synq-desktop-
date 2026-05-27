@@ -116,8 +116,8 @@ export default function CalendarPage() {
 
   return (
     <AnimatePage className="h-full w-full">
-      <div className="flex flex-1 h-full bg-[#0A0A0A] text-[#f2f2F2] overflow-hidden font-sans selection:bg-blue-500/30">
-        <aside className="w-72 border-r border-white/5 flex flex-col pt-6 px-4 bg-[#0e0e0e] shrink-0 z-10">
+      <div className="flex flex-1 h-full bg-transparent text-[#f2f2F2] overflow-hidden font-sans selection:bg-blue-500/30">
+        <aside className="w-72 border-r border-white/5 flex flex-col pt-6 px-4 bg-white/[0.015] shrink-0 z-10">
           <div className="px-2 mb-8 flex justify-center">
             <QuickCreateModal
               defaultType="event"
@@ -181,7 +181,7 @@ export default function CalendarPage() {
           </div>
         </aside>
 
-        <main className="flex-1 flex flex-col h-full bg-[#0A0A0A] relative">
+        <main className="flex-1 flex flex-col h-full bg-transparent relative min-h-0">
           <header className="h-16 border-b border-white/5 flex items-center px-10 justify-between bg-background/50 backdrop-blur-xl z-20 shrink-0">
             <div className="flex items-center gap-10">
               <div className="flex items-center gap-4">
@@ -253,7 +253,7 @@ export default function CalendarPage() {
             </div>
           </header>
 
-          <div className="flex-1 flex flex-col overflow-hidden">
+          <div className="flex-1 flex flex-col overflow-hidden min-h-0">
             {view === 'month' && (
               <MonthView
                 currentMonth={currentDate}
