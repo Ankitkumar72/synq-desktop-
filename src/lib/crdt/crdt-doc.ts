@@ -13,13 +13,17 @@ import * as Y from 'yjs'
 import { IndexeddbPersistence } from 'y-indexeddb'
 
 const IDB_PREFIX = 'synq-ydoc-'
+const MAX_CACHED_DOCS = 20
 
 // Cache of active Y.Doc instances (one per note)
 const docCache = new Map<string, Y.Doc>()
 const persistenceCache = new Map<string, IndexeddbPersistence>()
+const docRefCount = new Map<string, number>()
+const releaseTimers = new Map<string, NodeJS.Timeout>()
 
 // Track which docs have been modified locally (to avoid echo loops)
 const locallyModifiedDocs = new Set<string>()
+const modifiedTimers = new Map<string, NodeJS.Timeout>()
 // Suppress remote-to-ydoc updates while the user is actively editing
 const activeEditDocs = new Set<string>()
 
@@ -38,7 +42,51 @@ export function getOrCreateYDoc(noteId: string): Y.Doc {
   const persistence = new IndexeddbPersistence(`${IDB_PREFIX}${noteId}`, ydoc)
   persistenceCache.set(noteId, persistence)
 
+  // Evict idle docs to prevent unbounded memory growth in long sessions
+  evictIdleDocs()
+
   return ydoc
+}
+
+/**
+ * Acquire a Y.Doc, incrementing its reference count.
+ * Cancels any scheduled release/destruction timer.
+ */
+export function acquireYDoc(noteId: string): Y.Doc {
+  const timer = releaseTimers.get(noteId)
+  if (timer) {
+    clearTimeout(timer)
+    releaseTimers.delete(noteId)
+  }
+
+  const currentCount = docRefCount.get(noteId) || 0
+  docRefCount.set(noteId, currentCount + 1)
+
+  return getOrCreateYDoc(noteId)
+}
+
+/**
+ * Release a Y.Doc reference.
+ * If the reference count drops to 0, schedules destruction after a 5-second delay
+ * to allow quick transitions back to the same note.
+ */
+export function releaseYDoc(noteId: string): void {
+  const currentCount = docRefCount.get(noteId) || 0
+  const nextCount = Math.max(0, currentCount - 1)
+
+  if (nextCount === 0) {
+    docRefCount.delete(noteId)
+    const existing = releaseTimers.get(noteId)
+    if (existing) clearTimeout(existing)
+
+    releaseTimers.set(noteId, setTimeout(() => {
+      releaseTimers.delete(noteId)
+      destroyYDoc(noteId)
+      console.log(`[CRDTDoc] Reference count reached 0 for ${noteId.slice(0, 8)}… — destroyed idle doc`)
+    }, 5000))
+  } else {
+    docRefCount.set(noteId, nextCount)
+  }
 }
 
 /**
@@ -164,11 +212,7 @@ export function applyMobileBodyUpdate(noteId: string, newBody: string): void {
     return
   }
 
-  // Don't apply if we just wrote this body ourselves (echo prevention)
-  if (locallyModifiedDocs.has(noteId)) {
-    locallyModifiedDocs.delete(noteId)
-    return
-  }
+
 
   const ydoc = getOrCreateYDoc(noteId)
   const fragment = ydoc.getXmlFragment('content')
@@ -196,8 +240,13 @@ export function applyMobileBodyUpdate(noteId: string, newBody: string): void {
  */
 export function markLocallyModified(noteId: string): void {
   locallyModifiedDocs.add(noteId)
-  // Auto-clear after 5 seconds as a safety net
-  setTimeout(() => locallyModifiedDocs.delete(noteId), 5000)
+  // Debounce: clear any existing timer for this note, then set a new one
+  const existing = modifiedTimers.get(noteId)
+  if (existing) clearTimeout(existing)
+  modifiedTimers.set(noteId, setTimeout(() => {
+    locallyModifiedDocs.delete(noteId)
+    modifiedTimers.delete(noteId)
+  }, 5000))
 }
 
 /**
@@ -278,16 +327,57 @@ export function destroyYDoc(noteId: string): void {
     persistenceCache.delete(noteId)
   }
 
+  docRefCount.delete(noteId)
+  const releaseTimer = releaseTimers.get(noteId)
+  if (releaseTimer) {
+    clearTimeout(releaseTimer)
+    releaseTimers.delete(noteId)
+  }
+
   locallyModifiedDocs.delete(noteId)
   activeEditDocs.delete(noteId)
+
+  const timer = modifiedTimers.get(noteId)
+  if (timer) {
+    clearTimeout(timer)
+    modifiedTimers.delete(noteId)
+  }
 }
 
 /**
  * Destroy all docs (cleanup on sign-out).
  */
 export function destroyAllYDocs(): void {
+  // Clear all modified timers first
+  for (const timer of modifiedTimers.values()) {
+    clearTimeout(timer)
+  }
+  modifiedTimers.clear()
+
+  // Clear all release timers
+  for (const timer of releaseTimers.values()) {
+    clearTimeout(timer)
+  }
+  releaseTimers.clear()
+  docRefCount.clear()
+
   for (const [noteId] of docCache) {
     destroyYDoc(noteId)
+  }
+}
+
+/**
+ * Evict idle Y.Docs when the cache exceeds MAX_CACHED_DOCS.
+ * Skips docs that are actively being edited.
+ */
+function evictIdleDocs(): void {
+  if (docCache.size <= MAX_CACHED_DOCS) return
+  const toEvict = docCache.size - MAX_CACHED_DOCS
+  let evicted = 0
+  for (const [noteId] of docCache) {
+    if (activeEditDocs.has(noteId)) continue
+    destroyYDoc(noteId)
+    if (++evicted >= toEvict) break
   }
 }
 

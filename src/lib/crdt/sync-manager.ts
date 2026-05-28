@@ -29,6 +29,8 @@ let isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true
 let flushTimer: ReturnType<typeof setTimeout> | null = null
 
 let isInitialized = false
+let isFlushing = false
+let needsFlushAgain = false
 
 // Listeners for queue depth changes
 const queueListeners = new Set<(depth: number) => void>()
@@ -67,6 +69,8 @@ export function destroySyncManager(): void {
 
   
   isInitialized = false
+  isFlushing = false
+  needsFlushAgain = false
   queueListeners.clear()
   console.log('[SyncManager] Destroyed')
 }
@@ -97,34 +101,49 @@ function scheduleFlush(delayMs: number = 1000): void {
   }, delayMs)
 }
 
+
 /**
  * Execute the queue flush.
  */
 async function performFlush(): Promise<void> {
   if (!isOnline) return
+  if (isFlushing) {
+    needsFlushAgain = true
+    return
+  }
+  isFlushing = true
+  needsFlushAgain = false
 
-  const [crudDepth, crdtDepth] = await Promise.all([
-    getQueueDepth(),
-    getQueuedNoteCrdtDepth(),
-  ])
-  if (crudDepth + crdtDepth === 0) return
+  try {
+    do {
+      needsFlushAgain = false
+      const [crudDepth, crdtDepth] = await Promise.all([
+        getQueueDepth(),
+        getQueuedNoteCrdtDepth(),
+      ])
+      if (crudDepth + crdtDepth === 0) break
 
-  const [crudResult, crdtResult] = await Promise.all([
-    flushQueue(executeOperation),
-    flushQueuedNoteCrdtUpdates(),
-  ])
+      const [crudResult, crdtResult] = await Promise.all([
+        flushQueue(executeOperation),
+        flushQueuedNoteCrdtUpdates(),
+      ])
 
-  // Notify listeners of new queue depth
-  const [newCrudDepth, newCrdtDepth] = await Promise.all([
-    getQueueDepth(),
-    getQueuedNoteCrdtDepth(),
-  ])
-  const newDepth = newCrudDepth + newCrdtDepth
-  notifyQueueListeners(newDepth)
+      // Notify listeners of new queue depth
+      const [newCrudDepth, newCrdtDepth] = await Promise.all([
+        getQueueDepth(),
+        getQueuedNoteCrdtDepth(),
+      ])
+      const newDepth = newCrudDepth + newCrdtDepth
+      notifyQueueListeners(newDepth)
 
-  // If there were failures, schedule a retry with backoff
-  if ((crudResult.failed + crdtResult.failed) > 0) {
-    scheduleFlush(RETRY_BACKOFF_MS)
+      // If there were failures, schedule a retry with backoff
+      if ((crudResult.failed + crdtResult.failed) > 0) {
+        scheduleFlush(RETRY_BACKOFF_MS)
+        break // Stop looping on failure to respect backoff delay
+      }
+    } while (needsFlushAgain)
+  } finally {
+    isFlushing = false
   }
 }
 

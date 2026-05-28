@@ -377,16 +377,22 @@
     }
   }
 
-  /* Inline code styling */
+  /* Inline code styling (Shortcut keycaps) */
+  .ProseMirror :not(pre) > code,
+  .prose :not(pre) > code,
   :not(pre) > code {
-    background-color: rgba(75, 123, 255, 0.08);
-    color: #7ba4ff;
-    padding: 0.15rem 0.45rem;
-    border-radius: 5px;
-    font-size: 0.87em;
-    font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
-    font-weight: 500;
-    border: 1px solid rgba(75, 123, 255, 0.1);
+    background-color: rgba(46, 170, 220, 0.1) !important;
+    color: #2eaadc !important;
+    border: 1px solid rgba(46, 170, 220, 0.25) !important;
+    padding: 0.15rem 0.4rem !important;
+    border-radius: 6px !important;
+    font-size: 0.85em !important;
+    font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace !important;
+    font-weight: 600 !important;
+    box-shadow: 0 1.5px 0 rgba(0, 0, 0, 0.3) !important;
+    display: inline-block !important;
+    line-height: 1.4 !important;
+    vertical-align: middle !important;
   }
 
   /* Horizontal rule */
@@ -445,7 +451,7 @@
 
   /* Let paragraphs inherit color from their parent or inline styles */
   p {
-    color: #c8c9cb;
+    color: inherit;
   }
 
   /* Inline styles from paste should win over defaults */

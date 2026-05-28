@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { NoteEditor } from "@/components/notes/editor"
 import { SyncStatusIndicator } from "@/components/notes/sync-status-indicator"
+import { ActivePresenceAvatars } from "@/components/notes/active-presence"
 import { AnimatePage } from "@/components/layout/animate-page"
 import { useNotesStore } from "@/lib/store/use-notes-store"
 import { useUIStore } from "@/lib/store/use-ui-store"
@@ -375,6 +376,7 @@ function NotesPageContent() {
                 </div>
 
                 <div className="flex items-center gap-4">
+                  <ActivePresenceAvatars noteId={selectedNote.id} />
                   <SyncStatusIndicator />
                   <div className="flex items-center gap-1.5 text-[11px] text-neutral-600 font-mono">
                     <Clock className="w-3 h-3" />
