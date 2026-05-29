@@ -435,6 +435,7 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
   const startPollFallback = useCallback(() => {
     if (pollTimerRef.current) clearInterval(pollTimerRef.current)
     pollTimerRef.current = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) return // Pause in background
       const now = Date.now()
       if (realtimeConnectedRef.current) {
         if ((now - lastPollAtRef.current) < POLL_INTERVAL_REALTIME_UP) return
@@ -447,6 +448,7 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
   const startHealthCheck = useCallback(() => {
     if (healthCheckTimerRef.current) clearInterval(healthCheckTimerRef.current)
     healthCheckTimerRef.current = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) return // Pause in background
       if (!currentUserIdRef.current || isSubscribingRef.current) return
       const timeSinceLastAttempt = Date.now() - lastSubscribeAttemptRef.current
       if (timeSinceLastAttempt < HEALTH_CHECK_GRACE_MS) return
@@ -541,9 +543,22 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
       }
     })
 
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        setTimeout(() => {
+          if (document.visibilityState === 'visible' && !realtimeConnectedRef.current && currentUserIdRef.current) {
+            console.log('[Realtime] Tab active and disconnected. Lazy reconnecting...')
+            subscribeToRealtime()
+          }
+        }, 500)
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
     return () => {
       mounted = false
       subscription.unsubscribe()
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
       teardownRealtime()
       destroySyncManager()
       if (pollTimerRef.current) clearInterval(pollTimerRef.current)

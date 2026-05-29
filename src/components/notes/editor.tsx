@@ -378,6 +378,8 @@ export function NoteEditor({
   const ydoc = useMemo(() => acquireYDoc(id), [id])
   const repairedNotesRef = useRef<Set<string>>(new Set())
   const initGenerationRef = useRef(0)
+  const updatesSinceSnapshotRef = useRef(0)
+  const lastSnapshotTimeRef = useRef(Date.now())
 
   // Pair acquireYDoc with releaseYDoc during lifecycle
   useEffect(() => {
@@ -397,7 +399,7 @@ export function NoteEditor({
     onChangeRef.current = onChange
   }, [onChange])
 
-  const persistNow = useCallback(async (broadcast: boolean) => {
+  const persistNow = useCallback(async (broadcast: boolean, forceSnapshot = false) => {
     const userId = useUserStore.getState().user?.id
     if (!userId || isSavingRef.current) return
     if (pendingUpdatesRef.current.length === 0 && !hasPendingLocalChangeRef.current) return
@@ -418,11 +420,26 @@ export function NoteEditor({
     updateNoteLocal(id, { body, excerpt, content: contentVal || undefined, updated_at: now })
     onChangeRef.current?.({ content: contentVal, body, excerpt })
 
+    // Compaction throttling: only write snapshot when threshold met or forced
+    const nowTime = Date.now()
+    updatesSinceSnapshotRef.current += pendingBatch.length
+    const shouldSnapshot =
+      forceSnapshot ||
+      updatesSinceSnapshotRef.current >= 50 ||
+      (nowTime - lastSnapshotTimeRef.current) >= 5 * 60 * 1000 ||
+      lastSnapshotTimeRef.current === 0
+
+    const snapshot = shouldSnapshot ? Y.encodeStateAsUpdate(ydoc) : null
+
+    if (shouldSnapshot) {
+      updatesSinceSnapshotRef.current = 0
+      lastSnapshotTimeRef.current = nowTime
+    }
+
     try {
       const updateData = pendingBatch.length === 1
         ? pendingBatch[0]
         : Y.mergeUpdates(pendingBatch)
-      const snapshot = Y.encodeStateAsUpdate(ydoc)
       await saveYDocToSupabase(id, userId, {
         updateData,
         snapshot,
@@ -437,7 +454,7 @@ export function NoteEditor({
       if (retryTimeoutRef.current) clearTimeout(retryTimeoutRef.current)
       retryTimeoutRef.current = setTimeout(() => {
         retryTimeoutRef.current = null
-        void persistNow(broadcast)
+        void persistNow(broadcast, forceSnapshot)
       }, RETRY_DELAY_MS)
       return
     } finally {
@@ -545,11 +562,15 @@ export function NoteEditor({
 
         // 2. Always merge remote Yjs state to avoid stale local IndexedDB snapshots after refresh.
         // We use a robust 15-second timeout to accommodate cold starts on free-tier database instances.
+        let remoteSeq = 0
         try {
-          const remoteUpdate = await withTimeout(loadYDocFromSupabase(id), 15000, 'loadYDocFromSupabase timeout')
+          const remoteDoc = await withTimeout(loadYDocFromSupabase(id), 15000, 'loadYDocFromSupabase timeout')
           if (generation !== initGenerationRef.current) return
-          if (remoteUpdate) {
-            applyRemoteUpdate(id, remoteUpdate)
+          if (remoteDoc) {
+            if (remoteDoc.state) {
+              applyRemoteUpdate(id, remoteDoc.state)
+            }
+            remoteSeq = remoteDoc.lastSeq
           }
         } catch (err) {
           const isTimeout = err instanceof Error && err.message.includes('timeout')
@@ -564,6 +585,19 @@ export function NoteEditor({
         // 2.5 Replay missing incremental ops after local cursor.
         try {
           let cursor = getLocalLastSeq(id)
+          
+          // Cold boot / first load optimization: jump the sequence cursor directly to matching snapshot lastSeq
+          // to completely avoid replaying all historical updates since 0!
+          if (cursor === 0 && remoteSeq > 0) {
+            cursor = remoteSeq
+            setLocalLastSeq(id, cursor)
+            console.log(`[NoteEditor] Race-free cold boot cursor jump to snapshot seq: ${cursor}`)
+          } else if (remoteSeq > cursor) {
+            // Keep local cursor at least as high as the loaded snapshot sequence to maintain consistency
+            cursor = remoteSeq
+            setLocalLastSeq(id, cursor)
+          }
+
           const pageSize = 500
           for (let page = 0; page < 20; page++) {
             if (generation !== initGenerationRef.current) return
@@ -691,7 +725,7 @@ export function NoteEditor({
         }
 
         // Fire off the async save too, in case the browser allows it (e.g. pagehide)
-        void persistNow(false)
+        void persistNow(false, true)
       }
     }
 
@@ -818,7 +852,7 @@ export function NoteEditor({
       class: 'max-w-none focus:outline-none min-h-[calc(100vh-300px)] pt-2 pb-32 text-[#F2F2F2] text-[15px] leading-[1.6] font-sans antialiased selection:bg-[#4B7BFF]/30 selection:text-white [&>*]:my-3 [&>*:first-child]:mt-0 [&>h1]:text-[28px] [&>h1]:font-bold [&>h1]:tracking-tight [&>h1]:text-white [&>h1]:mt-6 [&>h1]:mb-2 [&>h2]:text-[22px] [&>h2]:font-semibold [&>h2]:tracking-tight [&>h2]:text-white [&>h2]:mt-5 [&>h2]:mb-2 [&>h3]:text-[18px] [&>h3]:font-medium [&>h3]:tracking-tight [&>h3]:text-white [&>h3]:mt-4 [&>h3]:mb-1.5 [&>p]:my-1.5 [&>p]:leading-[1.65] [&>blockquote]:border-l-2 [&>blockquote]:border-[#4B7BFF]/40 [&>blockquote]:pl-4 [&>blockquote]:text-[#A1A3A7] [&>blockquote]:italic [&>blockquote]:my-4 [&>pre]:bg-[#1a1a1e] [&>pre]:border [&>pre]:border-white/5 [&>pre]:p-4 [&>pre]:rounded-lg [&>pre]:my-4 [&>ul]:list-disc [&>ul]:pl-5 [&>ul]:my-2 [&>ol]:list-decimal [&>ol]:pl-5 [&>ol]:my-2 [&_li]:my-0.5 [&_code]:before:content-none [&_code]:after:content-none [&_.is-empty::before]:text-[#8A8F98] [&_.is-empty::before]:content-[attr(data-placeholder)] [&_.is-empty::before]:float-left [&_.is-empty::before]:pointer-events-none [&_.is-empty::before]:h-0 [&_ul[data-type="taskList"]]:list-none [&_ul[data-type="taskList"]]:pl-0 [&_ul[data-type="taskList"]_li]:flex [&_ul[data-type="taskList"]_li]:items-start [&_ul[data-type="taskList"]_li]:gap-2.5 [&_ul[data-type="taskList"]_li_label]:flex [&_ul[data-type="taskList"]_li_label]:items-center [&_ul[data-type="taskList"]_li_label]:select-none [&_ul[data-type="taskList"]_li_div]:flex-1 [&_ul[data-type="taskList"]_input[type="checkbox"]]:w-4 [&_ul[data-type="taskList"]_input[type="checkbox"]]:h-4 [&_ul[data-type="taskList"]_input[type="checkbox"]]:rounded-md [&_ul[data-type="taskList"]_input[type="checkbox"]]:border-neutral-700 [&_ul[data-type="taskList"]_input[type="checkbox"]]:bg-neutral-900 [&_ul[data-type="taskList"]_input[type="checkbox"]]:accent-blue-500 [&_ul[data-type="taskList"]_li[data-checked="true"]_div]:line-through [&_ul[data-type="taskList"]_li[data-checked="true"]_div]:text-neutral-500',
     },
     // Prevent huge image uploads (Limit base64 footprint in DB)
-    handlePaste(view: unknown, event: ClipboardEvent, _slice: unknown) {
+    handlePaste(view: unknown, event: ClipboardEvent) {
       const items = event.clipboardData?.items
       if (items) {
         for (const item of Array.from(items)) {
@@ -1002,7 +1036,7 @@ export function NoteEditor({
         saveTimeoutRef.current = null
       }
 
-      void persistNow(true)
+      void persistNow(true, true)
     },
     editorProps,
   })
@@ -1016,19 +1050,28 @@ export function NoteEditor({
   // or self-heal/repair the document if it contains raw markdown characters.
   useEffect(() => {
     if (!isLoading && editor && !editor.isDestroyed) {
-      const fragment = ydoc.getXmlFragment('content')
+      let fragmentLength = 0
+      let isPlain = true
+      let isYjsCorrupted = false
+
       const plainText = getPlainTextFromYDoc(id)
       const contentValue = getEditorContentValue(contentRef.current ?? null)
-      let isYjsCorrupted = false
-      if (fragment.length > 0 && contentValue && typeof contentValue === 'object') {
-        const jsonStr = JSON.stringify(contentValue)
-        // If Yjs plain text is extremely short but the server JSON is large and structured
-        if (plainText.length < 50 && jsonStr.length > 500) {
-          isYjsCorrupted = true
-        }
-      }
 
-      const isPlain = isFlatPlainTextFragment(fragment)
+      ydoc.transact(() => {
+        const fragment = ydoc.getXmlFragment('content')
+        fragmentLength = fragment.length
+
+        if (fragmentLength > 0 && contentValue && typeof contentValue === 'object') {
+          const jsonStr = JSON.stringify(contentValue)
+          // If Yjs plain text is extremely short but the server JSON is large and structured
+          if (plainText.length < 50 && jsonStr.length > 500) {
+            isYjsCorrupted = true
+          }
+        }
+
+        isPlain = isFlatPlainTextFragment(fragment)
+      })
+
       const hasFlutter = containsFlutterTags(plainText)
       const hasRawMarkdown = containsRawMarkdown(plainText)
       const repRef = repairedNotesRef.current.has(id)
@@ -1036,7 +1079,7 @@ export function NoteEditor({
       if (__DEV__) {
         console.group('[NoteEditor Auto-Repair Check]')
         console.log('Note ID:', id)
-        console.log('Fragment length:', fragment.length)
+        console.log('Fragment length:', fragmentLength)
         console.log('Is flat plain-text:', isPlain)
         console.log('Contains Flutter tags:', hasFlutter)
         console.log('Contains raw Markdown:', hasRawMarkdown)
@@ -1044,7 +1087,7 @@ export function NoteEditor({
         console.groupEnd()
       }
 
-      const shouldRepair = fragment.length > 0 && (
+      const shouldRepair = fragmentLength > 0 && (
         hasFlutter ||
         (isPlain && hasRawMarkdown)
       ) && !repRef
@@ -1065,12 +1108,15 @@ export function NoteEditor({
           console.error('[NoteEditor] Failed to parse raw Yjs markdown plain text during repair:', err)
           if (__DEV__) console.groupEnd()
         }
-      } else if (fragment.length === 0 || isYjsCorrupted) {
+      } else if (fragmentLength === 0 || isYjsCorrupted) {
         // Normal seeding when Yjs doc is empty or force seeding when Yjs doc is corrupted
         if (isYjsCorrupted) {
           console.warn('[NoteEditor] Force-seeding from server JSON because Yjs state appears corrupted.')
           // Clear corrupted state before seeding
-          fragment.delete(0, fragment.length)
+          ydoc.transact(() => {
+            const fragment = ydoc.getXmlFragment('content')
+            fragment.delete(0, fragment.length)
+          })
         }
         if (contentValue) {
           if (typeof contentValue === 'string') {

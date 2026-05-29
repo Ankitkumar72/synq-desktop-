@@ -237,6 +237,11 @@
   }
 }
 
+@keyframes gapcursor-blink {
+  from, to { background-color: transparent }
+  50% { background-color: #2eaadc }
+}
+
 /* Premium Tiptap Elements Styling (Notion-like) */
 .ProseMirror {
   outline: none;
@@ -282,11 +287,6 @@
     height: 100%;
     background-color: #2eaadc;
     animation: gapcursor-blink 1.2s step-end infinite;
-  }
-
-  @keyframes gapcursor-blink {
-    from, to { background-color: transparent }
-    50% { background-color: #2eaadc }
   }
 
   ul[data-type="taskList"] {

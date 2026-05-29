@@ -337,20 +337,26 @@ export async function saveYDocToSupabase(noteId: string, userId: string, options
   }
 }
 
-/**
- * Load a Yjs document state from Supabase.
- */
-export async function loadYDocFromSupabase(noteId: string): Promise<Uint8Array | null> {
+export interface RemoteDocSnapshot {
+  state: Uint8Array | null
+  lastSeq: number
+}
+
+export async function loadYDocFromSupabase(noteId: string): Promise<RemoteDocSnapshot | null> {
   const { data, error } = await supabase
     .from('crdt_documents')
-    .select('state')
+    .select('state, last_seq')
     .eq('entity_type', 'note')
     .eq('entity_id', noteId)
     .maybeSingle()
 
-  if (error || !data?.state) return null
-  return new Uint8Array(data.state)
+  if (error || !data) return null
+  return {
+    state: data.state ? new Uint8Array(data.state) : null,
+    lastSeq: data.last_seq ? Number(data.last_seq) : 0
+  }
 }
+
 
 /**
  * Trigger a flush immediately (e.g., when a mutation is enqueued).

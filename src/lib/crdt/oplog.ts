@@ -194,3 +194,21 @@ export async function flushQueuedNoteCrdtUpdates(): Promise<{ flushed: number; f
 
   return { flushed, failed }
 }
+
+export async function getLatestNoteCrdtSeq(noteId: string): Promise<number> {
+  const { data, error } = await supabase
+    .from('crdt_note_updates')
+    .select('seq')
+    .eq('entity_type', 'note')
+    .eq('entity_id', noteId)
+    .order('seq', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (error) {
+    console.warn('[Oplog] Failed to fetch latest seq:', error)
+    return 0
+  }
+  return data ? Number(data.seq) : 0
+}
+

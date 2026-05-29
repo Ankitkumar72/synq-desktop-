@@ -13,7 +13,7 @@ import * as Y from 'yjs'
 import { IndexeddbPersistence } from 'y-indexeddb'
 
 const IDB_PREFIX = 'synq-ydoc-'
-const MAX_CACHED_DOCS = 20
+const MAX_CACHED_DOCS = 10
 
 // Cache of active Y.Doc instances (one per note)
 const docCache = new Map<string, Y.Doc>()
@@ -33,7 +33,12 @@ const activeEditDocs = new Set<string>()
  */
 export function getOrCreateYDoc(noteId: string): Y.Doc {
   const existing = docCache.get(noteId)
-  if (existing) return existing
+  if (existing) {
+    // Move to the end of the Map's insertion order to maintain LRU behavior
+    docCache.delete(noteId)
+    docCache.set(noteId, existing)
+    return existing
+  }
 
   const ydoc = new Y.Doc()
   docCache.set(noteId, ydoc)
@@ -67,7 +72,7 @@ export function acquireYDoc(noteId: string): Y.Doc {
 
 /**
  * Release a Y.Doc reference.
- * If the reference count drops to 0, schedules destruction after a 5-second delay
+ * If the reference count drops to 0, schedules destruction after a 30-second delay
  * to allow quick transitions back to the same note.
  */
 export function releaseYDoc(noteId: string): void {
@@ -83,11 +88,12 @@ export function releaseYDoc(noteId: string): void {
       releaseTimers.delete(noteId)
       destroyYDoc(noteId)
       console.log(`[CRDTDoc] Reference count reached 0 for ${noteId.slice(0, 8)}… — destroyed idle doc`)
-    }, 5000))
+    }, 30000))
   } else {
     docRefCount.set(noteId, nextCount)
   }
 }
+
 
 /**
  * Get the XML fragment used by TipTap's collaboration extension.
@@ -268,8 +274,12 @@ export function getPlainTextFromYDoc(noteId: string): string {
   const ydoc = docCache.get(noteId)
   if (!ydoc) return ''
 
-  const fragment = ydoc.getXmlFragment('content')
-  return extractTextFromFragment(fragment)
+  let text = ''
+  ydoc.transact(() => {
+    const fragment = ydoc.getXmlFragment('content')
+    text = extractTextFromFragment(fragment)
+  })
+  return text
 }
 
 function extractTextFromFragment(fragment: Y.XmlFragment): string {

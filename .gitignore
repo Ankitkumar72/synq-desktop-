@@ -63,3 +63,6 @@ next-env.d.ts
 # local stress and integration tests
 /backend-integration-tests.ts
 /production-server-stress-tests.ts
+/formatting-conservation-test.ts
+/formatting-preservation-gate.ts
+/test-results.txt
