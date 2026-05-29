@@ -15,6 +15,7 @@ import { TableRow } from '@tiptap/extension-table-row'
 import { TableHeader } from '@tiptap/extension-table-header'
 import { TableCell } from '@tiptap/extension-table-cell'
 import * as Y from 'yjs'
+import { z } from 'zod'
 import { Loader2 } from "lucide-react"
 import Placeholder from '@tiptap/extension-placeholder'
 import { SlashCommand, suggestionConfig } from './slash-command'
@@ -57,42 +58,22 @@ const SAVE_DEBOUNCE_MS = 800
 const RETRY_DELAY_MS = 3000
 const __DEV__ = process.env.NODE_ENV !== 'production'
 
+const stashSchema = z.object({
+  noteId: z.string(),
+  opId: z.string().optional(),
+  updateData: z.string(),
+  snapshot: z.string().optional(),
+  body: z.string().nullable().optional(),
+  excerpt: z.string().nullable().optional(),
+  content: z.any().optional(),
+  updatedAt: z.string().optional()
+})
 
-function containsRawMarkdown(text: string): boolean {
+
+function containsFlutterTags(text: string): boolean {
   if (!text) return false
-  
-  // 1. Headers: line starting with "# " through "###### "
-  if (/^#+\s+\S+/m.test(text)) return true
-  
-  // 2. Bold or Italic: **bold**, *italic*, __bold__, _italic_
-  if (/\*\*[^*`]+\*\*/.test(text)) return true
-  if (/\*[^*`]+\*/.test(text)) return true
-  if (/__[^_`]+__/.test(text)) return true
-  if (/_[^_`]+_/.test(text)) return true
-  
-  // 3. Inline code: `code`
-  if (/`[^`\n]+`/.test(text)) return true
-  
-  // 4. Bullet lists: line starting with "- " or "* " (excluding horizontal rules)
-  if (/^\s*[-*]\s+\S+/m.test(text)) {
-    if (!/^\s*(?:-{3,}|\*{3,})\s*$/m.test(text)) {
-      return true
-    }
-  }
-  
-  // 5. Numbered lists: line starting with "1. ", "2. ", etc.
-  if (/^\s*\d+\.\s+\S+/m.test(text)) return true
-  
-  // 6. Blockquotes: line starting with "> "
-  if (/^\s*>\s+\S+/m.test(text)) return true
-  
-  // 7. Links: [text](url)
-  if (/\[[^\]\n]+\]\([^)\n]+\)/.test(text)) return true
-
-  // 8. Custom HTML-like tags from Flutter mobile clobber (e.g. <bold>, <code>, <italic>, <underline>, <link>)
   if (/<(?:bold|code|italic|underline|link)>/i.test(text)) return true
   if (/<\/(?:bold|code|italic|underline|link)>/i.test(text)) return true
-  
   return false
 }
 
@@ -120,13 +101,91 @@ function convertCustomTagsToMarkdown(text: string): string {
 }
 
 
+function containsRawMarkdown(text: string): boolean {
+  if (!text) return false
+  
+  // 1. Headers: line starting with "#" followed by space
+  if (/^#+\s/m.test(text)) return true
+  
+  // 2. Bold or Italic: **bold**, *italic*, __bold__, _italic_
+  if (/\*\*[^*]+\*\*/.test(text)) return true
+  if (/\*[^*]+\*/.test(text)) return true
+  if (/__[^_]+__/.test(text)) return true
+  if (/_[^_]+_/.test(text)) return true
+  
+  // 3. Inline code: `code`
+  if (/`[^`]+`/.test(text)) return true
+  
+  // 4. Bullet lists: line starting with "- " or "* " (excluding horizontal rules)
+  if (/^\s*[-*]\s+\S+/m.test(text)) {
+    if (!/^\s*(?:-{3,}|\*{3,})\s*$/m.test(text)) {
+      return true
+    }
+  }
+  
+  // 5. Numbered lists: line starting with "1. ", "2. ", etc.
+  if (/^\s*\d+\.\s+\S+/m.test(text)) return true
+  
+  // 6. Blockquotes: line starting with "> "
+  if (/^\s*>\s+\S+/m.test(text)) return true
+  
+  // 7. Links: [text](url)
+  if (/\[[^\]]+\]\([^)]+\)/.test(text)) return true
+
+  // 8. Custom HTML-like tags from Flutter mobile clobber (e.g. <bold>, <code>, <italic>, <underline>, <link>)
+  if (/<(?:bold|code|italic|underline|link)>/i.test(text)) return true
+  if (/<\/(?:bold|code|italic|underline|link)>/i.test(text)) return true
+  
+  // 9. Tables: line starting and containing pipe characters
+  if (/^\s*\|.+?\|.+?\|/m.test(text)) return true
+  
+  return false
+}
+
+function isXmlTextFormatted(xmlText: Y.XmlText): boolean {
+  try {
+    const delta = xmlText.toDelta()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return delta.some((op: any) => op.attributes && Object.keys(op.attributes).length > 0)
+  } catch {
+    return false
+  }
+}
+
+function isFlatPlainTextFragment(fragment: Y.XmlFragment): boolean {
+  if (fragment.length === 0) return true
+
+  for (let i = 0; i < fragment.length; i++) {
+    const child = fragment.get(i)
+    
+    // 1. Every top-level node must be a 'paragraph' XmlElement
+    if (!(child instanceof Y.XmlElement) || child.nodeName !== 'paragraph') {
+      return false
+    }
+
+    // 2. All children of the paragraph must be XmlText, and they must be unformatted
+    for (let j = 0; j < child.length; j++) {
+      const grandChild = child.get(j)
+      if (!(grandChild instanceof Y.XmlText)) {
+        return false
+      }
+      if (isXmlTextFormatted(grandChild)) {
+        return false
+      }
+    }
+  }
+
+  return true
+}
+
+
 class EditorErrorBoundary extends Component<
   { children: ReactNode },
-  { hasError: boolean }
+  { hasError: boolean, errorKey: number }
 > {
   constructor(props: { children: ReactNode }) {
     super(props)
-    this.state = { hasError: false }
+    this.state = { hasError: false, errorKey: 0 }
   }
 
   static getDerivedStateFromError() {
@@ -143,7 +202,7 @@ class EditorErrorBoundary extends Component<
         <div className="flex flex-col items-center justify-center py-20 gap-4 text-center">
           <p className="text-sm text-neutral-400">The editor encountered an error.</p>
           <button
-            onClick={() => this.setState({ hasError: false })}
+            onClick={() => this.setState({ hasError: false, errorKey: Date.now() })}
             className="px-4 py-2 text-sm bg-neutral-800 hover:bg-neutral-700 text-neutral-200 rounded-md transition-colors"
           >
             Reload Editor
@@ -151,7 +210,7 @@ class EditorErrorBoundary extends Component<
         </div>
       )
     }
-    return this.props.children
+    return <div key={this.state.errorKey} className="contents">{this.props.children}</div>
   }
 }
 
@@ -172,6 +231,20 @@ function uint8ArrayToBase64(arr: Uint8Array): string {
     binary += String.fromCharCode(arr[i])
   }
   return window.btoa(binary)
+}
+
+function showToast(msg: string) {
+  if (typeof document === 'undefined') return
+  const el = document.createElement('div')
+  el.textContent = msg
+  el.setAttribute('role', 'alert')
+  el.setAttribute('aria-live', 'polite')
+  el.className = 'fixed bottom-4 right-4 bg-neutral-800 text-neutral-200 border border-neutral-700 px-4 py-2 rounded-md shadow-lg z-[9999] transition-opacity duration-300'
+  document.body.appendChild(el)
+  setTimeout(() => {
+    el.style.opacity = '0'
+    setTimeout(() => el.remove(), 300)
+  }, 3000)
 }
 
 export function NoteEditor({
@@ -220,8 +293,7 @@ export function NoteEditor({
     if (pendingUpdatesRef.current.length === 0 && !hasPendingLocalChangeRef.current) return
 
     isSavingRef.current = true
-    const pendingBatch = pendingUpdatesRef.current
-    pendingUpdatesRef.current = []
+    const pendingBatch = pendingUpdatesRef.current.splice(0)
     const now = new Date().toISOString()
     const currentEditor = editorRef.current
     const body = currentEditor && !currentEditor.isDestroyed
@@ -306,38 +378,45 @@ export function NoteEditor({
         try {
           const stashRaw = window.localStorage.getItem(`synq-pending-unload:${id}`)
           if (stashRaw) {
-            const stashed = JSON.parse(stashRaw)
-            if (stashed && stashed.updateData) {
-              const updateData = base64ToUint8Array(stashed.updateData)
-              applyRemoteUpdate(id, updateData)
-              
-              updateNoteLocal(id, {
-                body: stashed.body,
-                excerpt: stashed.excerpt,
-                content: stashed.content || undefined,
-                updated_at: stashed.updatedAt || new Date().toISOString()
-              })
-
-              const userId = useUserStore.getState().user?.id
-              if (userId) {
-                const snapshot = stashed.snapshot ? base64ToUint8Array(stashed.snapshot) : undefined
-                await enqueueQueuedNoteCrdtUpdate({
-                  noteId: id,
-                  userId,
-                  clientId: hlc.getNodeId(),
-                  opId: stashed.opId || `recovered-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
-                  updateData,
-                  body: stashed.body,
-                  excerpt: stashed.excerpt,
-                  snapshot,
-                  updatedAt: stashed.updatedAt || new Date().toISOString(),
-                  content: stashed.content,
+            const parsed = JSON.parse(stashRaw)
+            const validation = stashSchema.safeParse(parsed)
+            if (validation.success) {
+              const stashed = validation.data
+              if (stashed && stashed.updateData) {
+                const updateData = base64ToUint8Array(stashed.updateData)
+                applyRemoteUpdate(id, updateData)
+                
+                updateNoteLocal(id, {
+                  body: stashed.body || null,
+                  excerpt: stashed.excerpt || null,
+                  content: stashed.content || undefined,
+                  updated_at: stashed.updatedAt || new Date().toISOString()
                 })
-                triggerFlush()
+
+                const userId = useUserStore.getState().user?.id
+                if (userId) {
+                  const snapshot = stashed.snapshot ? base64ToUint8Array(stashed.snapshot) : undefined
+                  await enqueueQueuedNoteCrdtUpdate({
+                    noteId: id,
+                    userId,
+                    clientId: hlc.getNodeId(),
+                    opId: stashed.opId || `recovered-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+                    updateData,
+                    body: stashed.body || null,
+                    excerpt: stashed.excerpt || null,
+                    snapshot,
+                    updatedAt: stashed.updatedAt || new Date().toISOString(),
+                    content: stashed.content,
+                  })
+                  triggerFlush()
+                }
               }
+              window.localStorage.removeItem(`synq-pending-unload:${id}`)
+              console.log(`[NoteEditor] Successfully recovered stashed edits for ${id.slice(0, 8)}…`)
+            } else {
+              console.warn('[NoteEditor] Failed to validate stashed edits:', validation.error)
+              window.localStorage.removeItem(`synq-pending-unload:${id}`)
             }
-            window.localStorage.removeItem(`synq-pending-unload:${id}`)
-            console.log(`[NoteEditor] Successfully recovered stashed edits for ${id.slice(0, 8)}…`)
           }
         } catch (stashErr) {
           console.error('[NoteEditor] Failed to recover stashed edits:', stashErr)
@@ -413,12 +492,17 @@ export function NoteEditor({
   }, [id, ydoc, updateNoteLocal])
 
   // Debounced save to Supabase
+  const persistNowRef = useRef(persistNow)
+  useEffect(() => {
+    persistNowRef.current = persistNow
+  }, [persistNow])
+
   const debouncedSave = useCallback(() => {
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current)
     saveTimeoutRef.current = setTimeout(() => {
-      void persistNow(true)
+      void persistNowRef.current(true)
     }, SAVE_DEBOUNCE_MS)
-  }, [persistNow])
+  }, [])
 
   // Monitor Yjs document updates to trigger saves
   useEffect(() => {
@@ -603,6 +687,137 @@ export function NoteEditor({
     }),
   ], [ydoc])
 
+  const editorProps = useMemo(() => ({
+    attributes: {
+      class: 'prose prose-invert max-w-none focus:outline-none min-h-[calc(100vh-300px)] pt-2 pb-32 text-[#F2F2F2] text-[15px] leading-[1.6] [&>*:first-child]:mt-0 font-sans selection:bg-[#4B7BFF]/30 selection:text-white prose-headings:font-semibold prose-headings:tracking-tight prose-headings:text-white prose-strong:text-white prose-blockquote:border-[#4B7BFF]/40 prose-blockquote:text-[#A1A3A7] prose-code:before:content-none prose-code:after:content-none [&_.is-empty::before]:text-[#8A8F98] [&_.is-empty::before]:content-[attr(data-placeholder)] [&_.is-empty::before]:float-left [&_.is-empty::before]:pointer-events-none [&_.is-empty::before]:h-0 [&_ul[data-type="taskList"]]:list-none [&_ul[data-type="taskList"]]:pl-0 [&_ul[data-type="taskList"]_li]:flex [&_ul[data-type="taskList"]_li]:items-start [&_ul[data-type="taskList"]_li]:gap-2.5 [&_ul[data-type="taskList"]_li_label]:flex [&_ul[data-type="taskList"]_li_label]:items-center [&_ul[data-type="taskList"]_li_label]:select-none [&_ul[data-type="taskList"]_li_div]:flex-1 [&_ul[data-type="taskList"]_input[type="checkbox"]]:w-4 [&_ul[data-type="taskList"]_input[type="checkbox"]]:h-4 [&_ul[data-type="taskList"]_input[type="checkbox"]]:rounded-md [&_ul[data-type="taskList"]_input[type="checkbox"]]:border-neutral-700 [&_ul[data-type="taskList"]_input[type="checkbox"]]:bg-neutral-900 [&_ul[data-type="taskList"]_input[type="checkbox"]]:accent-blue-500 [&_ul[data-type="taskList"]_li[data-checked="true"]_div]:line-through [&_ul[data-type="taskList"]_li[data-checked="true"]_div]:text-neutral-500',
+    },
+    // Prevent huge image uploads (Limit base64 footprint in DB)
+    handlePaste(view: unknown, event: ClipboardEvent, _slice: unknown) {
+      const items = event.clipboardData?.items
+      if (items) {
+        for (const item of Array.from(items)) {
+          if (item.type.startsWith('image/')) {
+            const file = item.getAsFile()
+            if (file && file.size > 500 * 1024) {
+              showToast("Image is too large. Max size is 500KB.")
+              event.preventDefault()
+              return true
+            }
+          }
+        }
+      }
+      return false
+    },
+    handleDrop(view: unknown, event: DragEvent, _slice: unknown, moved: boolean) {
+      if (moved) return false
+      const files = event.dataTransfer?.files
+      if (files) {
+        for (const file of Array.from(files)) {
+          if (file.type.startsWith('image/') && file.size > 500 * 1024) {
+            showToast("Image is too large. Max size is 500KB.")
+            event.preventDefault()
+            return true
+          }
+        }
+      }
+      return false
+    },
+    transformPastedHTML(html: string) {
+      if (!html) return html
+
+      // 1. Create a parser to manipulate nodes safely in memory
+      const parser = new DOMParser()
+      const doc = parser.parseFromString(html, 'text/html')
+
+      // 2. Strip overly large base64 images to prevent crashing storage
+      doc.querySelectorAll('img[src^="data:image/"]').forEach(img => {
+        const src = img.getAttribute('src')
+        // 500KB limit approximately matches 682,666 chars in Base64
+        if (src && src.length > 682666) {
+          img.remove()
+        }
+      })
+
+      // 3. Process inline styles to protect against XSS but preserve legitimate formatting
+      doc.querySelectorAll('[style]').forEach(el => {
+        const element = el as HTMLElement
+        const safeStyles: string[] = []
+        
+        if (element.style.color) safeStyles.push(`color: ${element.style.color}`)
+        if (element.style.fontSize) safeStyles.push(`font-size: ${element.style.fontSize}`)
+        if (element.style.fontFamily) safeStyles.push(`font-family: ${element.style.fontFamily}`)
+        
+        const bg = element.style.backgroundColor
+        if (bg) {
+          const mark = doc.createElement('mark')
+          mark.setAttribute('data-color', bg)
+          mark.style.backgroundColor = bg
+          
+          // Remove background from the original element so it doesn't duplicate
+          element.style.removeProperty('background-color')
+          if (safeStyles.length > 0) {
+            element.setAttribute('style', safeStyles.join('; '))
+          } else {
+            element.removeAttribute('style')
+          }
+          
+          // Wrap the ORIGINAL element (preserving its tag, classes, and color/font styles)
+          mark.innerHTML = element.outerHTML
+          element.replaceWith(mark)
+        } else {
+          // If there's no background color, just preserve the text styles
+          if (safeStyles.length > 0) {
+            element.setAttribute('style', safeStyles.join('; '))
+          } else {
+            element.removeAttribute('style')
+          }
+        }
+      })
+
+      // We add a temporary DOMPurify hook to whitelist ONLY our safe CSS properties,
+      // completely removing XSS capabilities from the style attribute (e.g., background-image).
+      DOMPurify.addHook('uponSanitizeAttribute', (node, data) => {
+        if (data.attrName === 'style') {
+          const el = node as HTMLElement
+          const allowed = ['color', 'font-size', 'font-family', 'background-color']
+          const clean = allowed
+            .map(p => el.style.getPropertyValue(p) ? `${p}: ${el.style.getPropertyValue(p)}` : '')
+            .filter(Boolean)
+          
+          if (clean.length) {
+            data.attrValue = clean.join('; ')
+            data.keepAttr = true
+          } else {
+            data.keepAttr = false
+          }
+        }
+      })
+
+      // 4. Sanitize and return the sanitized markup.
+      // Note that `style` is in ALLOWED_ATTR so the safe styles survive,
+      // but the hook above prevents malicious CSS from executing.
+      try {
+        return DOMPurify.sanitize(doc.body.innerHTML, {
+          FORCE_BODY: true,
+          ALLOWED_TAGS: [
+            'p', 'span', 'div', 'br', 'strong', 'b', 'em', 'i', 'u', 's', 'strike', 'a',
+            'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+            'ul', 'ol', 'li', 'blockquote', 'code', 'pre',
+            'table', 'thead', 'tbody', 'tr', 'th', 'td', 'img', 'mark',
+            'label', 'input', 'hr', 'sub', 'sup'
+          ],
+          ALLOWED_ATTR: [
+            'href', 'target', 'rel', 'src', 'alt', 'title', 'class', 'style',
+            'data-type', 'data-checked', 'checked', 'disabled', 'type', 'data-color'
+          ],
+        })
+      } finally {
+        // Clean up the hook so it doesn't affect other instances
+        DOMPurify.removeHook('uponSanitizeAttribute')
+      }
+    },
+  }), [])
+
   const editor = useEditor({
     extensions,
     immediatelyRender: false,
@@ -632,51 +847,7 @@ export function NoteEditor({
 
       void persistNow(true)
     },
-    editorProps: {
-      attributes: {
-        class: 'prose prose-invert max-w-none focus:outline-none min-h-[calc(100vh-300px)] pt-2 pb-32 text-[#F2F2F2] text-[15px] leading-[1.6] [&>*:first-child]:mt-0 font-sans selection:bg-[#4B7BFF]/30 selection:text-white prose-headings:font-semibold prose-headings:tracking-tight prose-headings:text-white prose-strong:text-white prose-blockquote:border-[#4B7BFF]/40 prose-blockquote:text-[#A1A3A7] prose-code:before:content-none prose-code:after:content-none [&_.is-empty::before]:text-[#8A8F98] [&_.is-empty::before]:content-[attr(data-placeholder)] [&_.is-empty::before]:float-left [&_.is-empty::before]:pointer-events-none [&_.is-empty::before]:h-0 [&_ul[data-type="taskList"]]:list-none [&_ul[data-type="taskList"]]:pl-0 [&_ul[data-type="taskList"]_li]:flex [&_ul[data-type="taskList"]_li]:items-start [&_ul[data-type="taskList"]_li]:gap-2.5 [&_ul[data-type="taskList"]_li_label]:flex [&_ul[data-type="taskList"]_li_label]:items-center [&_ul[data-type="taskList"]_li_label]:select-none [&_ul[data-type="taskList"]_li_div]:flex-1 [&_ul[data-type="taskList"]_input[type="checkbox"]]:w-4 [&_ul[data-type="taskList"]_input[type="checkbox"]]:h-4 [&_ul[data-type="taskList"]_input[type="checkbox"]]:rounded-md [&_ul[data-type="taskList"]_input[type="checkbox"]]:border-neutral-700 [&_ul[data-type="taskList"]_input[type="checkbox"]]:bg-neutral-900 [&_ul[data-type="taskList"]_input[type="checkbox"]]:accent-blue-500 [&_ul[data-type="taskList"]_li[data-checked="true"]_div]:line-through [&_ul[data-type="taskList"]_li[data-checked="true"]_div]:text-neutral-500',
-      },
-      transformPastedHTML(html) {
-        if (!html) return html
-
-        // 1. Create a parser to manipulate nodes safely in memory
-        const parser = new DOMParser()
-        const doc = parser.parseFromString(html, 'text/html')
-
-        // 2. Locate all span elements with inline background-color styling
-        //    and wrap them in <mark> tags while preserving the span's other styles
-        doc.querySelectorAll('span[style*="background-color"]').forEach(span => {
-          const element = span as HTMLElement
-          const bg = element.style.backgroundColor
-          if (bg) {
-            const mark = doc.createElement('mark')
-            mark.setAttribute('data-color', bg)
-            mark.style.backgroundColor = bg
-            // Strip background-color from the original span to avoid duplication
-            element.style.removeProperty('background-color')
-            // Wrap the span (preserving its other styles like color, font-size) inside the mark
-            mark.innerHTML = element.outerHTML
-            element.replaceWith(mark)
-          }
-        })
-
-        // 3. Sanitize and return the sanitized markup
-        return DOMPurify.sanitize(doc.body.innerHTML, {
-          FORCE_BODY: true,
-          ALLOWED_TAGS: [
-            'p', 'span', 'div', 'br', 'strong', 'b', 'em', 'i', 'u', 's', 'strike', 'a',
-            'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
-            'ul', 'ol', 'li', 'blockquote', 'code', 'pre',
-            'table', 'thead', 'tbody', 'tr', 'th', 'td', 'img', 'mark',
-            'label', 'input', 'hr', 'sub', 'sup'
-          ],
-          ALLOWED_ATTR: [
-            'href', 'target', 'rel', 'src', 'alt', 'title', 'class', 'style',
-            'data-type', 'data-checked', 'checked', 'disabled', 'type'
-          ],
-        })
-      },
-    },
+    editorProps,
   })
 
   // Synchronize editor ref for persistNow callback
@@ -690,7 +861,36 @@ export function NoteEditor({
     if (!isLoading && editor && !editor.isDestroyed) {
       const fragment = ydoc.getXmlFragment('content')
       const plainText = getPlainTextFromYDoc(id)
-      const shouldRepair = fragment.length > 0 && containsRawMarkdown(plainText) && !repairedNotesRef.current.has(id)
+      const contentValue = getEditorContentValue(contentRef.current ?? null)
+      let isYjsCorrupted = false
+      if (fragment.length > 0 && contentValue && typeof contentValue === 'object') {
+        const jsonStr = JSON.stringify(contentValue)
+        // If Yjs plain text is extremely short but the server JSON is large and structured
+        if (plainText.length < 50 && jsonStr.length > 500) {
+          isYjsCorrupted = true
+        }
+      }
+
+      const isPlain = isFlatPlainTextFragment(fragment)
+      const hasFlutter = containsFlutterTags(plainText)
+      const hasRawMarkdown = containsRawMarkdown(plainText)
+      const repRef = repairedNotesRef.current.has(id)
+
+      if (__DEV__) {
+        console.group('[NoteEditor Auto-Repair Check]')
+        console.log('Note ID:', id)
+        console.log('Fragment length:', fragment.length)
+        console.log('Is flat plain-text:', isPlain)
+        console.log('Contains Flutter tags:', hasFlutter)
+        console.log('Contains raw Markdown:', hasRawMarkdown)
+        console.log('Already repaired in this session:', repRef)
+        console.groupEnd()
+      }
+
+      const shouldRepair = fragment.length > 0 && (
+        hasFlutter ||
+        (isPlain && hasRawMarkdown)
+      ) && !repRef
 
       if (shouldRepair && plainText) {
         repairedNotesRef.current.add(id)
@@ -708,9 +908,13 @@ export function NoteEditor({
           console.error('[NoteEditor] Failed to parse raw Yjs markdown plain text during repair:', err)
           if (__DEV__) console.groupEnd()
         }
-      } else if (fragment.length === 0) {
-        // Normal seeding when Yjs doc is empty
-        const contentValue = getEditorContentValue(contentRef.current ?? null)
+      } else if (fragment.length === 0 || isYjsCorrupted) {
+        // Normal seeding when Yjs doc is empty or force seeding when Yjs doc is corrupted
+        if (isYjsCorrupted) {
+          console.warn('[NoteEditor] Force-seeding from server JSON because Yjs state appears corrupted.')
+          // Clear corrupted state before seeding
+          fragment.delete(0, fragment.length)
+        }
         if (contentValue) {
           if (typeof contentValue === 'string') {
             // Raw markdown or custom tags string detected: Use the editor's markdown engine to parse it to rich-text JSON
@@ -724,8 +928,7 @@ export function NoteEditor({
               if (__DEV__) console.log('[NoteEditor] Markdown content successfully seeded!')
               if (__DEV__) console.groupEnd()
             } catch (err) {
-              console.error('[NoteEditor] Failed to parse raw markdown content:', err)
-              editor.commands.setContent(contentValue)
+              console.error('[NoteEditor] Failed to parse raw markdown content, skipping seed to preserve integrity:', err)
               if (__DEV__) console.groupEnd()
             }
           } else {
@@ -735,6 +938,30 @@ export function NoteEditor({
       }
     }
   }, [isLoading, editor, ydoc, id])
+
+  // Cleanup existing large base64 images once on mount
+  useEffect(() => {
+    if (editor && !editor.isDestroyed && !isLoading) {
+      let modified = false
+      editor.state.doc.descendants((node, pos) => {
+        if (node.type.name === 'image' && node.attrs.src?.startsWith('data:image/')) {
+          const size = Math.floor(node.attrs.src.length * 0.75)
+          if (size > 500 * 1024) {
+            // It's too big, delete it asynchronously to avoid tiptap transaction conflicts in descendants loop
+            setTimeout(() => {
+              if (!editor.isDestroyed) {
+                editor.commands.deleteRange({ from: pos, to: pos + node.nodeSize })
+              }
+            }, 0)
+            modified = true
+          }
+        }
+      })
+      if (modified) {
+        showToast("Removed oversized base64 images from document to protect performance.")
+      }
+    }
+  }, [editor, isLoading])
 
   // Cleanup on unmount
   useEffect(() => {
