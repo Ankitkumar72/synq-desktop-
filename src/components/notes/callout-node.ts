@@ -55,7 +55,10 @@ export const CalloutNode = Node.create<CalloutOptions>({
   renderHTML({ HTMLAttributes }) {
     return [
       'div',
-      mergeAttributes(this.options.HTMLAttributes, HTMLAttributes, { 'data-type': 'callout' }),
+      mergeAttributes(this.options.HTMLAttributes, HTMLAttributes, {
+        'data-type': 'callout',
+        'data-drag-handle': '',
+      }),
       0,
     ]
   },

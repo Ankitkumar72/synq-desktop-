@@ -14,6 +14,10 @@ import { Table } from '@tiptap/extension-table'
 import { TableRow } from '@tiptap/extension-table-row'
 import { TableHeader } from '@tiptap/extension-table-header'
 import { TableCell } from '@tiptap/extension-table-cell'
+import GapCursor from '@tiptap/extension-gapcursor'
+import Dropcursor from '@tiptap/extension-dropcursor'
+import Focus from '@tiptap/extension-focus'
+import { TrailingNode } from './trailing-node'
 import * as Y from 'yjs'
 import { z } from 'zod'
 import { Loader2 } from "lucide-react"
@@ -140,6 +144,112 @@ function containsRawMarkdown(text: string): boolean {
   if (/^\s*\|.+?\|.+?\|/m.test(text)) return true
   
   return false
+}
+
+function markdownToHtml(text: string): string {
+  if (!text) return text
+  
+  let html = text
+  
+  // 1. Normalize code tags
+  html = html.replace(/<code>([\s\S]*?)<\/code>/gi, '`$1`')
+  html = html.replace(/<code[^>]*>([\s\S]*?)<\/code>/gi, '`$1`')
+
+  // 2. Headings
+  html = html.replace(/^### (.*?)$/gm, '<h3>$1</h3>')
+  html = html.replace(/^## (.*?)$/gm, '<h2>$1</h2>')
+  html = html.replace(/^# (.*?)$/gm, '<h1>$1</h1>')
+
+  // 3. Bold
+  html = html.replace(/\*\*([\s\S]*?)\*\*/g, '<strong>$1</strong>')
+  html = html.replace(/__([\s\S]*?)__/g, '<strong>$1</strong>')
+
+  // 4. Italic
+  html = html.replace(/\*([\s\S]*?)\*/g, '<em>$1</em>')
+  html = html.replace(/_([\s\S]*?)_/g, '<em>$1</em>')
+
+  // 5. Inline Code
+  html = html.replace(/`([^`]+)`/g, '<code>$1</code>')
+
+  // 6. Blockquotes
+  html = html.replace(/^\s*>\s+(.*?)$/gm, '<blockquote>$1</blockquote>')
+
+  // 7. Bullet lists
+  let inList = false
+  const lines = html.split('\n')
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    if (/^\s*[-*]\s+(.*)$/.test(line)) {
+      const content = line.replace(/^\s*[-*]\s+/, '')
+      lines[i] = (inList ? '' : '<ul>') + `<li>${content}</li>`
+      inList = true
+    } else {
+      if (inList) {
+        lines[i] = '</ul>' + line
+        inList = false
+      }
+    }
+  }
+  if (inList) {
+    lines[lines.length - 1] += '</ul>'
+  }
+  html = lines.join('\n')
+
+  // 8. Numbered lists
+  let inOList = false
+  const olLines = html.split('\n')
+  for (let i = 0; i < olLines.length; i++) {
+    const line = olLines[i]
+    if (/^\s*\d+\.\s+(.*)$/.test(line)) {
+      const content = line.replace(/^\s*\d+\.\s+/, '')
+      olLines[i] = (inOList ? '' : '<ol>') + `<li>${content}</li>`
+      inOList = true
+    } else {
+      if (inOList) {
+        olLines[i] = '</ol>' + line
+        inOList = false
+      }
+    }
+  }
+  if (inOList) {
+    olLines[olLines.length - 1] += '</ol>'
+  }
+  html = olLines.join('\n')
+
+  // 9. Tables
+  const tableLines = html.split('\n')
+  let inTable = false
+  let tableHtml = ''
+  for (let i = 0; i < tableLines.length; i++) {
+    const line = tableLines[i].trim()
+    if (line.startsWith('|') && line.endsWith('|')) {
+      const cells = line.split('|').map(c => c.trim()).filter((_, idx, arr) => idx > 0 && idx < arr.length - 1)
+      if (line.includes('---')) {
+        tableLines[i] = ''
+        continue
+      }
+      if (!inTable) {
+        tableHtml = '<table><thead><tr>' + cells.map(c => `<th>${c}</th>`).join('') + '</tr></thead><tbody>'
+        inTable = true
+      } else {
+        tableHtml += '<tr>' + cells.map(c => `<td>${c}</td>`).join('') + '</tr>'
+      }
+      tableLines[i] = ''
+    } else {
+      if (inTable) {
+        tableHtml += '</tbody></table>'
+        tableLines[i] = tableHtml + '\n' + tableLines[i]
+        inTable = false
+      }
+    }
+  }
+  if (inTable) {
+    tableHtml += '</tbody></table>'
+    tableLines[tableLines.length - 1] += '\n' + tableHtml
+  }
+  html = tableLines.filter(line => line !== '').join('\n')
+
+  return html
 }
 
 function isXmlTextFormatted(xmlText: Y.XmlText): boolean {
@@ -609,6 +719,8 @@ export function NoteEditor({
       link: false,
       underline: false,
       codeBlock: false, // Replaced by CodeBlockLowlight for syntax highlighting
+      gapcursor: false,
+      dropcursor: false,
     }),
     CodeBlockLowlight.configure({
       lowlight,
@@ -658,7 +770,7 @@ export function NoteEditor({
       bulletListMarker: '-',
       linkify: true,
       breaks: true,
-      transformPastedText: false,
+      transformPastedText: true,
       transformCopiedText: true,
     }),
     Placeholder.configure({
@@ -667,13 +779,17 @@ export function NoteEditor({
           return `Heading ${node.attrs.level}`
         }
         if (node.type.name === 'callout') {
-          return 'Callout content...'
+          return 'Type something...'
         }
         if (node.type.name === 'paragraph') {
           return "Type '/' for commands"
         }
+        if (node.type.name === 'codeBlock') {
+          return '// Write code...'
+        }
         return ""
       },
+      showOnlyWhenEditable: true,
       showOnlyCurrent: true,
       includeChildren: true,
     }),
@@ -685,11 +801,21 @@ export function NoteEditor({
       dragHandleWidth: 20,
       scrollTreshold: 100,
     }),
+    GapCursor,
+    Dropcursor.configure({
+      color: '#2eaadc',
+      width: 2,
+    }),
+    Focus.configure({
+      className: 'is-block-focused',
+      mode: 'deepest',
+    }),
+    TrailingNode,
   ], [ydoc])
 
   const editorProps = useMemo(() => ({
     attributes: {
-      class: 'prose prose-invert max-w-none focus:outline-none min-h-[calc(100vh-300px)] pt-2 pb-32 text-[#F2F2F2] text-[15px] leading-[1.6] [&>*:first-child]:mt-0 font-sans selection:bg-[#4B7BFF]/30 selection:text-white prose-headings:font-semibold prose-headings:tracking-tight prose-headings:text-white prose-strong:text-white prose-blockquote:border-[#4B7BFF]/40 prose-blockquote:text-[#A1A3A7] prose-code:before:content-none prose-code:after:content-none [&_.is-empty::before]:text-[#8A8F98] [&_.is-empty::before]:content-[attr(data-placeholder)] [&_.is-empty::before]:float-left [&_.is-empty::before]:pointer-events-none [&_.is-empty::before]:h-0 [&_ul[data-type="taskList"]]:list-none [&_ul[data-type="taskList"]]:pl-0 [&_ul[data-type="taskList"]_li]:flex [&_ul[data-type="taskList"]_li]:items-start [&_ul[data-type="taskList"]_li]:gap-2.5 [&_ul[data-type="taskList"]_li_label]:flex [&_ul[data-type="taskList"]_li_label]:items-center [&_ul[data-type="taskList"]_li_label]:select-none [&_ul[data-type="taskList"]_li_div]:flex-1 [&_ul[data-type="taskList"]_input[type="checkbox"]]:w-4 [&_ul[data-type="taskList"]_input[type="checkbox"]]:h-4 [&_ul[data-type="taskList"]_input[type="checkbox"]]:rounded-md [&_ul[data-type="taskList"]_input[type="checkbox"]]:border-neutral-700 [&_ul[data-type="taskList"]_input[type="checkbox"]]:bg-neutral-900 [&_ul[data-type="taskList"]_input[type="checkbox"]]:accent-blue-500 [&_ul[data-type="taskList"]_li[data-checked="true"]_div]:line-through [&_ul[data-type="taskList"]_li[data-checked="true"]_div]:text-neutral-500',
+      class: 'max-w-none focus:outline-none min-h-[calc(100vh-300px)] pt-2 pb-32 text-[#F2F2F2] text-[15px] leading-[1.6] font-sans antialiased selection:bg-[#4B7BFF]/30 selection:text-white [&>*]:my-3 [&>*:first-child]:mt-0 [&>h1]:text-[28px] [&>h1]:font-bold [&>h1]:tracking-tight [&>h1]:text-white [&>h1]:mt-6 [&>h1]:mb-2 [&>h2]:text-[22px] [&>h2]:font-semibold [&>h2]:tracking-tight [&>h2]:text-white [&>h2]:mt-5 [&>h2]:mb-2 [&>h3]:text-[18px] [&>h3]:font-medium [&>h3]:tracking-tight [&>h3]:text-white [&>h3]:mt-4 [&>h3]:mb-1.5 [&>p]:my-1.5 [&>p]:leading-[1.65] [&>blockquote]:border-l-2 [&>blockquote]:border-[#4B7BFF]/40 [&>blockquote]:pl-4 [&>blockquote]:text-[#A1A3A7] [&>blockquote]:italic [&>blockquote]:my-4 [&>pre]:bg-[#1a1a1e] [&>pre]:border [&>pre]:border-white/5 [&>pre]:p-4 [&>pre]:rounded-lg [&>pre]:my-4 [&>ul]:list-disc [&>ul]:pl-5 [&>ul]:my-2 [&>ol]:list-decimal [&>ol]:pl-5 [&>ol]:my-2 [&_li]:my-0.5 [&_code]:before:content-none [&_code]:after:content-none [&_.is-empty::before]:text-[#8A8F98] [&_.is-empty::before]:content-[attr(data-placeholder)] [&_.is-empty::before]:float-left [&_.is-empty::before]:pointer-events-none [&_.is-empty::before]:h-0 [&_ul[data-type="taskList"]]:list-none [&_ul[data-type="taskList"]]:pl-0 [&_ul[data-type="taskList"]_li]:flex [&_ul[data-type="taskList"]_li]:items-start [&_ul[data-type="taskList"]_li]:gap-2.5 [&_ul[data-type="taskList"]_li_label]:flex [&_ul[data-type="taskList"]_li_label]:items-center [&_ul[data-type="taskList"]_li_label]:select-none [&_ul[data-type="taskList"]_li_div]:flex-1 [&_ul[data-type="taskList"]_input[type="checkbox"]]:w-4 [&_ul[data-type="taskList"]_input[type="checkbox"]]:h-4 [&_ul[data-type="taskList"]_input[type="checkbox"]]:rounded-md [&_ul[data-type="taskList"]_input[type="checkbox"]]:border-neutral-700 [&_ul[data-type="taskList"]_input[type="checkbox"]]:bg-neutral-900 [&_ul[data-type="taskList"]_input[type="checkbox"]]:accent-blue-500 [&_ul[data-type="taskList"]_li[data-checked="true"]_div]:line-through [&_ul[data-type="taskList"]_li[data-checked="true"]_div]:text-neutral-500',
     },
     // Prevent huge image uploads (Limit base64 footprint in DB)
     handlePaste(view: unknown, event: ClipboardEvent, _slice: unknown) {
@@ -729,92 +855,123 @@ export function NoteEditor({
       const parser = new DOMParser()
       const doc = parser.parseFromString(html, 'text/html')
 
-      // 2. Strip overly large base64 images to prevent crashing storage
-      doc.querySelectorAll('img[src^="data:image/"]').forEach(img => {
-        const src = img.getAttribute('src')
-        // 500KB limit approximately matches 682,666 chars in Base64
-        if (src && src.length > 682666) {
-          img.remove()
-        }
-      })
+      // 1.5. If the HTML text content contains raw markdown, translate it to rich elements
+      const plainText = doc.body.textContent || ''
+      if (containsRawMarkdown(plainText)) {
+        const parsedHtml = markdownToHtml(plainText)
+        doc.body.innerHTML = parsedHtml
+      }
 
-      // 3. Process inline styles to protect against XSS but preserve legitimate formatting
-      doc.querySelectorAll('[style]').forEach(el => {
+      // 2. Convert elements with inline background-color style to <mark> elements for Tiptap Highlight
+      doc.querySelectorAll('[style*="background-color"], [style*="background:"]').forEach(el => {
         const element = el as HTMLElement
-        const safeStyles: string[] = []
-        
-        if (element.style.color) safeStyles.push(`color: ${element.style.color}`)
-        if (element.style.fontSize) safeStyles.push(`font-size: ${element.style.fontSize}`)
-        if (element.style.fontFamily) safeStyles.push(`font-family: ${element.style.fontFamily}`)
-        
-        const bg = element.style.backgroundColor
-        if (bg) {
+        const bg = element.style.backgroundColor || element.style.background
+        if (bg && bg !== 'transparent') {
+          // Create a mark element
           const mark = doc.createElement('mark')
           mark.setAttribute('data-color', bg)
           mark.style.backgroundColor = bg
           
-          // Remove background from the original element so it doesn't duplicate
+          // Move children to mark
+          while (element.firstChild) {
+            mark.appendChild(element.firstChild)
+          }
+          
+          // Remove background-color style from original element so it doesn't duplicate
           element.style.removeProperty('background-color')
-          if (safeStyles.length > 0) {
-            element.setAttribute('style', safeStyles.join('; '))
-          } else {
-            element.removeAttribute('style')
-          }
+          element.style.removeProperty('background')
           
-          // Wrap the ORIGINAL element (preserving its tag, classes, and color/font styles)
-          mark.innerHTML = element.outerHTML
-          element.replaceWith(mark)
-        } else {
-          // If there's no background color, just preserve the text styles
-          if (safeStyles.length > 0) {
-            element.setAttribute('style', safeStyles.join('; '))
-          } else {
-            element.removeAttribute('style')
-          }
+          // Append mark inside element
+          element.appendChild(mark)
         }
       })
 
-      // We add a temporary DOMPurify hook to whitelist ONLY our safe CSS properties,
-      // completely removing XSS capabilities from the style attribute (e.g., background-image).
-      DOMPurify.addHook('uponSanitizeAttribute', (node, data) => {
-        if (data.attrName === 'style') {
-          const el = node as HTMLElement
-          const allowed = ['color', 'font-size', 'font-family', 'background-color']
-          const clean = allowed
-            .map(p => el.style.getPropertyValue(p) ? `${p}: ${el.style.getPropertyValue(p)}` : '')
-            .filter(Boolean)
-          
-          if (clean.length) {
-            data.attrValue = clean.join('; ')
-            data.keepAttr = true
-          } else {
-            data.keepAttr = false
-          }
+      // 3. Notion copies headings with specific classes or tags. Normalize headers
+      doc.querySelectorAll('.notion-header-block, h1').forEach(el => {
+        if (el.tagName !== 'H1') {
+          const h1 = doc.createElement('h1')
+          h1.innerHTML = el.innerHTML
+          el.replaceWith(h1)
+        }
+      })
+      doc.querySelectorAll('.notion-sub_header-block, h2').forEach(el => {
+        if (el.tagName !== 'H2') {
+          const h2 = doc.createElement('h2')
+          h2.innerHTML = el.innerHTML
+          el.replaceWith(h2)
+        }
+      })
+      doc.querySelectorAll('.notion-sub_sub_header-block, h3').forEach(el => {
+        if (el.tagName !== 'H3') {
+          const h3 = doc.createElement('h3')
+          h3.innerHTML = el.innerHTML
+          el.replaceWith(h3)
         }
       })
 
-      // 4. Sanitize and return the sanitized markup.
-      // Note that `style` is in ALLOWED_ATTR so the safe styles survive,
-      // but the hook above prevents malicious CSS from executing.
-      try {
-        return DOMPurify.sanitize(doc.body.innerHTML, {
-          FORCE_BODY: true,
-          ALLOWED_TAGS: [
-            'p', 'span', 'div', 'br', 'strong', 'b', 'em', 'i', 'u', 's', 'strike', 'a',
-            'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
-            'ul', 'ol', 'li', 'blockquote', 'code', 'pre',
-            'table', 'thead', 'tbody', 'tr', 'th', 'td', 'img', 'mark',
-            'label', 'input', 'hr', 'sub', 'sup'
-          ],
-          ALLOWED_ATTR: [
-            'href', 'target', 'rel', 'src', 'alt', 'title', 'class', 'style',
-            'data-type', 'data-checked', 'checked', 'disabled', 'type', 'data-color'
-          ],
-        })
-      } finally {
-        // Clean up the hook so it doesn't affect other instances
-        DOMPurify.removeHook('uponSanitizeAttribute')
-      }
+      // 4. Normalize bullet lists from Notion
+      doc.querySelectorAll('[class*="bulleted_list-block"], [class*="list-bullet"]').forEach(el => {
+        const li = doc.createElement('li')
+        li.innerHTML = el.innerHTML
+        const ul = doc.createElement('ul')
+        ul.appendChild(li)
+        el.replaceWith(ul)
+      })
+
+      // 5. Normalize numbered lists from Notion
+      doc.querySelectorAll('[class*="numbered_list-block"], [class*="list-numbered"]').forEach(el => {
+        const li = doc.createElement('li')
+        li.innerHTML = el.innerHTML
+        const ol = doc.createElement('ol')
+        ol.appendChild(li)
+        el.replaceWith(ol)
+      })
+
+      // 6. Normalize checklists/todo-blocks from Notion
+      doc.querySelectorAll('[class*="to_do-block"]').forEach(el => {
+        const li = doc.createElement('li')
+        li.setAttribute('data-type', 'taskItem')
+        
+        const checkbox = doc.createElement('input')
+        checkbox.setAttribute('type', 'checkbox')
+        if (el.getAttribute('data-checked') === 'true') {
+          checkbox.setAttribute('checked', 'checked')
+          li.setAttribute('data-checked', 'true')
+        }
+        
+        const contentDiv = doc.createElement('div')
+        contentDiv.innerHTML = el.innerHTML
+        
+        li.appendChild(checkbox)
+        li.appendChild(contentDiv)
+        
+        const ul = doc.createElement('ul')
+        ul.setAttribute('data-type', 'taskList')
+        ul.appendChild(li)
+        el.replaceWith(ul)
+      })
+
+      // 7. Notion blockquotes
+      doc.querySelectorAll('.notion-quote-block').forEach(el => {
+        const blockquote = doc.createElement('blockquote')
+        blockquote.innerHTML = el.innerHTML
+        el.replaceWith(blockquote)
+      })
+
+      // 8. Sanitize the clean, normalized HTML using DOMPurify
+      return DOMPurify.sanitize(doc.body.innerHTML, {
+        ALLOWED_TAGS: [
+          'p', 'span', 'div', 'br', 'strong', 'b', 'em', 'i', 'u', 's', 'strike', 'a',
+          'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+          'ul', 'ol', 'li', 'blockquote', 'code', 'pre',
+          'table', 'thead', 'tbody', 'tr', 'th', 'td', 'img', 'mark',
+          'label', 'input', 'hr', 'sub', 'sup'
+        ],
+        ALLOWED_ATTR: [
+          'href', 'target', 'rel', 'src', 'alt', 'title', 'class', 'style',
+          'data-type', 'data-checked', 'checked', 'disabled', 'type', 'data-color'
+        ],
+      })
     },
   }), [])
 

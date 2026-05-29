@@ -239,6 +239,56 @@
 
 /* Premium Tiptap Elements Styling (Notion-like) */
 .ProseMirror {
+  outline: none;
+
+  /* Notion-style block focus border */
+  .is-block-focused {
+    position: relative;
+  }
+  .is-block-focused::before {
+    content: '';
+    position: absolute;
+    left: -12px;
+    top: 0;
+    bottom: 0;
+    width: 2.5px;
+    background-color: #2eaadc;
+    border-radius: 9999px;
+    pointer-events: none;
+    z-index: 10;
+  }
+
+  /* Premium non-italicized placeholder */
+  .is-empty::before {
+    color: #8A8F98 !important;
+    font-style: normal !important;
+    font-weight: 400 !important;
+    opacity: 0.65;
+  }
+
+  /* Gap cursor styling */
+  .ProseMirror-gapcursor {
+    display: none;
+    pointer-events: none;
+    position: absolute;
+  }
+
+  .ProseMirror-gapcursor:after {
+    content: '';
+    display: block;
+    position: absolute;
+    top: 0;
+    width: 2px;
+    height: 100%;
+    background-color: #2eaadc;
+    animation: gapcursor-blink 1.2s step-end infinite;
+  }
+
+  @keyframes gapcursor-blink {
+    from, to { background-color: transparent }
+    50% { background-color: #2eaadc }
+  }
+
   ul[data-type="taskList"] {
     list-style: none;
     padding-left: 0 !important;
