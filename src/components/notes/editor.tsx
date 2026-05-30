@@ -653,8 +653,9 @@ export function NoteEditor({
   useEffect(() => {
     const handleUpdate = (update: Uint8Array, origin: string | null) => {
       // If the update came from a 'remote' transaction (via applyRemoteUpdate),
+      // or from a 'mobile-sync' transaction (via applyMobileBodyUpdate),
       // we skip scheduling a save to prevent a loop.
-      if (origin !== 'remote') {
+      if (origin !== 'remote' && origin !== 'mobile-sync') {
         pendingUpdatesRef.current.push(new Uint8Array(update))
         hasPendingLocalChangeRef.current = true
         debouncedSave()

@@ -73,7 +73,8 @@ export async function applyNoteCrdtUpdate(input: ApplyNoteCrdtUpdateInput): Prom
       .eq('id', input.noteId)
     
     if (contentError) {
-      console.warn('[Oplog] Failed to update notes.content column:', contentError)
+      console.error('[Oplog] Failed to update notes.content column:', contentError)
+      throw contentError
     }
   }
 
