@@ -1,0 +1,157 @@
+.editorContent {
+  color: #F2F2F2;
+  font-size: 15px;
+  line-height: 1.6;
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.editorContent ::selection {
+  background-color: rgba(75, 123, 255, 0.3);
+  color: white;
+}
+
+.editorContent > * {
+  margin-top: 12px;
+  margin-bottom: 12px;
+}
+.editorContent > *:first-child {
+  margin-top: 0;
+}
+
+.editorContent > h1 {
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  color: white;
+  margin-top: 24px;
+  margin-bottom: 8px;
+}
+
+.editorContent > h2 {
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  color: white;
+  margin-top: 20px;
+  margin-bottom: 8px;
+}
+
+.editorContent > h3 {
+  font-size: 18px;
+  font-weight: 500;
+  letter-spacing: -0.025em;
+  color: white;
+  margin-top: 16px;
+  margin-bottom: 6px;
+}
+
+.editorContent > p {
+  margin-top: 6px;
+  margin-bottom: 6px;
+  line-height: 1.65;
+}
+
+.editorContent > blockquote {
+  border-left-width: 2px;
+  border-color: rgba(75, 123, 255, 0.4);
+  padding-left: 16px;
+  color: #A1A3A7;
+  font-style: italic;
+  margin-top: 16px;
+  margin-bottom: 16px;
+}
+
+.editorContent > pre {
+  background-color: #1a1a1e;
+  border-width: 1px;
+  border-color: rgba(255, 255, 255, 0.05);
+  padding: 16px;
+  border-radius: 8px;
+  margin-top: 16px;
+  margin-bottom: 16px;
+}
+
+.editorContent > ul {
+  list-style-type: disc;
+  padding-left: 20px;
+  margin-top: 8px;
+  margin-bottom: 8px;
+}
+
+.editorContent > ol {
+  list-style-type: decimal;
+  padding-left: 20px;
+  margin-top: 8px;
+  margin-bottom: 8px;
+}
+
+.editorContent li {
+  margin-top: 2px;
+  margin-bottom: 2px;
+}
+
+.editorContent strong { font-weight: 600; color: white; }
+.editorContent em { font-style: italic; }
+.editorContent u { text-decoration: underline; text-underline-offset: 2px; }
+.editorContent s, .editorContent del { text-decoration: line-through; }
+.editorContent code { 
+  background: #1a1a1e; 
+  color: #e06c75; 
+  padding: 2px 6px; 
+  border-radius: 4px; 
+  font-size: 13px; 
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; 
+}
+.editorContent code::before { content: none; }
+.editorContent code::after { content: none; }
+.editorContent a { color: #2eaadc; text-decoration: underline; }
+.editorContent a:hover { color: rgba(46, 170, 220, 0.8); }
+.editorContent mark { border-radius: 2px; padding: 0 2px; }
+.editorContent mark[data-color="#FFFF00"] { background: #FFFF00; color: black; }
+.editorContent mark[data-color="#FF0000"] { background: #FF0000; color: white; }
+.editorContent td, .editorContent th { 
+  border: 1px solid rgba(255,255,255,0.1); 
+  padding: 8px; 
+}
+.editorContent th { background: rgba(255,255,255,0.05); font-weight: 600; }
+.editorContent table { border-collapse: collapse; width: 100%; }
+
+.editorContent .is-empty::before {
+  color: #8A8F98;
+  content: attr(data-placeholder);
+  float: left;
+  pointer-events: none;
+  height: 0;
+}
+
+.editorContent ul[data-type="taskList"] {
+  list-style-type: none;
+  padding-left: 0;
+}
+.editorContent ul[data-type="taskList"] li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.editorContent ul[data-type="taskList"] li label {
+  display: flex;
+  align-items: center;
+  user-select: none;
+}
+.editorContent ul[data-type="taskList"] li div {
+  flex: 1 1 0%;
+}
+.editorContent ul[data-type="taskList"] input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  border-radius: 6px;
+  border-color: #404040;
+  background-color: #171717;
+  accent-color: #3b82f6;
+}
+.editorContent ul[data-type="taskList"] li[data-checked="true"] div {
+  text-decoration: line-through;
+  color: #737373;
+}

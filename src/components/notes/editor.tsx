@@ -52,6 +52,7 @@ import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight'
 import { common, createLowlight } from 'lowlight'
 import DOMPurify from 'dompurify'
 import GlobalDragHandle from 'tiptap-extension-global-drag-handle'
+import styles from './editor-content.module.css'
 
 
 
@@ -849,30 +850,7 @@ export function NoteEditor({
 
   const editorProps = useMemo(() => ({
     attributes: {
-      class: 'max-w-none focus:outline-none min-h-[calc(100vh-300px)] pt-2 pb-32 text-[#F2F2F2] text-[15px] leading-[1.6] font-sans antialiased selection:bg-[#4B7BFF]/30 selection:text-white '
-        + '[&>*]:my-3 [&>*:first-child]:mt-0 '
-        + '[&>h1]:text-[28px] [&>h1]:font-bold [&>h1]:tracking-tight [&>h1]:text-white [&>h1]:mt-6 [&>h1]:mb-2 '
-        + '[&>h2]:text-[22px] [&>h2]:font-semibold [&>h2]:tracking-tight [&>h2]:text-white [&>h2]:mt-5 [&>h2]:mb-2 '
-        + '[&>h3]:text-[18px] [&>h3]:font-medium [&>h3]:tracking-tight [&>h3]:text-white [&>h3]:mt-4 [&>h3]:mb-1.5 '
-        + '[&>p]:my-1.5 [&>p]:leading-[1.65] '
-        + '[&>blockquote]:border-l-2 [&>blockquote]:border-[#4B7BFF]/40 [&>blockquote]:pl-4 [&>blockquote]:text-[#A1A3A7] [&>blockquote]:italic [&>blockquote]:my-4 '
-        + '[&>pre]:bg-[#1a1a1e] [&>pre]:border [&>pre]:border-white/5 [&>pre]:p-4 [&>pre]:rounded-lg [&>pre]:my-4 '
-        + '[&>ul]:list-disc [&>ul]:pl-5 [&>ul]:my-2 [&>ol]:list-decimal [&>ol]:pl-5 [&>ol]:my-2 '
-        + '[&_li]:my-0.5 '
-        + '[&_strong]:font-semibold [&_strong]:text-white '
-        + '[&_em]:italic '
-        + '[&_u]:underline [&_u]:underline-offset-2 '
-        + '[&_s]:line-through [&_del]:line-through '
-        + '[&_code]:bg-[#1a1a1e] [&_code]:text-[#e06c75] [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-[13px] [&_code]:font-mono [&_code]:before:content-none [&_code]:after:content-none '
-        + '[&_a]:text-[#2eaadc] [&_a]:underline [&_a]:hover:text-[#2eaadc]/80 '
-        + '[&_mark]:rounded [&_mark]:px-0.5 '
-        + '[&_mark[data-color="#FFFF00"]]:bg-[#FFFF00] [&_mark[data-color="#FFFF00"]]:text-black '
-        + '[&_mark[data-color="#FF0000"]]:bg-[#FF0000] [&_mark[data-color="#FF0000"]]:text-white '
-        + '[&_td]:border [&_td]:border-white/10 [&_td]:p-2 '
-        + '[&_th]:border [&_th]:border-white/10 [&_th]:p-2 [&_th]:bg-white/5 [&_th]:font-semibold '
-        + '[&_table]:border-collapse [&_table]:w-full '
-        + '[&_.is-empty::before]:text-[#8A8F98] [&_.is-empty::before]:content-[attr(data-placeholder)] [&_.is-empty::before]:float-left [&_.is-empty::before]:pointer-events-none [&_.is-empty::before]:h-0 '
-        + '[&_ul[data-type="taskList"]]:list-none [&_ul[data-type="taskList"]]:pl-0 [&_ul[data-type="taskList"]_li]:flex [&_ul[data-type="taskList"]_li]:items-start [&_ul[data-type="taskList"]_li]:gap-2.5 [&_ul[data-type="taskList"]_li_label]:flex [&_ul[data-type="taskList"]_li_label]:items-center [&_ul[data-type="taskList"]_li_label]:select-none [&_ul[data-type="taskList"]_li_div]:flex-1 [&_ul[data-type="taskList"]_input[type="checkbox"]]:w-4 [&_ul[data-type="taskList"]_input[type="checkbox"]]:h-4 [&_ul[data-type="taskList"]_input[type="checkbox"]]:rounded-md [&_ul[data-type="taskList"]_input[type="checkbox"]]:border-neutral-700 [&_ul[data-type="taskList"]_input[type="checkbox"]]:bg-neutral-900 [&_ul[data-type="taskList"]_input[type="checkbox"]]:accent-blue-500 [&_ul[data-type="taskList"]_li[data-checked="true"]_div]:line-through [&_ul[data-type="taskList"]_li[data-checked="true"]_div]:text-neutral-500',
+      class: `${styles.editorContent} max-w-none focus:outline-none min-h-[calc(100vh-300px)] pt-2 pb-32`,
     },
     // Prevent huge image uploads (Limit base64 footprint in DB)
     handlePaste(view: unknown, event: ClipboardEvent) {
