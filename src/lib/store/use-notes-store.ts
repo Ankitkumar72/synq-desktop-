@@ -19,6 +19,7 @@ import {
 } from '@/lib/crdt/crdt-doc'
 import { getPlainTextFromStoredContent } from '@/lib/notes/note-content'
 
+const mobileSyncDebounceTimers = new Map<string, NodeJS.Timeout>()
 export function sanitizeNote(note: Partial<Note>): Note {
   const normalizedBody = typeof note.body === 'string'
     ? getPlainTextFromStoredContent(note.body)
@@ -313,6 +314,17 @@ export const useNotesStore = create<NotesState>()(
                   if (!remoteNodeId.startsWith('web')) {
                     // Mobile edit detected — update Yjs doc
                     applyMobileBodyUpdate(remoteNote.id, getPlainTextFromStoredContent(value as string))
+                    // Persist mobile-origin body changes to CRDT in a controlled path
+                    // (without re-triggering the destructive loop in editor.tsx)
+                    const timer = mobileSyncDebounceTimers.get(remoteNote.id)
+                    if (timer) clearTimeout(timer)
+                    mobileSyncDebounceTimers.set(
+                      remoteNote.id,
+                      setTimeout(() => {
+                        void get().saveNoteContent(remoteNote.id)
+                        mobileSyncDebounceTimers.delete(remoteNote.id)
+                      }, 1500)
+                    )
                   }
                 }
               }
