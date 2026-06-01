@@ -27,7 +27,6 @@ import {
   TabsTrigger 
 } from "@/components/ui/tabs"
 import { useTaskStore } from "@/lib/store/use-task-store"
-import { useNotesStore } from "@/lib/store/use-notes-store"
 import { AnimatePage } from "@/components/layout/animate-page"
 import { Task, Note, Priority } from "@/types"
 
@@ -45,13 +44,13 @@ interface DisplayTask {
 export default function TasksPage() {
   const [view, setView] = useState<'list' | 'kanban'>('list')
   const { tasks, updateTask, deleteTask, fetchTasks, isLoading: tasksLoading, error: tasksError } = useTaskStore()
-  const { fetchNotes } = useNotesStore()
   const [searchQuery, setSearchQuery] = useState("")
 
   useEffect(() => {
-    fetchTasks()
-    fetchNotes()
-  }, [fetchTasks, fetchNotes])
+    if (tasks.length === 0) {
+      fetchTasks()
+    }
+  }, [tasks.length, fetchTasks])
 
   const allTasks: DisplayTask[] = tasks
     .filter(t => !t.is_deleted)

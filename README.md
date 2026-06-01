@@ -12,8 +12,8 @@
   </p>
 
   <p>
-    <img src="https://img.shields.io/badge/Flutter-3.10.7+-02569B?logo=flutter&logoColor=white" />
-    <img src="https://img.shields.io/badge/Next.js-15+-000000?logo=nextdotjs&logoColor=white" />
+    <img src="https://img.shields.io/badge/Flutter-3.22+-02569B?logo=flutter&logoColor=white" />
+    <img src="https://img.shields.io/badge/Next.js-14+-000000?logo=nextdotjs&logoColor=white" />
     <img src="https://img.shields.io/badge/Supabase-Backend-3ECF8E?logo=supabase&logoColor=white" />
     <img src="https://img.shields.io/badge/License-Apache%202.0-blue" />
   </p>
@@ -23,193 +23,128 @@
 
 ## 🚀 What is Synq?
 
-**Synq is a unified productivity operating system** that brings together tasks, notes, calendar, and focus into one seamless experience.
+**Synq is a cross-platform, unified productivity operating system** that brings together tasks, notes, calendar, and focus into one seamless experience.
 
 > ✨ Every note can contain tasks
 > ✨ Every task exists in time
 > ✨ Everything is connected
+> ✨ Multiplayer Realtime Sync
 
-Built as a **multi-platform system**, Synq ensures your workflow stays consistent across mobile and desktop.
+Built as a **multi-platform system**, Synq ensures your workflow stays consistent across mobile and desktop, utilizing a single source of truth architecture.
 
 ---
 
 ## 🧠 Core Philosophy
 
-Most productivity tools are fragmented.
+Most productivity tools are fragmented. Synq solves this by following a **Unified Productivity Model**:
 
-Synq solves this by following a **Unified Productivity Model**:
-
-* No separation between notes and tasks
-* Timeline-driven workflow
-* Context-aware scheduling
-* Cross-device synchronization
+* **No separation between notes and tasks**
+* **Context-aware scheduling and timeline-driven workflow**
+* **Cross-device synchronization** with a "Server-First with Optimistic UI" engine
+* **Local-first** architecture to keep you working offline seamlessly
 
 ---
 
 ## 🧩 Applications
 
-| App              | Platform      | Stack                | Purpose                              |
-| ---------------- | ------------- | -------------------- | ------------------------------------ |
-| **synq-app**     | iOS & Android | Flutter + Riverpod   | Capture, focus, and manage on-the-go |
-| **synq-desktop** | Web/Desktop   | Next.js 15 + Zustand | Deep work, planning, analytics       |
+| App              | Platform      | Stack                        | Purpose                              |
+| ---------------- | ------------- | ---------------------------- | ------------------------------------ |
+| **synq-app**     | iOS & Android | Flutter + Bloc + Isar        | Capture, focus, and manage on-the-go |
+| **synq-desktop** | Web/Desktop   | Next.js 14 + Zustand + Slate | Deep work, planning, analytics       |
 
 ---
 
 ## ✨ Features
 
 ### 🏠 Smart Dashboard
-
-* Unified view of tasks, notes, and events
-* Real-time priority surfacing
+* Unified view of tasks, notes, and events with real-time priority surfacing
 * Daily summaries & progress insights
 
----
-
-### 📅 Timeline & Scheduling
-
-* Live timeline with current-time tracking
-* Drag & drop planner
-* Recurring events (daily → yearly)
-* Infinite calendar navigation
-
----
+### 📝 Realtime Notes & Editor System
+* **Block-based editing engine** (Slate.js for Web, Custom/Quill for Mobile)
+* **Realtime Multiplayer Sync** powered by Supabase Websockets and Optimistic UI locking
+* Offline-first support with Isar (Mobile) and Local caching
+* Nested folders & tagging + Backlinks (Obsidian-style)
 
 ### ✅ Tasks & Projects
-
 * Universal quick-add system
 * Smart lists with status + priorities
 * Folder-based project organization
-* Native reminders & notifications
 
----
-
-### 📝 Notes System
-
-* Rich text + Markdown (Tiptap)
-* Nested folders & tagging
-* Attachments with optimized storage
-* Fast navigation with state persistence
-
----
+### 📅 Timeline & Scheduling
+* Live timeline with current-time tracking
+* Drag & drop planner + Recurring events (daily → yearly)
 
 ### ⏱️ Focus Mode (Mobile)
-
-* Visual focus sessions
-* Task-linked deep work
-* Flexible timers & tracking
+* Visual focus sessions and Task-linked deep work
 
 ---
 
-### 📊 Analytics
+## 🏗️ Architecture & Sync Strategy
 
-* Productivity insights
-* Streak tracking
-* Completion metrics
+Both clients (Mobile & Desktop) act as "dumb renderers." Supabase Postgres is the single source of truth. All business logic lives in Postgres (RLS policies, triggers, functions) so both platforms behave identically.
 
----
-
-### 🛡️ Data Safety
-
-* Trash recovery system
-* Offline-first architecture (Hive)
-* Zero data loss design
-
----
-
-## 🔐 Authentication & Security
-
-* Email + Password login
-* Google OAuth (one-tap login)
-* Secure session management
-* TLS encrypted communication
-* Supabase Auth + Edge Functions
-
----
-
-## 🏗️ Architecture
-
-```
-Mobile (Flutter)        Desktop (Next.js)
-       │                        │
-       └──────────┬─────────────┘
-                  │
-          Supabase Backend
-   (Auth • Database • Storage • Realtime)
+```text
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│   Flutter App   │     │   Node.js Web   │     │   Supabase      │
+│  (Android/iOS)  │◄───►│   (Next.js 14)  │◄───►│  (Postgres +    │
+│                 │     │                 │     │   Realtime API) │
+└─────────────────┘     └─────────────────┘     └─────────────────┘
+         │                       │                        │
+         └───────────────────────┴────────────────────────┘
+                    Shared: REST + WebSocket (Realtime)
 ```
 
-### Key Design Principles
-
-* Feature-first architecture
-* Shared backend, independent clients
-* Local-first + real-time sync
+### Sync Engine: Server-First with Optimistic UI
+* **Reads**: Local Cache -> Supabase Subscription -> Local Cache Update
+* **Writes**: Local Optimistic UI -> Debounce -> Supabase Push
+* **Conflict Resolution**: Last-Write-Wins + Field-level merging via `blocks.version` locks.
 
 ---
 
 ## 🧰 Tech Stack
 
-### 📱 Mobile App
+### 📱 Mobile App (`task_app`)
+* **Framework**: Flutter 3.22+
+* **State Management**: Bloc/Cubit
+* **Offline Cache**: Isar NoSQL
+* **Backend Integration**: `supabase_flutter`
 
-* Flutter 3.10+
-* Riverpod (State)
-* Hive (Offline cache)
-* Supabase
-* Firebase (Messaging + Crashlytics)
-
----
-
-### 🖥️ Desktop App
-
-* Next.js 15 (App Router)
-* React 19
-* Tailwind CSS + Framer Motion
-* Zustand (State)
-* Tiptap (Editor)
-* TypeScript
-
----
+### 🖥️ Desktop App (`Synq Desktop`)
+* **Framework**: Next.js 14 (App Router) + React 18
+* **Editor**: Slate.js (`slate-react`)
+* **State Management**: Zustand
+* **Styling**: Tailwind CSS + shadcn/ui + Framer Motion
+* **Validation**: Zod (matching Supabase schema types)
 
 ### ⚡ Backend
-
-* Supabase (PostgreSQL)
-* Realtime sync
-* Storage system
-* Edge Functions
-* Paddle (Billing)
-
----
-
-## 📦 Ecosystem
-
-| Component         | Description        |
-| ----------------- | ------------------ |
-| `synq-app`        | Mobile app         |
-| `synq-desktop`    | Desktop/web app    |
-| `paddle-backend`  | Subscription logic |
-| `image-optimizer` | Asset processing   |
+* **Database**: Supabase (Postgres 15+)
+* **Realtime**: WebSockets for Presence & Sync
+* **Auth**: Supabase Auth (Email, Google OAuth)
+* **Storage**: Supabase Storage for assets
 
 ---
 
 ## 💻 Getting Started
 
 ### Prerequisites
-
-* Flutter 3.10+
+* Flutter 3.22+
 * Node.js 20+
 * Supabase project
 
 ---
 
-### 📱 Mobile Setup
+### 📱 Mobile Setup (`task_app`)
 
 ```bash
 git clone https://github.com/Ankitkumar72/synq.git
 cd synq/task_app
 
 flutter pub get
+flutter pub run build_runner build --delete-conflicting-outputs
 ```
 
 Create `.env`:
-
 ```env
 SUPABASE_URL=your-url
 SUPABASE_ANON_KEY=your-key
@@ -221,7 +156,7 @@ flutter run
 
 ---
 
-### 🖥️ Desktop Setup
+### 🖥️ Desktop Setup (`Synq Desktop`)
 
 ```bash
 cd synq/Synq\ Desktop
@@ -229,7 +164,6 @@ npm install
 ```
 
 Create `.env.local`:
-
 ```env
 NEXT_PUBLIC_SUPABASE_URL=your-url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-key
@@ -243,70 +177,24 @@ npm run dev
 ---
 
 ## 🔐 Google OAuth Setup
-
-### Google Cloud
-
-* Create OAuth Client ID
-* Add redirect URI:
-
-```
-https://<project-id>.supabase.co/auth/v1/callback
-```
-
-### Supabase
-
-* Enable Google provider
-* Add Client ID & Secret
-* Configure redirect URLs
-
-> ⚠️ Common issue: mismatch in redirect URI or client secret
-
----
-
-## 🗂️ Project Structure
-
-### Mobile
-
-```
-task_app/
-├── lib/
-│   ├── features/
-│   ├── core/
-│   └── main.dart
-└── assets/
-```
-
-### Desktop
-
-```
-src/
-├── app/
-├── components/
-├── hooks/
-├── lib/
-└── types/
-```
+1. **Google Cloud**: Create OAuth Client ID & add redirect URI `https://<project-id>.supabase.co/auth/v1/callback`
+2. **Supabase**: Enable Google provider, add Client ID & Secret
 
 ---
 
 ## 🤝 Contributing
-
 ```bash
 git checkout -b feature/your-feature
 git commit -m "feat: add feature"
 git push origin feature/your-feature
 ```
 
-Open a PR 🚀
-
 ---
 
 ## 📄 License
-
 Apache 2.0 License
 
 ---
-
 <div align="center">
   <p>Built with ❤️ by <b>Ankit Kumar</b></p>
   <p><i>Designing the future of productivity.</i></p>

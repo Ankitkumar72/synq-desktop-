@@ -122,8 +122,10 @@ export default function DashboardPage() {
   }
 
   useEffect(() => {
-    fetchEvents()
-  }, [fetchEvents])
+    if (events.length === 0) {
+      fetchEvents()
+    }
+  }, [events.length, fetchEvents])
 
   const userName = getUserDisplayName(user)
   const initials = getUserInitials(user)

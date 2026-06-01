@@ -77,9 +77,13 @@ export default function CalendarPage() {
   }
 
   useEffect(() => {
-    fetchEvents()
-    fetchTasks()
-  }, [fetchEvents, fetchTasks])
+    if (events.length === 0) {
+      fetchEvents()
+    }
+    if (tasks.length === 0) {
+      fetchTasks()
+    }
+  }, [events.length, tasks.length, fetchEvents, fetchTasks])
 
   if (!hasMounted) return null
 

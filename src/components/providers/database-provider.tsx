@@ -387,7 +387,10 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
         realtimeConnectedRef.current = true
         isSubscribingRef.current = false
         bindNoteBroadcastChannel(channel)
-        fetchData().catch(e => console.error('[Realtime] Sync fetch failed:', e))
+        // Avoid duplicate fetch right after bootstrap; do a catch-up fetch only on reconnect.
+        if (attempt > 0) {
+          fetchData().catch(e => console.error('[Realtime] Sync fetch failed:', e))
+        }
       } else if (
         status === 'TIMED_OUT' ||
         status === 'CHANNEL_ERROR' ||

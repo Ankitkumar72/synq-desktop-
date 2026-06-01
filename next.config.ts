@@ -2,7 +2,10 @@ import type { NextConfig } from "next";
 
 import path from "path";
 
+const distDir = process.env.NEXT_DIST_DIR?.trim()
+
 const nextConfig: NextConfig = {
+  ...(distDir ? { distDir } : {}),
   images: {
     qualities: [75, 100],
     remotePatterns: [

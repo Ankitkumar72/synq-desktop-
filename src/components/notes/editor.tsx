@@ -583,6 +583,10 @@ export function NoteEditor({
 
         if (generation !== initGenerationRef.current) return
 
+        // Unblock editor rendering as soon as baseline state is ready.
+        // Oplog catch-up can continue without keeping the full-page loader visible.
+        setIsLoading(false)
+
         // 2.5 Replay missing incremental ops after local cursor.
         try {
           let cursor = getLocalLastSeq(id)
@@ -1062,6 +1066,7 @@ export function NoteEditor({
       ydoc.transact(() => {
         const fragment = ydoc.getXmlFragment('content')
         fragmentLength = fragment.length
+        isPlain = isFlatPlainTextFragment(fragment)
 
         if (fragmentLength > 0 && contentValue && typeof contentValue === 'object') {
           const jsonStr = JSON.stringify(contentValue)
@@ -1070,8 +1075,6 @@ export function NoteEditor({
             isYjsCorrupted = true
           }
         }
-
-        isPlain = isFlatPlainTextFragment(fragment)
       })
 
       const hasFlutter = containsFlutterTags(plainText)

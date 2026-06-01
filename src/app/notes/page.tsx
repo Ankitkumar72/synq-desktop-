@@ -97,8 +97,10 @@ function NotesPageContent() {
   }, [searchParams, notes, selectedNoteId, setSelectedNoteId])
 
   useEffect(() => {
-    fetchProjects()
-  }, [fetchProjects])
+    if (projects.length === 0) {
+      fetchProjects()
+    }
+  }, [projects.length, fetchProjects])
 
   // Sync URL with selectedNoteId using silent history updates
   useEffect(() => {
