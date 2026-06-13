@@ -9,7 +9,7 @@ export interface QueuedOperation {
   entityId: string        
   operationType: 'insert' | 'update' | 'delete' | 'hard_delete'
 
-  payload: Record<string, any>   
+  payload: Record<string, unknown>   
   hlcTimestamp: string     
   createdAt: number        
   retryCount: number       

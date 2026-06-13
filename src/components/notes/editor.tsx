@@ -244,7 +244,7 @@ function isXmlTextFormatted(xmlText: Y.XmlText): boolean {
   try {
     const delta = xmlText.toDelta()
 
-    return delta.some((op: any) => op.attributes && Object.keys(op.attributes).length > 0)
+    return delta.some((op: { attributes?: Record<string, unknown> }) => op.attributes && Object.keys(op.attributes).length > 0)
   } catch {
     return false
   }
@@ -1069,7 +1069,7 @@ export function NoteEditor({
           const cleanedMarkdown = convertCustomTagsToMarkdown(plainText)
           if (__DEV__) console.log('[NoteEditor] Translated mobile tags to standard Markdown:', cleanedMarkdown)
 
-          const parsedNode = (editor.storage as any).markdown.parser.parse(cleanedMarkdown)
+          const parsedNode = (editor.storage as unknown as { markdown: { parser: { parse: (text: string) => Parameters<Editor['commands']['setContent']>[0] } } }).markdown.parser.parse(cleanedMarkdown)
           editor.commands.setContent(parsedNode)
           if (__DEV__) console.log('[NoteEditor] Note self-healing successfully completed!')
           if (__DEV__) console.groupEnd()
@@ -1095,7 +1095,7 @@ export function NoteEditor({
               const cleanedMarkdown = convertCustomTagsToMarkdown(contentValue)
               if (__DEV__) console.log('[NoteEditor] Translated raw markdown content:', cleanedMarkdown)
 
-              const parsedNode = (editor.storage as any).markdown.parser.parse(cleanedMarkdown)
+              const parsedNode = (editor.storage as unknown as { markdown: { parser: { parse: (text: string) => Parameters<Editor['commands']['setContent']>[0] } } }).markdown.parser.parse(cleanedMarkdown)
               editor.commands.setContent(parsedNode)
               if (__DEV__) console.log('[NoteEditor] Markdown content successfully seeded!')
               if (__DEV__) console.groupEnd()
@@ -1190,7 +1190,7 @@ export function NoteEditor({
       setActiveEdit(id, false)
     }
 
-  }, [id])
+  }, [id, clearActiveNoteActivity, setFocusedNoteId, updateNoteLocal, ydoc])
 
   if (isLoading) {
     return (

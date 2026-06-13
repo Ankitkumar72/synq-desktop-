@@ -25,7 +25,7 @@ const RETRY_BASE_DELAY_MS = 2000
 const INITIAL_SUBSCRIBE_DELAY_MS = 250
 // Poll intervals (ms)
 const POLL_INTERVAL_REALTIME_DOWN = 10_000  // 10s when realtime is down
-const POLL_INTERVAL_REALTIME_UP = 30_000    // 30s when realtime is healthy
+// const POLL_INTERVAL_REALTIME_UP = 30_000    // 30s when realtime is healthy
 const HEALTH_CHECK_INTERVAL = 60_000        // 60s health check
 const HEALTH_CHECK_GRACE_MS = 30_000        // Don't health-check within 30s of a subscribe attempt
 
