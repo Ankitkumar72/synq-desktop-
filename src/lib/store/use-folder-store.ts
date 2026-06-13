@@ -16,7 +16,7 @@ interface FolderState {
   isLoading: boolean
   error: string | null
   setFolders: (folders: Folder[]) => void
-  fetchFolders: (includeDeleted?: boolean) => Promise<void>
+  fetchFolders: (includeDeleted?: boolean, prefetchedData?: Folder[]) => Promise<void>
   addFolder: (folder: Omit<Folder, 'id' | 'created_at' | 'updated_at'>) => Promise<void>
   updateFolder: (id: string, updates: Partial<Folder>) => Promise<void>
   deleteFolder: (id: string) => Promise<void>
@@ -32,7 +32,7 @@ export const useFolderStore = create<FolderState>()(
       error: null,
       setFolders: (folders) => set({ folders }),
 
-      fetchFolders: async (includeDeleted = false) => {
+      fetchFolders: async (includeDeleted = false, prefetchedData?: Folder[]) => {
         if (!supabase || get().isLoading) return
         set({ isLoading: true, error: null })
 
@@ -48,17 +48,22 @@ export const useFolderStore = create<FolderState>()(
         }
 
         try {
-          let query = supabase.from(TABLES.FOLDERS).select('*').eq(COLUMNS.USER_ID, userId)
+          let data = prefetchedData;
+          
+          if (!data) {
+            let query = supabase.from(TABLES.FOLDERS).select('*').eq(COLUMNS.USER_ID, userId)
 
-          if (!includeDeleted) {
-            query = query.eq(COLUMNS.IS_DELETED, false)
-          }
+            if (!includeDeleted) {
+              query = query.eq(COLUMNS.IS_DELETED, false)
+            }
 
-          const { data, error } = await query.order('created_at', { ascending: false })
-          if (error) {
-            console.error('[FolderStore] Error fetching folders:', error)
-            set({ error: error.message, isLoading: false })
-            return
+            const res = await query.order('created_at', { ascending: false })
+            if (res.error) {
+              console.error('[FolderStore] Error fetching folders:', res.error)
+              set({ error: res.error.message, isLoading: false })
+              return
+            }
+            data = res.data || []
           }
 
           const currentFolders = get().folders

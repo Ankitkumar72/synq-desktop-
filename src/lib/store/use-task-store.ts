@@ -15,7 +15,7 @@ interface TaskState {
   isLoading: boolean
   error: string | null
   setTasks: (tasks: Task[]) => void
-  fetchTasks: (includeDeleted?: boolean) => Promise<void>
+  fetchTasks: (includeDeleted?: boolean, prefetchedData?: Task[]) => Promise<void>
   addTask: (task: Omit<Task, 'id' | 'created_at'>) => Promise<void>
   updateTask: (id: string, updates: Partial<Task>) => Promise<void>
   deleteTask: (id: string) => Promise<void>
@@ -36,7 +36,7 @@ export const useTaskStore = create<TaskState>()(
       isLoading: false,
       error: null,
       setTasks: (tasks) => set({ tasks }),
-      fetchTasks: async (includeDeleted = false) => {
+      fetchTasks: async (includeDeleted = false, prefetchedData?: Task[]) => {
         if (!supabase || get().isLoading) return
         set({ isLoading: true, error: null })
         
@@ -52,40 +52,44 @@ export const useTaskStore = create<TaskState>()(
         }
 
         try {
-          // RLS automatically filters by user_id (auth.uid() = user_id)
-          let query = supabase
-            .from('tasks')
-            .select('*')
-            .eq('user_id', userId)
+          let data = prefetchedData;
           
-          if (!includeDeleted) {
-            query = query.eq('is_deleted', false)
+          if (!data) {
+            // RLS automatically filters by user_id (auth.uid() = user_id)
+            let query = supabase
+              .from('tasks')
+              .select('*')
+              .eq('user_id', userId)
+            
+            if (!includeDeleted) {
+              query = query.eq('is_deleted', false)
+            }
+            
+            const res = await query.order('created_at', { ascending: false })
+            
+            if (res.error) {
+              console.error('[TaskStore] Error fetching tasks:', {
+                message: res.error.message,
+                code: res.error.code,
+                details: res.error.details,
+                hint: res.error.hint,
+                status: res.status,
+                statusText: res.statusText
+              })
+              set({ error: res.error.message, isLoading: false })
+              return
+            }
+            data = res.data || []
           }
-          
-          const { data, error, status, statusText } = await query
-            .order('created_at', { ascending: false })
-          
-          if (error) {
-            console.error('[TaskStore] Error fetching tasks:', {
-              message: error.message,
-              code: error.code,
-              details: error.details,
-              hint: error.hint,
-              status,
-              statusText
-            })
-            set({ error: error.message, isLoading: false })
-          } else {
-            console.group('[Sync Debug] Fetched Tasks')
-            console.log('Count:', data?.length || 0)
-            console.log('Data:', data)
-            console.groupEnd()
 
-            // Merge each fetched task using CRDT merge to preserve local state
-            const currentTasks = get().tasks
-            const merged = mergeTaskList(currentTasks, data || [], true, includeDeleted)
-            set({ tasks: merged, isLoading: false })
-          }
+          console.group('[Sync Debug] Fetched Tasks')
+          console.log('Count:', data?.length || 0)
+          console.groupEnd()
+
+          // Merge each fetched task using CRDT merge to preserve local state
+          const currentTasks = get().tasks
+          const merged = mergeTaskList(currentTasks, data || [], true, includeDeleted)
+          set({ tasks: merged, isLoading: false })
         } catch (err) {
           console.error('[TaskStore] Unexpected error in fetchTasks:', err)
           set({ error: err instanceof Error ? err.message : String(err), isLoading: false })

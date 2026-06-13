@@ -20,7 +20,7 @@ interface EventState {
   deleteEvent: (id: string) => Promise<void>
   restoreEvent: (id: string) => Promise<void>
   permanentlyDeleteEvent: (id: string) => Promise<void>
-  fetchEvents: (includeDeleted?: boolean) => Promise<void>
+  fetchEvents: (includeDeleted?: boolean, prefetchedData?: CalendarEvent[]) => Promise<void>
   mergeEventLocal: (remote: CalendarEvent) => void
   clearStore: () => void
 }
@@ -210,7 +210,7 @@ export const useEventStore = create<EventState>()(
         }
       },
 
-      fetchEvents: async (includeDeleted = false) => {
+      fetchEvents: async (includeDeleted = false, prefetchedData?: CalendarEvent[]) => {
         if (!supabase || get().isLoading) return
         set({ isLoading: true, error: null })
         
@@ -227,26 +227,31 @@ export const useEventStore = create<EventState>()(
         }
 
         try {
-          let query = supabase
-            .from('events')
-            .select('*')
-            .eq('user_id', userId)
-
-          if (!includeDeleted) {
-            query = query.eq('is_deleted', false)
-          }
-
-          const { data, error } = await query.order('start_date', { ascending: true })
+          let data = prefetchedData;
           
-          if (error) {
-            console.error('[EventStore] Supabase error in fetchEvents:', {
-              message: error.message,
-              code: error.code,
-              details: error.details,
-              hint: error.hint,
-            })
-            set({ isLoading: false, error: error.message })
-            return
+          if (!data) {
+            let query = supabase
+              .from('events')
+              .select('*')
+              .eq('user_id', userId)
+
+            if (!includeDeleted) {
+              query = query.eq('is_deleted', false)
+            }
+
+            const res = await query.order('start_date', { ascending: true })
+            
+            if (res.error) {
+              console.error('[EventStore] Supabase error in fetchEvents:', {
+                message: res.error.message,
+                code: res.error.code,
+                details: res.error.details,
+                hint: res.error.hint,
+              })
+              set({ isLoading: false, error: res.error.message })
+              return
+            }
+            data = res.data || []
           }
 
           const currentEvents = get().events

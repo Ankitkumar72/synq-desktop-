@@ -15,7 +15,7 @@ interface ProjectState {
   isLoading: boolean
   error: string | null
   setProjects: (projects: Project[]) => void
-  fetchProjects: (includeDeleted?: boolean) => Promise<void>
+  fetchProjects: (includeDeleted?: boolean, prefetchedData?: Project[]) => Promise<void>
   addProject: (project: Omit<Project, 'id' | 'created_at' | 'task_count' | 'completed_task_count' | 'progress'>) => Promise<void>
   updateProject: (id: string, updates: Partial<Project>) => Promise<void>
   deleteProject: (id: string) => Promise<void>
@@ -32,7 +32,7 @@ export const useProjectStore = create<ProjectState>()(
       error: null,
       setProjects: (projects) => set({ projects }),
 
-      fetchProjects: async (includeDeleted = false) => {
+      fetchProjects: async (includeDeleted = false, prefetchedData?: Project[]) => {
         if (!supabase || get().isLoading) return
         set({ isLoading: true, error: null })
 
@@ -48,25 +48,30 @@ export const useProjectStore = create<ProjectState>()(
         }
 
         try {
-          let query = supabase.from('projects').select('*').eq('user_id', userId)
+          let data = prefetchedData;
+          
+          if (!data) {
+            let query = supabase.from('projects').select('*').eq('user_id', userId)
 
-          if (!includeDeleted) {
-            query = query.eq('is_deleted', false)
-          }
+            if (!includeDeleted) {
+              query = query.eq('is_deleted', false)
+            }
 
-          const { data, error, status, statusText } = await query.order('created_at', { ascending: false })
-          if (error) {
-            console.error('[ProjectStore] Error fetching projects:', {
-              message: error.message,
-              code: error.code,
-              details: error.details,
-              hint: error.hint,
-              status,
-              statusText,
-              raw: error,
-            })
-            set({ error: error.message || `Supabase error (${error.code || status})`, isLoading: false })
-            return
+            const res = await query.order('created_at', { ascending: false })
+            if (res.error) {
+              console.error('[ProjectStore] Error fetching projects:', {
+                message: res.error.message,
+                code: res.error.code,
+                details: res.error.details,
+                hint: res.error.hint,
+                status: res.status,
+                statusText: res.statusText,
+                raw: res.error,
+              })
+              set({ error: res.error.message || `Supabase error (${res.error.code || res.status})`, isLoading: false })
+              return
+            }
+            data = res.data || []
           }
 
           const currentProjects = get().projects

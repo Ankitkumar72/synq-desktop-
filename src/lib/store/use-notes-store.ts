@@ -60,7 +60,7 @@ interface NotesState {
   deleteNote: (id: string) => Promise<void>
   restoreNote: (id: string) => Promise<void>
   permanentlyDeleteNote: (id: string) => Promise<void>
-  fetchNotes: (includeDeleted?: boolean) => Promise<void>
+  fetchNotes: (includeDeleted?: boolean, prefetchedData?: Note[]) => Promise<void>
   setSelectedNoteId: (id: string | null) => void
   pinNote: (id: string, isPinned: boolean) => Promise<void>
   focusedNoteId: string | null
@@ -486,7 +486,7 @@ export const useNotesStore = create<NotesState>()(
 
       setSelectedNoteId: (id) => set({ selectedNoteId: id }),
 
-      fetchNotes: async (includeDeleted = false) => {
+      fetchNotes: async (includeDeleted = false, prefetchedData?: Note[]) => {
         if (!supabase || get().isLoading) return
         
         const userId = useUserStore.getState().user?.id
@@ -498,30 +498,34 @@ export const useNotesStore = create<NotesState>()(
         try {
           set({ isLoading: true });
           
-          // Fetch all notes in one query (up to 500)
-          let query = supabase
-            .from(includeDeleted ? TABLES.WEB_NOTES : TABLES.WEB_NOTES_ACTIVE)
-            .select('*')
-            .eq(COLUMNS.USER_ID, userId);
-          if (!includeDeleted) {
-            query = query.eq(COLUMNS.IS_DELETED, false);
-          }
-          
-          const { data, error, status, statusText } = await query
-            .order('updated_at', { ascending: false })
-            .limit(500);
-          
-          if (error) {
-            console.error('[NotesStore] Error fetching notes:', {
-              message: error.message,
-              code: error.code,
-              details: error.details,
-              hint: error.hint,
-              status,
-              statusText
-            });
-            set({ isLoading: false });
-            return;
+          let data = prefetchedData;
+          if (!data) {
+            // Fetch all notes in one query (up to 500)
+            let query = supabase
+              .from(includeDeleted ? TABLES.WEB_NOTES : TABLES.WEB_NOTES_ACTIVE)
+              .select('*')
+              .eq(COLUMNS.USER_ID, userId);
+            if (!includeDeleted) {
+              query = query.eq(COLUMNS.IS_DELETED, false);
+            }
+            
+            const res = await query
+              .order('updated_at', { ascending: false })
+              .limit(500);
+            
+            if (res.error) {
+              console.error('[NotesStore] Error fetching notes:', {
+                message: res.error.message,
+                code: res.error.code,
+                details: res.error.details,
+                hint: res.error.hint,
+                status: res.status,
+                statusText: res.statusText
+              });
+              set({ isLoading: false });
+              return;
+            }
+            data = res.data || []
           }
 
           if (data) {

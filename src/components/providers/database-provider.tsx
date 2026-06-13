@@ -56,14 +56,36 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
   // -------------------------------------------------------------------------
 
   const fetchData = useCallback(async () => {
-    const promises = [
-      useTaskStore.getState().fetchTasks(),
-      useNotesStore.getState().fetchNotes(),
-      useEventStore.getState().fetchEvents(),
-      useProjectStore.getState().fetchProjects(),
-      useFolderStore.getState().fetchFolders()
-    ]
-    await Promise.allSettled(promises)
+    try {
+      const { data, error } = await supabase.rpc('get_bootstrap_data')
+      
+      if (error) {
+        console.error('[DatabaseProvider] Error fetching bootstrap data:', error)
+        // Fallback to separate fetches if RPC fails
+        const promises = [
+          useTaskStore.getState().fetchTasks(),
+          useNotesStore.getState().fetchNotes(),
+          useEventStore.getState().fetchEvents(),
+          useProjectStore.getState().fetchProjects(),
+          useFolderStore.getState().fetchFolders()
+        ]
+        await Promise.allSettled(promises)
+        return
+      }
+
+      if (data) {
+        const promises = [
+          useTaskStore.getState().fetchTasks(false, data.tasks),
+          useNotesStore.getState().fetchNotes(false, data.notes),
+          useEventStore.getState().fetchEvents(false, data.events),
+          useProjectStore.getState().fetchProjects(false, data.projects),
+          useFolderStore.getState().fetchFolders(false, data.folders)
+        ]
+        await Promise.allSettled(promises)
+      }
+    } catch (err) {
+      console.error('[DatabaseProvider] Unexpected error in fetchData:', err)
+    }
   }, [])
 
   // -------------------------------------------------------------------------
@@ -225,9 +247,10 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
         break
       }
       const update = toUint8Update(row.update_data)
-      if (update && applyRemoteUpdateIfLoaded(noteId, update)) {
-        cursor = seq
+      if (update) {
+        applyRemoteUpdateIfLoaded(noteId, update)
       }
+      cursor = seq
     }
 
     if (cursor > 0) {
@@ -243,9 +266,10 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
         const seq = Number(row.seq || 0)
         if (seq <= cursor) continue
         const update = toUint8Update(row.update_data)
-        if (update && applyRemoteUpdateIfLoaded(noteId, update)) {
-          cursor = seq
+        if (update) {
+          applyRemoteUpdateIfLoaded(noteId, update)
         }
+        cursor = seq
       }
       if (cursor > 0) {
         setLocalLastSeq(noteId, cursor)
@@ -439,10 +463,11 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
     if (pollTimerRef.current) clearInterval(pollTimerRef.current)
     pollTimerRef.current = setInterval(() => {
       if (typeof document !== 'undefined' && document.hidden) return // Pause in background
+      
+      // Do not poll the database constantly if Realtime is actively connected!
+      if (realtimeConnectedRef.current) return
+      
       const now = Date.now()
-      if (realtimeConnectedRef.current) {
-        if ((now - lastPollAtRef.current) < POLL_INTERVAL_REALTIME_UP) return
-      }
       lastPollAtRef.current = now
       fetchData().catch(err => console.error('[Poll] Error:', err))
     }, POLL_INTERVAL_REALTIME_DOWN)
@@ -463,7 +488,9 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
     let mounted = true
 
     const executeInit = async (session: Session | null) => {
-      if (initStarted.current) return
+      const targetUserId = session?.user?.id || null
+      if (initStarted.current && currentUserIdRef.current === targetUserId) return
+      
       initStarted.current = true
 
       try {
@@ -521,29 +548,27 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
-    supabase.auth.getSession().then(async ({ data: { session }, error }) => {
-      if (error) {
-        if (error.message.includes('refresh_token_not_found')) {
-          await supabase.auth.signOut()
-          window.location.href = '/login'
-          return
-        }
-      }
-      if (mounted) executeInit(session)
-    })
-
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (_event === 'TOKEN_REFRESHED' && !session) {
         await supabase.auth.signOut()
         window.location.href = '/login'
         return
       }
-      if ((_event === 'SIGNED_IN' || _event === 'SIGNED_OUT') && initStarted.current) {
-         initStarted.current = false
-         if (mounted) executeInit(session)
-      } else if (!initStarted.current) {
-         if (mounted) executeInit(session)
+      if (_event === 'SIGNED_OUT') {
+        initStarted.current = false // Allow re-init on next sign-in
+        if (mounted) executeInit(null)
+      } else if (session && mounted) {
+        executeInit(session)
       }
+    })
+
+    supabase.auth.getSession().then(async ({ data: { session }, error }) => {
+      if (error && error.message.includes('refresh_token_not_found')) {
+        await supabase.auth.signOut()
+        window.location.href = '/login'
+        return
+      }
+      if (session && mounted) executeInit(session)
     })
 
     const handleVisibilityChange = () => {
