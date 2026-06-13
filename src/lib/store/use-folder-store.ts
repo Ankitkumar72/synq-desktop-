@@ -124,7 +124,7 @@ export const useFolderStore = create<FolderState>()(
               entityType: 'folder',
               entityId: folderId,
               operationType: 'insert',
-              payload: folderPayload,
+              payload: folderPayload as unknown as Record<string, unknown>,
               hlcTimestamp: timestamp,
             })
             triggerFlush()
@@ -138,7 +138,7 @@ export const useFolderStore = create<FolderState>()(
             entityType: 'folder',
             entityId: folderId,
             operationType: 'insert',
-            payload: folderPayload,
+            payload: folderPayload as unknown as Record<string, unknown>,
             hlcTimestamp: timestamp,
           })
         }

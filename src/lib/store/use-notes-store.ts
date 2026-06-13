@@ -182,7 +182,7 @@ export const useNotesStore = create<NotesState>()(
                 entityType: 'note',
                 entityId: noteId,
                 operationType: 'insert',
-                payload: fullNote,
+                payload: fullNote as unknown as Record<string, unknown>,
                 hlcTimestamp: timestamp,
               })
               triggerFlush()
@@ -196,7 +196,7 @@ export const useNotesStore = create<NotesState>()(
               entityType: 'note',
               entityId: noteId,
               operationType: 'insert',
-              payload: fullNote,
+              payload: fullNote as unknown as Record<string, unknown>,
               hlcTimestamp: timestamp,
             })
           }
