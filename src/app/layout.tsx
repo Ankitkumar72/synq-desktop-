@@ -4,6 +4,7 @@ import "./globals.css";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { LayoutContent } from "@/components/layout/layout-content";
 import { DatabaseProvider } from "@/components/providers/database-provider";
+import brandLogo from "../../assets/images/brand-logo.png";
 
 const roboto = Roboto({
   weight: ["100", "300", "400", "500", "700", "900"],
@@ -25,8 +26,8 @@ export const metadata: Metadata = {
   title: "Synq | Productivity OS",
   description: "Minimal productivity for teams and individuals",
   icons: {
-    icon: "/brand-logo.png",
-    apple: "/brand-logo.png",
+    icon: brandLogo.src,
+    apple: brandLogo.src,
   },
 };
 

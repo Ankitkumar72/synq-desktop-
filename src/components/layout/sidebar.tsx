@@ -15,6 +15,7 @@ import { usePathname } from "next/navigation"
 import { useUserStore } from "@/lib/store/use-user-store"
 import { useUIStore } from "@/lib/store/use-ui-store"
 
+
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { getUserDisplayName, getUserInitials } from "@/lib/user-utils"
 
@@ -34,6 +35,8 @@ export function LinearSidebar() {
 
   return (
     <aside className="w-[240px] bg-[#090909] flex flex-col p-3 shrink-0 relative z-40">
+
+
 
       {/* User Profile */}
       <div className="flex items-center gap-3 mb-4 p-2">

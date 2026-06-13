@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input'
 import { login, signInWithGoogle, signInWithGithub, signInWithLinkedin, signInWithFacebook } from '../actions'
 import { useSearchParams } from 'next/navigation'
 import Image from 'next/image'
+import brandLogo from '../../../../assets/images/brand-logo.png'
 
 export default function LoginPage() {
   return (
@@ -52,7 +53,7 @@ function LoginContent() {
         >
           <div className="h-10 w-10 relative mb-8">
             <Image
-              src="/brand-logo.png"
+              src={brandLogo}
               alt="Synq Logo"
               fill
               className="object-contain opacity-80"
@@ -93,7 +94,7 @@ function LoginContent() {
           <div className="flex justify-center">
             <div className="h-10 w-10 sm:h-12 sm:w-12 relative">
               <Image
-                src="/brand-logo.png"
+                src={brandLogo}
                 alt="Synq Logo"
                 fill
                 className="object-contain"

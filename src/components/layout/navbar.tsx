@@ -4,6 +4,8 @@ import { Search, LayoutDashboard, Calendar, FileText, User } from "lucide-react"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
+import Image from "next/image"
+import brandLogo from "../../../assets/images/brand-logo.png"
 
 const NAV_LINKS = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard },
@@ -18,8 +20,19 @@ export function Navbar() {
   return (
     <nav className="h-16 border-b border-white/5 bg-background/50 backdrop-blur-xl sticky top-0 z-30 px-8 flex items-center justify-between">
       {/* Left: Logo & Company Name */}
-      <div className="flex items-center w-[250px]">
-        <span className="font-playfair text-[40px] font-bold tracking-[-0.5px] text-white leading-none mb-1 cursor-default">
+      <div className="flex items-center w-[250px] gap-3">
+        <div className="h-8 w-8 relative">
+          <Image
+            src={brandLogo}
+            alt="Synq Logo"
+            fill
+            className="object-contain"
+            quality={100}
+            priority
+            sizes="32px"
+          />
+        </div>
+        <span className="font-playfair text-[32px] font-bold tracking-[-0.5px] text-white leading-none mb-1 cursor-default">
           Synq.
         </span>
       </div>

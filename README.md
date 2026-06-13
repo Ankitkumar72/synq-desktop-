@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="assets/images/logo.png" width="120" height="120" alt="Synq Logo" />
+  <img src="assets/images/brand-logo.png" width="120" height="120" alt="Synq Logo" />
 
 # Synq — Productivity OS
 
