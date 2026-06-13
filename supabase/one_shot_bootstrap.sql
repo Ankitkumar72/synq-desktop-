@@ -1,17 +1,6 @@
--- Synq one-shot bootstrap for an empty Supabase project.
--- Run this in Supabase SQL Editor once (or re-run safely where IF EXISTS is used).
-
 BEGIN;
-
--- -----------------------------------------------------------------------------
--- Extensions
--- -----------------------------------------------------------------------------
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp" WITH SCHEMA extensions;
 CREATE EXTENSION IF NOT EXISTS moddatetime WITH SCHEMA extensions;
-
--- -----------------------------------------------------------------------------
--- Core tables
--- -----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.profiles (
   id UUID REFERENCES auth.users ON DELETE CASCADE PRIMARY KEY,
   name TEXT,
@@ -23,7 +12,6 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()),
   updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now())
 );
-
 CREATE TABLE IF NOT EXISTS public.projects (
   id UUID DEFAULT extensions.uuid_generate_v4() PRIMARY KEY,
   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
@@ -41,7 +29,6 @@ CREATE TABLE IF NOT EXISTS public.projects (
   created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()),
   updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now())
 );
-
 CREATE TABLE IF NOT EXISTS public.tasks (
   id UUID DEFAULT extensions.uuid_generate_v4() PRIMARY KEY,
   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
@@ -62,7 +49,6 @@ CREATE TABLE IF NOT EXISTS public.tasks (
   updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()),
   deleted_at TIMESTAMPTZ
 );
-
 CREATE TABLE IF NOT EXISTS public.notes (
   id UUID DEFAULT extensions.uuid_generate_v4() PRIMARY KEY,
   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
@@ -100,7 +86,6 @@ CREATE TABLE IF NOT EXISTS public.notes (
   updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()),
   created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now())
 );
-
 CREATE TABLE IF NOT EXISTS public.folders (
   id UUID DEFAULT extensions.uuid_generate_v4() PRIMARY KEY,
   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
@@ -115,7 +100,6 @@ CREATE TABLE IF NOT EXISTS public.folders (
   created_at TIMESTAMPTZ DEFAULT now(),
   updated_at TIMESTAMPTZ DEFAULT now()
 );
-
 DO $$
 BEGIN
   IF NOT EXISTS (
@@ -130,7 +114,6 @@ BEGIN
       FOREIGN KEY (folder_id) REFERENCES public.folders(id) ON DELETE SET NULL;
   END IF;
 END $$;
-
 CREATE TABLE IF NOT EXISTS public.events (
   id UUID DEFAULT extensions.uuid_generate_v4() PRIMARY KEY,
   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE DEFAULT auth.uid(),
@@ -148,7 +131,6 @@ CREATE TABLE IF NOT EXISTS public.events (
   created_at TIMESTAMPTZ DEFAULT now(),
   updated_at TIMESTAMPTZ DEFAULT now()
 );
-
 CREATE TABLE IF NOT EXISTS public.devices (
   id UUID DEFAULT extensions.uuid_generate_v4() PRIMARY KEY,
   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
@@ -158,7 +140,6 @@ CREATE TABLE IF NOT EXISTS public.devices (
   last_active_at TIMESTAMPTZ DEFAULT now(),
   created_at TIMESTAMPTZ DEFAULT now()
 );
-
 CREATE TABLE IF NOT EXISTS public.activities (
   id UUID DEFAULT extensions.uuid_generate_v4() PRIMARY KEY,
   user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
@@ -168,7 +149,6 @@ CREATE TABLE IF NOT EXISTS public.activities (
   target_type TEXT,
   created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now())
 );
-
 CREATE TABLE IF NOT EXISTS public.rate_limits (
   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
   action TEXT NOT NULL,
@@ -176,10 +156,6 @@ CREATE TABLE IF NOT EXISTS public.rate_limits (
   window_start TIMESTAMPTZ DEFAULT now(),
   PRIMARY KEY (user_id, action)
 );
-
--- -----------------------------------------------------------------------------
--- CRDT tables
--- -----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.crdt_documents (
   entity_type TEXT NOT NULL,
   entity_id UUID NOT NULL,
@@ -188,7 +164,6 @@ CREATE TABLE IF NOT EXISTS public.crdt_documents (
   updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()),
   PRIMARY KEY (entity_type, entity_id)
 );
-
 CREATE TABLE IF NOT EXISTS public.crdt_note_updates (
   seq BIGSERIAL PRIMARY KEY,
   entity_type TEXT NOT NULL DEFAULT 'note',
@@ -200,10 +175,6 @@ CREATE TABLE IF NOT EXISTS public.crdt_note_updates (
   created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
   UNIQUE (entity_type, entity_id, op_id)
 );
-
--- -----------------------------------------------------------------------------
--- RLS
--- -----------------------------------------------------------------------------
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.projects ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.tasks ENABLE ROW LEVEL SECURITY;
@@ -215,55 +186,46 @@ ALTER TABLE public.activities ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.rate_limits ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.crdt_documents ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.crdt_note_updates ENABLE ROW LEVEL SECURITY;
-
 DROP POLICY IF EXISTS "Users can view own profile." ON public.profiles;
 DROP POLICY IF EXISTS "Users can insert their own profile." ON public.profiles;
 DROP POLICY IF EXISTS "Users can update own profile." ON public.profiles;
 CREATE POLICY "Users can view own profile." ON public.profiles FOR SELECT USING (auth.uid() = id);
 CREATE POLICY "Users can insert their own profile." ON public.profiles FOR INSERT WITH CHECK (auth.uid() = id);
 CREATE POLICY "Users can update own profile." ON public.profiles FOR UPDATE USING (auth.uid() = id);
-
 DROP POLICY IF EXISTS "Users can manage own projects" ON public.projects;
 CREATE POLICY "Users can manage own projects"
   ON public.projects FOR ALL
   USING (auth.uid() = user_id)
   WITH CHECK (auth.uid() = user_id);
-
 DROP POLICY IF EXISTS "Users can manage own tasks" ON public.tasks;
 CREATE POLICY "Users can manage own tasks"
   ON public.tasks FOR ALL
   USING (auth.uid() = user_id)
   WITH CHECK (auth.uid() = user_id);
-
 DROP POLICY IF EXISTS "Users can manage own notes" ON public.notes;
 CREATE POLICY "Users can manage own notes"
   ON public.notes FOR ALL
   USING (auth.uid() = user_id)
   WITH CHECK (auth.uid() = user_id);
-
 DROP POLICY IF EXISTS "Users can manage own folders" ON public.folders;
 CREATE POLICY "Users can manage own folders"
   ON public.folders FOR ALL
   USING (auth.uid() = user_id)
   WITH CHECK (auth.uid() = user_id);
-
 DROP POLICY IF EXISTS "Users can manage own events" ON public.events;
 CREATE POLICY "Users can manage own events"
   ON public.events FOR ALL
   USING (auth.uid() = user_id)
   WITH CHECK (auth.uid() = user_id);
-
 DROP POLICY IF EXISTS "Users can manage own devices" ON public.devices;
 CREATE POLICY "Users can manage own devices"
   ON public.devices FOR ALL
   USING (auth.uid() = user_id)
   WITH CHECK (auth.uid() = user_id);
-
 DROP POLICY IF EXISTS "Users can view own activities" ON public.activities;
 CREATE POLICY "Users can view own activities"
   ON public.activities FOR SELECT
   USING (auth.uid() = user_id);
-
 DROP POLICY IF EXISTS "Users can view own rate limits" ON public.rate_limits;
 DROP POLICY IF EXISTS "No direct user writes" ON public.rate_limits;
 DROP POLICY IF EXISTS "No direct user updates" ON public.rate_limits;
@@ -273,13 +235,11 @@ CREATE POLICY "Users can view own rate limits"
 CREATE POLICY "No direct user writes" ON public.rate_limits FOR INSERT WITH CHECK (false);
 CREATE POLICY "No direct user updates" ON public.rate_limits FOR UPDATE USING (false);
 CREATE POLICY "No direct user deletes" ON public.rate_limits FOR DELETE USING (false);
-
 DROP POLICY IF EXISTS "Users can manage own CRDT documents" ON public.crdt_documents;
 CREATE POLICY "Users can manage own CRDT documents"
   ON public.crdt_documents FOR ALL
   USING (auth.uid() = user_id)
   WITH CHECK (auth.uid() = user_id);
-
 DROP POLICY IF EXISTS "Users can read accessible crdt note updates" ON public.crdt_note_updates;
 DROP POLICY IF EXISTS "Users can insert accessible crdt note updates" ON public.crdt_note_updates;
 CREATE POLICY "Users can read accessible crdt note updates"
@@ -303,10 +263,6 @@ CREATE POLICY "Users can insert accessible crdt note updates"
         AND n.user_id = auth.uid()
     )
   );
-
--- -----------------------------------------------------------------------------
--- Soft-delete synchronization trigger
--- -----------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION public.sync_deleted_status_generic()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -318,7 +274,6 @@ BEGIN
     END IF;
     RETURN NEW;
   END IF;
-
   IF NEW.is_deleted = true AND COALESCE(OLD.is_deleted, false) = false THEN
     NEW.deleted_at = COALESCE(NEW.deleted_at, now());
   ELSIF NEW.is_deleted = false AND COALESCE(OLD.is_deleted, false) = true THEN
@@ -328,11 +283,9 @@ BEGIN
   ELSIF NEW.deleted_at IS NULL AND OLD.deleted_at IS NOT NULL THEN
     NEW.is_deleted = false;
   END IF;
-
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
-
 DO $$
 BEGIN
   IF to_regclass('public.notes') IS NOT NULL THEN
@@ -356,10 +309,6 @@ BEGIN
     EXECUTE 'CREATE TRIGGER trg_sync_deleted_projects BEFORE INSERT OR UPDATE ON public.projects FOR EACH ROW EXECUTE FUNCTION public.sync_deleted_status_generic()';
   END IF;
 END $$;
-
--- -----------------------------------------------------------------------------
--- updated_at triggers
--- -----------------------------------------------------------------------------
 DO $$
 BEGIN
   IF to_regclass('public.notes') IS NOT NULL THEN
@@ -391,10 +340,6 @@ BEGIN
     EXECUTE 'CREATE TRIGGER set_updated_at_crdt_documents BEFORE UPDATE ON public.crdt_documents FOR EACH ROW EXECUTE FUNCTION extensions.moddatetime(updated_at)';
   END IF;
 END $$;
-
--- -----------------------------------------------------------------------------
--- Auth signup profile hook
--- -----------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER
 LANGUAGE plpgsql
@@ -411,7 +356,6 @@ BEGIN
   RETURN NEW;
 END;
 $$;
-
 DO $$
 BEGIN
   IF NOT EXISTS (
@@ -424,10 +368,6 @@ BEGIN
       FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
   END IF;
 END $$;
-
--- -----------------------------------------------------------------------------
--- Note content upgrader helper
--- -----------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION public.legacy_note_text_to_tiptap_doc(input_text TEXT)
 RETURNS JSONB
 LANGUAGE plpgsql
@@ -437,7 +377,6 @@ DECLARE
   normalized_text TEXT;
 BEGIN
   normalized_text := REPLACE(COALESCE(input_text, ''), E'\r\n', E'\n');
-
   IF normalized_text = '' THEN
     RETURN jsonb_build_object(
       'type', 'doc',
@@ -446,7 +385,6 @@ BEGIN
       )
     );
   END IF;
-
   RETURN jsonb_build_object(
     'type', 'doc',
     'content',
@@ -467,10 +405,6 @@ BEGIN
   );
 END;
 $$;
-
--- -----------------------------------------------------------------------------
--- CRDT RPCs
--- -----------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION public.apply_note_crdt_update(
   p_entity_id UUID,
   p_user_id UUID,
@@ -494,7 +428,6 @@ BEGIN
   IF auth.uid() IS NULL OR auth.uid() <> p_user_id THEN
     RAISE EXCEPTION 'forbidden' USING ERRCODE = '42501';
   END IF;
-
   INSERT INTO public.crdt_note_updates (
     entity_type, entity_id, user_id, client_id, op_id, update_data
   ) VALUES (
@@ -502,7 +435,6 @@ BEGIN
   )
   ON CONFLICT (entity_type, entity_id, op_id) DO NOTHING
   RETURNING crdt_note_updates.seq INTO v_seq;
-
   IF v_seq IS NULL THEN
     SELECT u.seq INTO v_seq
     FROM public.crdt_note_updates u
@@ -510,11 +442,9 @@ BEGIN
       AND u.entity_id = p_entity_id
       AND u.op_id = p_op_id
     LIMIT 1;
-
-    RETURN QUERY SELECT false, v_seq;
+    RETURN QUERY SELECT FALSE AS applied, v_seq AS seq;
     RETURN;
   END IF;
-
   UPDATE public.notes n
   SET
     body = p_body,
@@ -523,32 +453,43 @@ BEGIN
     updated_at = COALESCE(p_updated_at, timezone('utc'::text, now()))
   WHERE n.id = p_entity_id
     AND n.user_id = p_user_id;
-
   IF NOT FOUND THEN
     RAISE EXCEPTION 'note not found or forbidden' USING ERRCODE = '42501';
   END IF;
-
   IF p_snapshot IS NOT NULL THEN
     INSERT INTO public.crdt_documents (
-      entity_type, entity_id, user_id, state, updated_at
+      entity_type, entity_id, user_id, state, last_seq, updated_at
     ) VALUES (
-      'note', p_entity_id, p_user_id, p_snapshot, COALESCE(p_updated_at, timezone('utc'::text, now()))
+      'note', p_entity_id, p_user_id, p_snapshot, v_seq,
+      COALESCE(p_updated_at, timezone('utc'::text, now()))
     )
     ON CONFLICT (entity_type, entity_id) DO UPDATE
     SET
-      user_id = excluded.user_id,
-      state = excluded.state,
-      updated_at = excluded.updated_at;
+      user_id = EXCLUDED.user_id,
+      state = EXCLUDED.state,
+      last_seq = EXCLUDED.last_seq,
+      updated_at = EXCLUDED.updated_at;
+    DELETE FROM public.crdt_note_updates AS del_cnu
+    WHERE del_cnu.entity_type = 'note'
+      AND del_cnu.entity_id = p_entity_id
+      AND del_cnu.seq < COALESCE((
+        SELECT inner_cnu.seq
+        FROM public.crdt_note_updates AS inner_cnu
+        WHERE inner_cnu.entity_type = 'note'
+          AND inner_cnu.entity_id = p_entity_id
+        ORDER BY inner_cnu.seq DESC
+        OFFSET 500
+        LIMIT 1
+      ), 0);
   END IF;
-
-  RETURN QUERY SELECT true, v_seq;
+  RETURN QUERY SELECT TRUE AS applied, v_seq AS seq;
+EXCEPTION WHEN OTHERS THEN
+  RAISE EXCEPTION 'apply_note_crdt_update failed: %', SQLSTATE;
 END;
 $$;
-
 GRANT EXECUTE ON FUNCTION public.apply_note_crdt_update(
   UUID, UUID, TEXT, TEXT, BIGINT[], TEXT, TEXT, TEXT, TIMESTAMPTZ, BIGINT[]
 ) TO authenticated;
-
 CREATE OR REPLACE FUNCTION public.get_note_crdt_updates(
   p_entity_id UUID,
   p_after_seq BIGINT DEFAULT 0,
@@ -578,53 +519,35 @@ AS $$
   ORDER BY u.seq ASC
   LIMIT GREATEST(1, LEAST(COALESCE(p_limit, 500), 5000));
 $$;
-
 GRANT EXECUTE ON FUNCTION public.get_note_crdt_updates(UUID, BIGINT, INT) TO authenticated;
-
--- -----------------------------------------------------------------------------
--- Views used by web to avoid mobile task-like rows in notes table
--- -----------------------------------------------------------------------------
 CREATE OR REPLACE VIEW public.web_notes
 WITH (security_invoker = true) AS
 SELECT *
 FROM public.notes
 WHERE COALESCE(is_task, false) = false;
-
 CREATE OR REPLACE VIEW public.web_notes_active
 WITH (security_invoker = true) AS
 SELECT *
 FROM public.notes
 WHERE COALESCE(is_task, false) = false
   AND deleted_at IS NULL;
-
 GRANT SELECT ON public.web_notes TO authenticated;
 GRANT SELECT ON public.web_notes_active TO authenticated;
-
--- -----------------------------------------------------------------------------
--- Indexes
--- -----------------------------------------------------------------------------
 CREATE INDEX IF NOT EXISTS idx_tasks_user_id ON public.tasks(user_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_project_id ON public.tasks(project_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_status ON public.tasks(user_id, status);
 CREATE INDEX IF NOT EXISTS idx_tasks_due_date ON public.tasks(due_date) WHERE deleted_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_tasks_user_start_at_active ON public.tasks(user_id, start_at) WHERE deleted_at IS NULL;
-
 CREATE INDEX IF NOT EXISTS idx_notes_user_id ON public.notes(user_id);
 CREATE INDEX IF NOT EXISTS idx_notes_folder_id ON public.notes(folder_id);
 CREATE INDEX IF NOT EXISTS idx_notes_deleted_at ON public.notes(user_id, deleted_at);
 CREATE INDEX IF NOT EXISTS idx_notes_scheduled ON public.notes(user_id, scheduled_time) WHERE scheduled_time IS NOT NULL;
-
 CREATE INDEX IF NOT EXISTS idx_events_user_date ON public.events(user_id, start_date);
 CREATE INDEX IF NOT EXISTS idx_events_range ON public.events(start_date, end_date) WHERE deleted_at IS NULL;
-
 CREATE INDEX IF NOT EXISTS idx_crdt_documents_user_id ON public.crdt_documents(user_id);
 CREATE INDEX IF NOT EXISTS idx_crdt_documents_entity ON public.crdt_documents(user_id, entity_type, entity_id);
 CREATE INDEX IF NOT EXISTS idx_crdt_note_updates_entity_seq ON public.crdt_note_updates(entity_type, entity_id, seq);
 CREATE INDEX IF NOT EXISTS idx_crdt_note_updates_user_created ON public.crdt_note_updates(user_id, created_at DESC);
-
--- -----------------------------------------------------------------------------
--- Realtime
--- -----------------------------------------------------------------------------
 DO $$
 BEGIN
   IF to_regclass('public.notes') IS NOT NULL THEN EXECUTE 'ALTER TABLE public.notes REPLICA IDENTITY FULL'; END IF;
@@ -634,38 +557,30 @@ BEGIN
   IF to_regclass('public.folders') IS NOT NULL THEN EXECUTE 'ALTER TABLE public.folders REPLICA IDENTITY FULL'; END IF;
   IF to_regclass('public.crdt_documents') IS NOT NULL THEN EXECUTE 'ALTER TABLE public.crdt_documents REPLICA IDENTITY FULL'; END IF;
 END $$;
-
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'supabase_realtime') THEN
     IF to_regclass('public.notes') IS NOT NULL AND NOT EXISTS (
       SELECT 1 FROM pg_publication_tables WHERE pubname='supabase_realtime' AND schemaname='public' AND tablename='notes'
     ) THEN EXECUTE 'ALTER PUBLICATION supabase_realtime ADD TABLE public.notes'; END IF;
-
     IF to_regclass('public.tasks') IS NOT NULL AND NOT EXISTS (
       SELECT 1 FROM pg_publication_tables WHERE pubname='supabase_realtime' AND schemaname='public' AND tablename='tasks'
     ) THEN EXECUTE 'ALTER PUBLICATION supabase_realtime ADD TABLE public.tasks'; END IF;
-
     IF to_regclass('public.projects') IS NOT NULL AND NOT EXISTS (
       SELECT 1 FROM pg_publication_tables WHERE pubname='supabase_realtime' AND schemaname='public' AND tablename='projects'
     ) THEN EXECUTE 'ALTER PUBLICATION supabase_realtime ADD TABLE public.projects'; END IF;
-
     IF to_regclass('public.events') IS NOT NULL AND NOT EXISTS (
       SELECT 1 FROM pg_publication_tables WHERE pubname='supabase_realtime' AND schemaname='public' AND tablename='events'
     ) THEN EXECUTE 'ALTER PUBLICATION supabase_realtime ADD TABLE public.events'; END IF;
-
     IF to_regclass('public.folders') IS NOT NULL AND NOT EXISTS (
       SELECT 1 FROM pg_publication_tables WHERE pubname='supabase_realtime' AND schemaname='public' AND tablename='folders'
     ) THEN EXECUTE 'ALTER PUBLICATION supabase_realtime ADD TABLE public.folders'; END IF;
-
     IF to_regclass('public.crdt_documents') IS NOT NULL AND NOT EXISTS (
       SELECT 1 FROM pg_publication_tables WHERE pubname='supabase_realtime' AND schemaname='public' AND tablename='crdt_documents'
     ) THEN EXECUTE 'ALTER PUBLICATION supabase_realtime ADD TABLE public.crdt_documents'; END IF;
-
     IF to_regclass('public.crdt_note_updates') IS NOT NULL AND NOT EXISTS (
       SELECT 1 FROM pg_publication_tables WHERE pubname='supabase_realtime' AND schemaname='public' AND tablename='crdt_note_updates'
     ) THEN EXECUTE 'ALTER PUBLICATION supabase_realtime ADD TABLE public.crdt_note_updates'; END IF;
   END IF;
 END $$;
-
 COMMIT;

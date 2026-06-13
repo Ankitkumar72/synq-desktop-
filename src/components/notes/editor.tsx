@@ -41,6 +41,7 @@ import {
 } from '@/lib/crdt/crdt-doc'
 import { saveYDocToSupabase, loadYDocFromSupabase, triggerFlush } from '@/lib/crdt/sync-manager'
 import { getLocalLastSeq, getNoteCrdtUpdates, setLocalLastSeq, toUint8Update, enqueueQueuedNoteCrdtUpdate } from '@/lib/crdt/oplog'
+import { isNonRetryableError } from '@/lib/crdt/oplog'
 import { useUserStore } from '@/lib/store/use-user-store'
 import type { NoteContent } from '@/types'
 import { getEditorContentValue } from '@/lib/notes/note-content'
@@ -54,13 +55,11 @@ import DOMPurify from 'dompurify'
 import GlobalDragHandle from 'tiptap-extension-global-drag-handle'
 import styles from './editor-content.module.css'
 
-
-
-
 const lowlight = createLowlight(common)
 
 const SAVE_DEBOUNCE_MS = 800
 const RETRY_DELAY_MS = 3000
+const MAX_PERSIST_RETRIES = 3
 const __DEV__ = process.env.NODE_ENV !== 'production'
 
 const stashSchema = z.object({
@@ -74,7 +73,6 @@ const stashSchema = z.object({
   updatedAt: z.string().optional()
 })
 
-
 function containsFlutterTags(text: string): boolean {
   if (!text) return false
   if (/<(?:bold|code|italic|underline|link)>/i.test(text)) return true
@@ -84,74 +82,65 @@ function containsFlutterTags(text: string): boolean {
 
 function convertCustomTagsToMarkdown(text: string): string {
   if (!text) return text
-  
+
   let result = text
-  
-  // 1. Convert <bold>text</bold> to **text**
+
   result = result.replace(/<bold>([\s\S]*?)<\/bold>/gi, '**$1**')
-  
-  // 2. Convert <italic>text</italic> to *text*
+
   result = result.replace(/<italic>([\s\S]*?)<\/italic>/gi, '*$1*')
-  
-  // 3. Convert <code>text</code> to `text`
+
   result = result.replace(/<code>([\s\S]*?)<\/code>/gi, '`$1`')
-  
-  // 4. Convert <underline>text</underline> to <u>text</u>
+
   result = result.replace(/<underline>([\s\S]*?)<\/underline>/gi, '<u>$1</u>')
-  
-  // 5. Convert <link ... href="URL" ...>TEXT</link> to [TEXT](URL)
+
   result = result.replace(/<link[^>]*href=["']([^"']*)["'][^>]*>([\s\S]*?)<\/link>/gi, '[$2]($1)')
-  
+
   return result
 }
 
-
 function containsRawMarkdown(text: string): boolean {
   if (!text) return false
-  
-  // 1. Headers: line starting with "#" followed by space
+
   if (/^#+\s/m.test(text)) return true
-  
-  // 2. Bold or Italic: **bold**, *italic*, __bold__, _italic_
+
   if (/\*\*[^*]+\*\*/.test(text)) return true
   if (/\*[^*]+\*/.test(text)) return true
   if (/__[^_]+__/.test(text)) return true
   if (/_[^_]+_/.test(text)) return true
-  
-  // 3. Inline code: `code`
+
   if (/`[^`]+`/.test(text)) return true
-  
+
   // 4. Bullet lists: line starting with "- " or "* " (excluding horizontal rules)
   if (/^\s*[-*]\s+\S+/m.test(text)) {
     if (!/^\s*(?:-{3,}|\*{3,})\s*$/m.test(text)) {
       return true
     }
   }
-  
+
   // 5. Numbered lists: line starting with "1. ", "2. ", etc.
   if (/^\s*\d+\.\s+\S+/m.test(text)) return true
-  
+
   // 6. Blockquotes: line starting with "> "
   if (/^\s*>\s+\S+/m.test(text)) return true
-  
+
   // 7. Links: [text](url)
   if (/\[[^\]]+\]\([^)]+\)/.test(text)) return true
 
   // 8. Custom HTML-like tags from Flutter mobile clobber (e.g. <bold>, <code>, <italic>, <underline>, <link>)
   if (/<(?:bold|code|italic|underline|link)>/i.test(text)) return true
   if (/<\/(?:bold|code|italic|underline|link)>/i.test(text)) return true
-  
+
   // 9. Tables: line starting and containing pipe characters
   if (/^\s*\|.+?\|.+?\|/m.test(text)) return true
-  
+
   return false
 }
 
 function markdownToHtml(text: string): string {
   if (!text) return text
-  
+
   let html = text
-  
+
   // 1. Normalize code tags
   html = html.replace(/<code>([\s\S]*?)<\/code>/gi, '`$1`')
   html = html.replace(/<code[^>]*>([\s\S]*?)<\/code>/gi, '`$1`')
@@ -196,7 +185,6 @@ function markdownToHtml(text: string): string {
   }
   html = lines.join('\n')
 
-  // 8. Numbered lists
   let inOList = false
   const olLines = html.split('\n')
   for (let i = 0; i < olLines.length; i++) {
@@ -217,7 +205,6 @@ function markdownToHtml(text: string): string {
   }
   html = olLines.join('\n')
 
-  // 9. Tables
   const tableLines = html.split('\n')
   let inTable = false
   let tableHtml = ''
@@ -256,7 +243,7 @@ function markdownToHtml(text: string): string {
 function isXmlTextFormatted(xmlText: Y.XmlText): boolean {
   try {
     const delta = xmlText.toDelta()
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     return delta.some((op: any) => op.attributes && Object.keys(op.attributes).length > 0)
   } catch {
     return false
@@ -268,13 +255,11 @@ function isFlatPlainTextFragment(fragment: Y.XmlFragment): boolean {
 
   for (let i = 0; i < fragment.length; i++) {
     const child = fragment.get(i)
-    
-    // 1. Every top-level node must be a 'paragraph' XmlElement
+
     if (!(child instanceof Y.XmlElement) || child.nodeName !== 'paragraph') {
       return false
     }
 
-    // 2. All children of the paragraph must be XmlText, and they must be unformatted
     for (let j = 0; j < child.length; j++) {
       const grandChild = child.get(j)
       if (!(grandChild instanceof Y.XmlText)) {
@@ -288,7 +273,6 @@ function isFlatPlainTextFragment(fragment: Y.XmlFragment): boolean {
 
   return true
 }
-
 
 class EditorErrorBoundary extends Component<
   { children: ReactNode },
@@ -381,8 +365,8 @@ export function NoteEditor({
   const initGenerationRef = useRef(0)
   const updatesSinceSnapshotRef = useRef(0)
   const lastSnapshotTimeRef = useRef(Date.now())
+  const persistRetryCountRef = useRef(0)
 
-  // Pair acquireYDoc with releaseYDoc during lifecycle
   useEffect(() => {
     const activeId = id
     return () => {
@@ -390,7 +374,6 @@ export function NoteEditor({
     }
   }, [id])
 
-  // Store initial content in a ref to avoid re-triggering initialization if it changes
   const contentRef = useRef(content)
   useEffect(() => {
     contentRef.current = content
@@ -414,14 +397,12 @@ export function NoteEditor({
       : getPlainTextFromYDoc(id)
     const excerpt = body.length > 100 ? `${body.slice(0, 100)}...` : body
 
-    // Retrieve latest Tiptap JSON content from the editor ref
     const contentVal = currentEditor && !currentEditor.isDestroyed ? currentEditor.getJSON() : null
 
     markLocallyModified(id)
     updateNoteLocal(id, { body, excerpt, content: contentVal || undefined, updated_at: now })
     onChangeRef.current?.({ content: contentVal, body, excerpt })
 
-    // Compaction throttling: only write snapshot when threshold met or forced
     const nowTime = Date.now()
     updatesSinceSnapshotRef.current += pendingBatch.length
     const shouldSnapshot =
@@ -447,11 +428,30 @@ export function NoteEditor({
         content: contentVal || undefined,
       })
       hasPendingLocalChangeRef.current = false
+      persistRetryCountRef.current = 0
     } catch (err) {
+
+      if (isNonRetryableError(err)) {
+        if (__DEV__) console.error('[NoteEditor] Non-retryable sync error, not scheduling retry:', err)
+        hasPendingLocalChangeRef.current = false
+        pendingUpdatesRef.current = []
+        persistRetryCountRef.current = 0
+        isSavingRef.current = false
+        return
+      }
+
       pendingUpdatesRef.current = pendingBatch.concat(pendingUpdatesRef.current)
       hasPendingLocalChangeRef.current = true
-      console.error('[NoteEditor] Failed to persist note state:', err)
-      // Schedule a retry so unsaved data isn't silently lost
+      persistRetryCountRef.current++
+      if (__DEV__) console.error(`[NoteEditor] Failed to persist note state (attempt ${persistRetryCountRef.current}/${MAX_PERSIST_RETRIES}):`, err)
+
+      if (persistRetryCountRef.current >= MAX_PERSIST_RETRIES) {
+        showToast('Sync failed. Your changes are saved locally and will retry later.')
+        persistRetryCountRef.current = 0
+        isSavingRef.current = false
+        return
+      }
+
       if (retryTimeoutRef.current) clearTimeout(retryTimeoutRef.current)
       retryTimeoutRef.current = setTimeout(() => {
         retryTimeoutRef.current = null
@@ -484,12 +484,10 @@ export function NoteEditor({
     })
   }, [id, updateNoteLocal, ydoc])
 
-  // Initialize the Yjs doc from IndexedDB/Supabase
   useEffect(() => {
     const generation = ++initGenerationRef.current
     setIsLoading(true)
 
-    // Helper to prevent promises from hanging indefinitely
     const withTimeout = <T,>(promise: Promise<T>, ms: number, errorMessage: string = 'Timeout'): Promise<T> => {
       let timer: NodeJS.Timeout
       return Promise.race([
@@ -502,7 +500,7 @@ export function NoteEditor({
 
     const init = async () => {
       try {
-        // Recover any pending stashed edits from localStorage
+
         try {
           const stashRaw = window.localStorage.getItem(`synq-pending-unload:${id}`)
           if (stashRaw) {
@@ -513,7 +511,7 @@ export function NoteEditor({
               if (stashed && stashed.updateData) {
                 const updateData = base64ToUint8Array(stashed.updateData)
                 applyRemoteUpdate(id, updateData)
-                
+
                 updateNoteLocal(id, {
                   body: stashed.body || null,
                   excerpt: stashed.excerpt || null,
@@ -552,7 +550,6 @@ export function NoteEditor({
 
         if (generation !== initGenerationRef.current) return
 
-        // 1. Wait for IndexedDB persistence to finish loading
         try {
           await withTimeout(waitForPersistence(id), 3000, 'waitForPersistence timeout')
         } catch (err) {
@@ -561,8 +558,6 @@ export function NoteEditor({
 
         if (generation !== initGenerationRef.current) return
 
-        // 2. Always merge remote Yjs state to avoid stale local IndexedDB snapshots after refresh.
-        // We use a robust 15-second timeout to accommodate cold starts on free-tier database instances.
         let remoteSeq = 0
         try {
           const remoteDoc = await withTimeout(loadYDocFromSupabase(id), 15000, 'loadYDocFromSupabase timeout')
@@ -583,22 +578,17 @@ export function NoteEditor({
 
         if (generation !== initGenerationRef.current) return
 
-        // Unblock editor rendering as soon as baseline state is ready.
-        // Oplog catch-up can continue without keeping the full-page loader visible.
         setIsLoading(false)
 
-        // 2.5 Replay missing incremental ops after local cursor.
         try {
           let cursor = getLocalLastSeq(id)
-          
-          // Cold boot / first load optimization: jump the sequence cursor directly to matching snapshot lastSeq
-          // to completely avoid replaying all historical updates since 0!
+
           if (cursor === 0 && remoteSeq > 0) {
             cursor = remoteSeq
             setLocalLastSeq(id, cursor)
             console.log(`[NoteEditor] Race-free cold boot cursor jump to snapshot seq: ${cursor}`)
           } else if (remoteSeq > cursor) {
-            // Keep local cursor at least as high as the loaded snapshot sequence to maintain consistency
+
             cursor = remoteSeq
             setLocalLastSeq(id, cursor)
           }
@@ -640,7 +630,6 @@ export function NoteEditor({
     init()
   }, [id, ydoc, updateNoteLocal])
 
-  // Debounced save to Supabase
   const persistNowRef = useRef(persistNow)
   useEffect(() => {
     persistNowRef.current = persistNow
@@ -653,12 +642,9 @@ export function NoteEditor({
     }, SAVE_DEBOUNCE_MS)
   }, [])
 
-  // Monitor Yjs document updates to trigger saves
   useEffect(() => {
     const handleUpdate = (update: Uint8Array, origin: string | null) => {
-      // If the update came from a 'remote' transaction (via applyRemoteUpdate),
-      // or from a 'mobile-sync' transaction (via applyMobileBodyUpdate),
-      // we skip scheduling a save to prevent a loop.
+
       if (origin !== 'remote' && origin !== 'mobile-sync') {
         pendingUpdatesRef.current.push(new Uint8Array(update))
         hasPendingLocalChangeRef.current = true
@@ -679,7 +665,6 @@ export function NoteEditor({
         saveTimeoutRef.current = null
       }
 
-      // If we have a pending local change, write it synchronously to localStorage to prevent tab-closure data loss!
       if (hasPendingLocalChangeRef.current) {
         try {
           const pendingBatch = pendingUpdatesRef.current
@@ -693,13 +678,11 @@ export function NoteEditor({
             const snapshotStr = uint8ArrayToBase64(snapshot)
             const nowStr = new Date().toISOString()
 
-            // Fetch text contents using optimized textContent (effectively O(1))
             const body = editorRef.current && !editorRef.current.isDestroyed
               ? editorRef.current.state.doc.textContent
               : getPlainTextFromYDoc(id)
             const excerpt = body.length > 100 ? `${body.slice(0, 100)}...` : body
 
-            // Retrieve editor JSON content synchronously
             const contentVal = editorRef.current && !editorRef.current.isDestroyed
               ? editorRef.current.getJSON()
               : null
@@ -715,10 +698,8 @@ export function NoteEditor({
               updatedAt: nowStr,
             }
 
-            // QuotaExceededError protection: if the JSON is huge (e.g. because of embedded base64 images),
-            // discard the heavy JSON payload and keep only the lightweight Yjs binary.
             const serialized = JSON.stringify(stash)
-            if (serialized.length > 4 * 1024 * 1024) { // 4MB safety margin
+            if (serialized.length > 4 * 1024 * 1024) { 
               console.warn('[NoteEditor] Unload stash exceeds 4MB. Saving Yjs binary only.')
               stash.content = null
             }
@@ -730,7 +711,6 @@ export function NoteEditor({
           console.error('[NoteEditor] Failed to stash pending edits synchronously on unload:', err)
         }
 
-        // Fire off the async save too, in case the browser allows it (e.g. pagehide)
         void persistNow(false, true)
       }
     }
@@ -754,11 +734,11 @@ export function NoteEditor({
 
   const extensions = useMemo(() => [
     StarterKit.configure({
-      // Disable the built-in undo/redo — Yjs Collaboration handles it
+
       undoRedo: false,
       link: false,
       underline: false,
-      codeBlock: false, // Replaced by CodeBlockLowlight for syntax highlighting
+      codeBlock: false, 
       gapcursor: false,
       dropcursor: false,
     }),
@@ -907,26 +887,22 @@ export function NoteEditor({
         const element = el as HTMLElement
         const bg = element.style.backgroundColor || element.style.background
         if (bg && bg !== 'transparent') {
-          // Create a mark element
+
           const mark = doc.createElement('mark')
           mark.setAttribute('data-color', bg)
           mark.style.backgroundColor = bg
-          
-          // Move children to mark
+
           while (element.firstChild) {
             mark.appendChild(element.firstChild)
           }
-          
-          // Remove background-color style from original element so it doesn't duplicate
+
           element.style.removeProperty('background-color')
           element.style.removeProperty('background')
-          
-          // Append mark inside element
+
           element.appendChild(mark)
         }
       })
 
-      // 3. Notion copies headings with specific classes or tags. Normalize headers
       doc.querySelectorAll('.notion-header-block, h1').forEach(el => {
         if (el.tagName !== 'H1') {
           const h1 = doc.createElement('h1')
@@ -949,7 +925,6 @@ export function NoteEditor({
         }
       })
 
-      // 4. Normalize bullet lists from Notion
       doc.querySelectorAll('[class*="bulleted_list-block"], [class*="list-bullet"]').forEach(el => {
         const li = doc.createElement('li')
         li.innerHTML = el.innerHTML
@@ -958,7 +933,6 @@ export function NoteEditor({
         el.replaceWith(ul)
       })
 
-      // 5. Normalize numbered lists from Notion
       doc.querySelectorAll('[class*="numbered_list-block"], [class*="list-numbered"]').forEach(el => {
         const li = doc.createElement('li')
         li.innerHTML = el.innerHTML
@@ -967,38 +941,35 @@ export function NoteEditor({
         el.replaceWith(ol)
       })
 
-      // 6. Normalize checklists/todo-blocks from Notion
       doc.querySelectorAll('[class*="to_do-block"]').forEach(el => {
         const li = doc.createElement('li')
         li.setAttribute('data-type', 'taskItem')
-        
+
         const checkbox = doc.createElement('input')
         checkbox.setAttribute('type', 'checkbox')
         if (el.getAttribute('data-checked') === 'true') {
           checkbox.setAttribute('checked', 'checked')
           li.setAttribute('data-checked', 'true')
         }
-        
+
         const contentDiv = doc.createElement('div')
         contentDiv.innerHTML = el.innerHTML
-        
+
         li.appendChild(checkbox)
         li.appendChild(contentDiv)
-        
+
         const ul = doc.createElement('ul')
         ul.setAttribute('data-type', 'taskList')
         ul.appendChild(li)
         el.replaceWith(ul)
       })
 
-      // 7. Notion blockquotes
       doc.querySelectorAll('.notion-quote-block').forEach(el => {
         const blockquote = doc.createElement('blockquote')
         blockquote.innerHTML = el.innerHTML
         el.replaceWith(blockquote)
       })
 
-      // 8. Sanitize the clean, normalized HTML using DOMPurify
       return DOMPurify.sanitize(doc.body.innerHTML, {
         ALLOWED_TAGS: [
           'p', 'span', 'div', 'br', 'strong', 'b', 'em', 'i', 'u', 's', 'strike', 'a',
@@ -1019,12 +990,10 @@ export function NoteEditor({
     extensions,
     immediatelyRender: false,
     onUpdate: () => {
-      // Mark as actively editing
+
       markNoteActivity(id)
       setActiveEdit(id, true)
 
-      // We don't call debouncedSave here anymore. 
-      // It's handled by the ydoc update listener below to avoid remote-echo loops.
     },
     onFocus: () => {
       setFocusedNoteId(id)
@@ -1035,8 +1004,6 @@ export function NoteEditor({
       clearActiveNoteActivity(id)
       setActiveEdit(id, false)
 
-      // Immediate save on blur — only if it was a local change
-      // (Wait, blur is usually user-initiated, so it's safe to save)
       if (saveTimeoutRef.current) {
         clearTimeout(saveTimeoutRef.current)
         saveTimeoutRef.current = null
@@ -1047,13 +1014,10 @@ export function NoteEditor({
     editorProps,
   })
 
-  // Synchronize editor ref for persistNow callback
   useEffect(() => {
     editorRef.current = editor
   }, [editor])
 
-  // Seed initial rich-text content if the Yjs document is empty and we have stored content,
-  // or self-heal/repair the document if it contains raw markdown characters.
   useEffect(() => {
     if (!isLoading && editor && !editor.isDestroyed) {
       let fragmentLength = 0
@@ -1070,7 +1034,7 @@ export function NoteEditor({
 
         if (fragmentLength > 0 && contentValue && typeof contentValue === 'object') {
           const jsonStr = JSON.stringify(contentValue)
-          // If Yjs plain text is extremely short but the server JSON is large and structured
+
           if (plainText.length < 50 && jsonStr.length > 500) {
             isYjsCorrupted = true
           }
@@ -1099,12 +1063,12 @@ export function NoteEditor({
 
       if (shouldRepair && plainText) {
         repairedNotesRef.current.add(id)
-        // If the note needs repair (contains raw markdown/tags), parse the Yjs plain text directly!
+
         try {
           if (__DEV__) console.group('[NoteEditor] Self-healing repair triggered for note:', id)
           const cleanedMarkdown = convertCustomTagsToMarkdown(plainText)
           if (__DEV__) console.log('[NoteEditor] Translated mobile tags to standard Markdown:', cleanedMarkdown)
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
           const parsedNode = (editor.storage as any).markdown.parser.parse(cleanedMarkdown)
           editor.commands.setContent(parsedNode)
           if (__DEV__) console.log('[NoteEditor] Note self-healing successfully completed!')
@@ -1114,10 +1078,10 @@ export function NoteEditor({
           if (__DEV__) console.groupEnd()
         }
       } else if (fragmentLength === 0 || isYjsCorrupted) {
-        // Normal seeding when Yjs doc is empty or force seeding when Yjs doc is corrupted
+
         if (isYjsCorrupted) {
           console.warn('[NoteEditor] Force-seeding from server JSON because Yjs state appears corrupted.')
-          // Clear corrupted state before seeding
+
           ydoc.transact(() => {
             const fragment = ydoc.getXmlFragment('content')
             fragment.delete(0, fragment.length)
@@ -1125,12 +1089,12 @@ export function NoteEditor({
         }
         if (contentValue) {
           if (typeof contentValue === 'string') {
-            // Raw markdown or custom tags string detected: Use the editor's markdown engine to parse it to rich-text JSON
+
             try {
               if (__DEV__) console.group('[NoteEditor] Initial markdown content seeding for note:', id)
               const cleanedMarkdown = convertCustomTagsToMarkdown(contentValue)
               if (__DEV__) console.log('[NoteEditor] Translated raw markdown content:', cleanedMarkdown)
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
               const parsedNode = (editor.storage as any).markdown.parser.parse(cleanedMarkdown)
               editor.commands.setContent(parsedNode)
               if (__DEV__) console.log('[NoteEditor] Markdown content successfully seeded!')
@@ -1147,7 +1111,6 @@ export function NoteEditor({
     }
   }, [isLoading, editor, ydoc, id])
 
-  // Cleanup existing large base64 images once on mount
   useEffect(() => {
     if (editor && !editor.isDestroyed && !isLoading) {
       let modified = false
@@ -1155,7 +1118,7 @@ export function NoteEditor({
         if (node.type.name === 'image' && node.attrs.src?.startsWith('data:image/')) {
           const size = Math.floor(node.attrs.src.length * 0.75)
           if (size > 500 * 1024) {
-            // It's too big, delete it asynchronously to avoid tiptap transaction conflicts in descendants loop
+
             setTimeout(() => {
               if (!editor.isDestroyed) {
                 editor.commands.deleteRange({ from: pos, to: pos + node.nodeSize })
@@ -1171,16 +1134,14 @@ export function NoteEditor({
     }
   }, [editor, isLoading])
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
-      // Cancel any pending retry
+
       if (retryTimeoutRef.current) {
         clearTimeout(retryTimeoutRef.current)
         retryTimeoutRef.current = null
       }
 
-      // Get the latest content from the editor synchronously BEFORE it is destroyed!
       if (
         editorRef.current &&
         !editorRef.current.isDestroyed &&
@@ -1198,26 +1159,24 @@ export function NoteEditor({
           ? editorRef.current.state.doc.textContent
           : getPlainTextFromYDoc(id)
         const excerpt = body.length > 100 ? `${body.slice(0, 100)}...` : body
-        
-        // Save to Supabase immediately using a synchronous capture of the editor state!
+
         const userId = useUserStore.getState().user?.id
         if (userId) {
           const pendingBatch = pendingUpdatesRef.current
           pendingUpdatesRef.current = []
           hasPendingLocalChangeRef.current = false
-          
+
           const updateData = pendingBatch.length === 1
             ? pendingBatch[0]
             : Y.mergeUpdates(pendingBatch)
-          
+
           const snapshot = Y.encodeStateAsUpdate(ydoc)
           void saveYDocToSupabase(id, userId, {
             updateData,
             snapshot,
             content: contentVal,
           })
-          
-          // Also update the local store synchronously so the UI has the correct value when switching notes
+
           updateNoteLocal(id, { body, excerpt, content: contentVal, updated_at: new Date().toISOString() })
         }
       }
@@ -1230,7 +1189,7 @@ export function NoteEditor({
       setFocusedNoteId(null)
       setActiveEdit(id, false)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, [id])
 
   if (isLoading) {

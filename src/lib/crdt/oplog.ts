@@ -2,6 +2,27 @@ import { supabase } from '@/lib/supabase.client'
 import { hlc } from '@/lib/hlc'
 import { del as idbDel, get as idbGet, keys as idbKeys, set as idbSet } from 'idb-keyval'
 
+const __DEV__ = process.env.NODE_ENV !== 'production'
+export class NonRetryableRpcError extends Error {
+  constructor(message: string, public readonly status: number, public readonly code?: string) {
+    super(message)
+    this.name = 'NonRetryableRpcError'
+  }
+}
+
+export function isNonRetryableError(err: unknown): boolean {
+  if (err instanceof NonRetryableRpcError) return true
+  if (!err || typeof err !== 'object') return false
+  const maybe = err as { code?: string; status?: number; statusCode?: number }
+  const status = maybe.status ?? maybe.statusCode ?? 0
+
+  if (status >= 400 && status < 500) return true
+
+  const nonRetryableCodes = ['42702', '42501', '42883', '42P01', '22P02', '23505']
+  if (maybe.code && nonRetryableCodes.includes(maybe.code)) return true
+  return false
+}
+
 export interface ApplyNoteCrdtUpdateInput {
   noteId: string
   userId: string
@@ -43,12 +64,8 @@ function toIntArray(input?: Uint8Array): number[] | null {
 
 const OPLOG_QUEUE_PREFIX = 'synq-crdt-opq:'
 const OPLOG_LAST_SEQ_PREFIX = 'synq-crdt-last-seq:'
-const MAX_QUEUE_RETRIES = 20
+const MAX_QUEUE_RETRIES = 10
 
-/**
- * Atomically appends a CRDT op and updates note metadata.
- * This is idempotent by (noteId, opId).
- */
 export async function applyNoteCrdtUpdate(input: ApplyNoteCrdtUpdateInput): Promise<ApplyNoteCrdtUpdateResult> {
   const { data, error } = await supabase.rpc('apply_note_crdt_update', {
     p_entity_id: input.noteId,
@@ -63,17 +80,25 @@ export async function applyNoteCrdtUpdate(input: ApplyNoteCrdtUpdateInput): Prom
     p_snapshot: toIntArray(input.snapshot),
   })
 
-  if (error) throw error
+  if (error) {
 
-  // If rich content is provided, also persist it directly to the notes.content JSONB column
+    if (isNonRetryableError(error)) {
+      const status = (error as { status?: number }).status ?? 400
+      const code = (error as { code?: string }).code
+      if (__DEV__) console.error(`[Oplog] Non-retryable RPC error (${status}, code=${code}):`, error.message)
+      throw new NonRetryableRpcError(error.message, status, code)
+    }
+    throw error
+  }
+
   if (input.content !== undefined) {
     const { error: contentError } = await supabase
       .from('notes')
       .update({ content: input.content })
       .eq('id', input.noteId)
-    
+
     if (contentError) {
-      console.error('[Oplog] Failed to update notes.content column:', contentError)
+      if (__DEV__) console.error('[Oplog] Failed to update notes.content column:', contentError)
       throw contentError
     }
   }
@@ -85,9 +110,6 @@ export async function applyNoteCrdtUpdate(input: ApplyNoteCrdtUpdateInput): Prom
   }
 }
 
-/**
- * Fetches incremental CRDT operations after a given sequence number.
- */
 export async function getNoteCrdtUpdates(noteId: string, afterSeq: number, limit = 500): Promise<NoteCrdtUpdateRow[]> {
   const { data, error } = await supabase.rpc('get_note_crdt_updates', {
     p_entity_id: noteId,
@@ -120,7 +142,7 @@ export function setLocalLastSeq(noteId: string, seq: number): void {
   try {
     window.localStorage.setItem(`${OPLOG_LAST_SEQ_PREFIX}${noteId}`, String(Math.floor(seq)))
   } catch {
-    // no-op: local storage unavailable
+
   }
 }
 
@@ -129,7 +151,7 @@ export function clearLocalLastSeq(noteId: string): void {
   try {
     window.localStorage.removeItem(`${OPLOG_LAST_SEQ_PREFIX}${noteId}`)
   } catch {
-    // no-op: local storage unavailable
+
   }
 }
 
@@ -187,7 +209,22 @@ export async function flushQueuedNoteCrdtUpdates(): Promise<{ flushed: number; f
       }
       await dequeueQueuedNoteCrdtUpdate(op.id)
       flushed++
-    } catch {
+    } catch (err) {
+
+      if (isNonRetryableError(err)) {
+        if (__DEV__) console.error(`[Oplog] Non-retryable error for op ${op.id}, discarding:`, err)
+        await dequeueQueuedNoteCrdtUpdate(op.id)
+        failed++
+        continue
+      }
+
+      if (op.retryCount >= MAX_QUEUE_RETRIES) {
+        if (__DEV__) console.error(`[Oplog] Op ${op.id} exceeded ${MAX_QUEUE_RETRIES} retries, dead-lettering`)
+        await dequeueQueuedNoteCrdtUpdate(op.id)
+        failed++
+        continue
+      }
+
       await markQueuedNoteCrdtRetry(op.id)
       failed++
     }
@@ -207,7 +244,7 @@ export async function getLatestNoteCrdtSeq(noteId: string): Promise<number> {
     .maybeSingle()
 
   if (error) {
-    console.warn('[Oplog] Failed to fetch latest seq:', error)
+    if (__DEV__) console.warn('[Oplog] Failed to fetch latest seq:', error)
     return 0
   }
   return data ? Number(data.seq) : 0

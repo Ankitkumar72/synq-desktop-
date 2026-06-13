@@ -66,3 +66,4 @@ next-env.d.ts
 /formatting-conservation-test.ts
 /formatting-preservation-gate.ts
 /test-results.txt
+/test-rpc.js

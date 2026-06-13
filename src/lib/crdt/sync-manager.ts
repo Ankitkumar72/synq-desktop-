@@ -1,12 +1,4 @@
-/**
- * Sync Manager
- * 
- * Central orchestrator for CRDT sync:
- * - Monitors online/offline state
- * - Flushes offline queue on reconnect
- * - Schedules Yjs document saves to Supabase
- * - Coordinates all sync operations
- */
+
 
 import { supabase } from '@/lib/supabase.client'
 import { hlc } from '@/lib/hlc'
@@ -16,6 +8,7 @@ import {
   flushQueuedNoteCrdtUpdates,
   getQueuedNoteCrdtDepth,
   setLocalLastSeq,
+  isNonRetryableError,
 } from './oplog'
 import {
   flushQueue,
@@ -25,6 +18,56 @@ import {
 } from './offline-queue'
 import { getDocState, markLocallyModified, getPlainTextFromYDoc, getExcerptFromYDoc } from './crdt-doc'
 
+const __DEV__ = process.env.NODE_ENV !== 'production'
+
+type CircuitState = 'closed' | 'open' | 'half-open'
+
+class CircuitBreaker {
+  private state: CircuitState = 'closed'
+  private failures = 0
+  private lastFailureAt = 0
+
+  constructor(
+    private readonly threshold = 5,        
+    private readonly resetAfterMs = 30_000  
+  ) {}
+
+  async execute<T>(fn: () => Promise<T>): Promise<T> {
+    if (this.state === 'open') {
+      const elapsed = Date.now() - this.lastFailureAt
+      if (elapsed < this.resetAfterMs) {
+        throw new Error('[CircuitBreaker] Open, skipping request')
+      }
+      this.state = 'half-open'
+    }
+
+    try {
+      const result = await fn()
+      this.reset()
+      return result
+    } catch (err) {
+      this.recordFailure()
+      throw err
+    }
+  }
+
+  private reset() {
+    this.failures = 0
+    this.state = 'closed'
+  }
+
+  private recordFailure() {
+    this.failures++
+    this.lastFailureAt = Date.now()
+    if (this.failures >= this.threshold) {
+      if (__DEV__) console.warn(`[CircuitBreaker] Opened after ${this.failures} consecutive failures`)
+      this.state = 'open'
+    }
+  }
+}
+
+const crdtBreaker = new CircuitBreaker(5, 30_000)
+
 let isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true
 let flushTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -32,13 +75,8 @@ let isInitialized = false
 let isFlushing = false
 let needsFlushAgain = false
 
-// Listeners for queue depth changes
 const queueListeners = new Set<(depth: number) => void>()
 
-/**
- * Initialize the sync manager.
- * Sets up online/offline listeners and starts the flush cycle.
- */
 export function initSyncManager(): void {
   if (isInitialized) return
   isInitialized = true
@@ -52,13 +90,10 @@ export function initSyncManager(): void {
   console.log(`[SyncManager] Initialized. Online: ${isOnline}`)
 
   if (isOnline) {
-    scheduleFlush(500) // Flush any pending ops from last session
+    scheduleFlush(500) 
   }
 }
 
-/**
- * Tear down the sync manager.
- */
 export function destroySyncManager(): void {
   if (typeof window === 'undefined') return
 
@@ -67,7 +102,6 @@ export function destroySyncManager(): void {
 
   if (flushTimer) clearTimeout(flushTimer)
 
-  
   isInitialized = false
   isFlushing = false
   needsFlushAgain = false
@@ -90,9 +124,6 @@ function handleOffline(): void {
   }
 }
 
-/**
- * Schedule a queue flush after a delay.
- */
 function scheduleFlush(delayMs: number = 1000): void {
   if (flushTimer) clearTimeout(flushTimer)
   flushTimer = setTimeout(async () => {
@@ -101,10 +132,6 @@ function scheduleFlush(delayMs: number = 1000): void {
   }, delayMs)
 }
 
-
-/**
- * Execute the queue flush.
- */
 async function performFlush(): Promise<void> {
   if (!isOnline) return
   if (isFlushing) {
@@ -128,7 +155,6 @@ async function performFlush(): Promise<void> {
         flushQueuedNoteCrdtUpdates(),
       ])
 
-      // Notify listeners of new queue depth
       const [newCrudDepth, newCrdtDepth] = await Promise.all([
         getQueueDepth(),
         getQueuedNoteCrdtDepth(),
@@ -136,10 +162,9 @@ async function performFlush(): Promise<void> {
       const newDepth = newCrudDepth + newCrdtDepth
       notifyQueueListeners(newDepth)
 
-      // If there were failures, schedule a retry with backoff
       if ((crudResult.failed + crdtResult.failed) > 0) {
-        scheduleFlush(RETRY_BACKOFF_MS)
-        break // Stop looping on failure to respect backoff delay
+        scheduleFlush(RETRY_BACKOFF_MS * 2.5) 
+        break 
       }
     } while (needsFlushAgain)
   } finally {
@@ -147,9 +172,6 @@ async function performFlush(): Promise<void> {
   }
 }
 
-/**
- * Execute a single queued operation against Supabase.
- */
 async function executeOperation(op: QueuedOperation): Promise<void> {
   const table = op.entityType === 'note' ? 'notes' : `${op.entityType}s`
 
@@ -177,7 +199,7 @@ async function executeOperation(op: QueuedOperation): Promise<void> {
       break
     }
     case 'delete': {
-      // Soft delete — set deleted_at
+
       const { error } = await supabase
         .from(table)
         .update({ deleted_at: new Date().toISOString(), ...payload })
@@ -193,10 +215,6 @@ async function executeOperation(op: QueuedOperation): Promise<void> {
   }
 }
 
-/**
- * Save a Yjs document state to Supabase.
- * Also updates body/excerpt for Flutter compatibility.
- */
 function createOpId(): string {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID()
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
@@ -228,7 +246,6 @@ export async function saveYDocToSupabase(noteId: string, userId: string, options
   const snapshot = options.snapshot === undefined ? state : options.snapshot
   const content = options.content
 
-  // Mark as locally modified to prevent echo from Realtime
   markLocallyModified(noteId)
 
   if (!isOnline) {
@@ -247,25 +264,32 @@ export async function saveYDocToSupabase(noteId: string, userId: string, options
     return
   }
 
-  // Preferred: atomic RPC (op-log append + metadata + optional snapshot)
   try {
-    const result = await applyNoteCrdtUpdate({
-      noteId,
-      userId,
-      clientId,
-      opId,
-      updateData,
-      snapshot: snapshot ?? undefined,
-      body,
-      excerpt,
-      updatedAt,
-      content,
-    })
+    const result = await crdtBreaker.execute(() =>
+      applyNoteCrdtUpdate({
+        noteId,
+        userId,
+        clientId,
+        opId,
+        updateData,
+        snapshot: snapshot ?? undefined,
+        body,
+        excerpt,
+        updatedAt,
+        content,
+      })
+    )
     if (result.seq > 0) {
       setLocalLastSeq(noteId, result.seq)
     }
     return
   } catch (rpcError) {
+
+    if (isNonRetryableError(rpcError)) {
+      if (__DEV__) console.error('[SyncManager] Non-retryable RPC error, discarding operation:', rpcError)
+      return
+    }
+
     if (!isRpcUnavailableError(rpcError)) {
       try {
         await enqueueQueuedNoteCrdtUpdate({
@@ -283,16 +307,14 @@ export async function saveYDocToSupabase(noteId: string, userId: string, options
         triggerFlush()
         return
       } catch (queueErr) {
-        console.error('[SyncManager] Failed to enqueue CRDT op after RPC error:', queueErr)
+        if (__DEV__) console.error('[SyncManager] Failed to enqueue CRDT op after RPC error:', queueErr)
         throw rpcError
       }
     }
 
-    // Backward compatibility: if migration/RPC is not present yet, fall back.
-    console.warn('[SyncManager] Atomic RPC unavailable, falling back to legacy save path:', rpcError)
+    if (__DEV__) console.warn('[SyncManager] Atomic RPC unavailable, falling back to legacy save path:', rpcError)
   }
 
-  // Fallback: legacy non-atomic dual write
   const { error: crdtError } = await supabase
     .from('crdt_documents')
     .upsert({
@@ -309,7 +331,7 @@ export async function saveYDocToSupabase(noteId: string, userId: string, options
       : (crdtError && typeof crdtError === 'object' && Object.keys(crdtError).length > 0
         ? JSON.stringify(crdtError)
         : 'Unknown error (check crdt_documents table exists)')
-    console.error('[SyncManager] Failed to save CRDT state:', errorMessage)
+    if (__DEV__) console.error('[SyncManager] Failed to save CRDT state:', errorMessage)
   }
 
   const noteUpdate: Record<string, unknown> = {
@@ -333,7 +355,7 @@ export async function saveYDocToSupabase(noteId: string, userId: string, options
       : (noteError && typeof noteError === 'object' && Object.keys(noteError).length > 0
         ? JSON.stringify(noteError)
         : 'Unknown error')
-    console.error('[SyncManager] Failed to update note body:', errorMessage)
+    if (__DEV__) console.error('[SyncManager] Failed to update note body:', errorMessage)
   }
 }
 
@@ -357,19 +379,12 @@ export async function loadYDocFromSupabase(noteId: string): Promise<RemoteDocSna
   }
 }
 
-
-/**
- * Trigger a flush immediately (e.g., when a mutation is enqueued).
- */
 export function triggerFlush(): void {
   if (isOnline && !flushTimer) {
     scheduleFlush(250)
   }
 }
 
-/**
- * Subscribe to queue depth changes.
- */
 export function onQueueDepthChange(listener: (depth: number) => void): () => void {
   queueListeners.add(listener)
   return () => queueListeners.delete(listener)
@@ -381,9 +396,6 @@ function notifyQueueListeners(depth: number): void {
   }
 }
 
-/**
- * Check if we're currently online.
- */
 export function getOnlineStatus(): boolean {
   return isOnline
 }
