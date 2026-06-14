@@ -13,10 +13,10 @@
 /coverage
 
 # next.js
-/.next/
-/.next-build/
-/out/
-/build
+.next/
+.next-build/
+out/
+build
 
 # misc
 .DS_Store
@@ -59,11 +59,3 @@ next-env.d.ts
 # local scratch and editor state
 /scratch/
 .obsidian/
-
-# local stress and integration tests
-/backend-integration-tests.ts
-/production-server-stress-tests.ts
-/formatting-conservation-test.ts
-/formatting-preservation-gate.ts
-/test-results.txt
-/test-rpc.js
