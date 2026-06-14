@@ -49,11 +49,11 @@ export async function debugSupabase() {
         if (text.trim().startsWith('[') || text.trim().startsWith('{')) {
           console.log(`[Debug] Table ${table} parsed JSON:`, JSON.parse(text))
         }
-      } catch (fetchErr) {
-        console.error(`[Debug] Table ${table} fetch failed:`, fetchErr)
+      } catch (_fetchErr) {
+        console.error(`[Debug] Table ${table} fetch failed:`, _fetchErr)
       }
     }
-  } catch (err) {
-    console.error('[Debug] Unexpected diagnostic failure:', err)
+  } catch (_err) {
+    console.error('[Debug] Unexpected diagnostic failure:', _err)
   }
 }

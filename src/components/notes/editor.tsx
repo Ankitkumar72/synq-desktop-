@@ -611,15 +611,15 @@ export function NoteEditor({
             }
             if (ops.length < pageSize) break
           }
-        } catch (err) {
-          const isTimeout = err instanceof Error && err.message.includes('timeout')
+        } catch (_err) {
+          const isTimeout = _err instanceof Error && _err.message.includes('timeout')
           console.warn(
             `[NoteEditor] Failed to replay oplog catch-up${isTimeout ? ' (timed out — database could be waking up)' : ''}:`,
-            err
+            _err
           )
         }
-      } catch (err) {
-        console.error('[NoteEditor] Fatal error during initialization:', err)
+      } catch (_err) {
+        console.error('[NoteEditor] Fatal error during initialization:', _err)
       } finally {
         if (generation === initGenerationRef.current) {
           setIsLoading(false)
@@ -1068,14 +1068,10 @@ export function NoteEditor({
           if (__DEV__) console.group('[NoteEditor] Self-healing repair triggered for note:', id)
           const cleanedMarkdown = convertCustomTagsToMarkdown(plainText)
           if (__DEV__) console.log('[NoteEditor] Translated mobile tags to standard Markdown:', cleanedMarkdown)
-
           const parsedNode = (editor.storage as unknown as { markdown: { parser: { parse: (text: string) => Parameters<Editor['commands']['setContent']>[0] } } }).markdown.parser.parse(cleanedMarkdown)
           editor.commands.setContent(parsedNode)
-          if (__DEV__) console.log('[NoteEditor] Note self-healing successfully completed!')
-          if (__DEV__) console.groupEnd()
-        } catch (err) {
-          console.error('[NoteEditor] Failed to parse raw Yjs markdown plain text during repair:', err)
-          if (__DEV__) console.groupEnd()
+        } catch (_err) {
+          console.error('[NoteEditor] Failed to parse raw Yjs markdown plain text during repair:', _err)
         }
       } else if (fragmentLength === 0 || isYjsCorrupted) {
 
