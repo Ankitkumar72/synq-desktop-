@@ -1,11 +1,9 @@
 import { useProfileStore } from "@synq/shared"
 
-/**
- * Convenience hook for feature gating.
- * Usage: const { isPro, isFree } = useProGate()
- */
 export function useProGate() {
-  const { isPro, planTier, isAdmin } = useProfileStore()
+  const isPro = useProfileStore(s => s.isPro)
+  const planTier = useProfileStore(s => s.planTier)
+  const isAdmin = useProfileStore(s => s.isAdmin)
   return {
     isPro,
     isFree: planTier === 'free' && !isAdmin,

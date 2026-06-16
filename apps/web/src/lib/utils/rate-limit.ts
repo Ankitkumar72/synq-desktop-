@@ -146,14 +146,16 @@ const rateLimitMap = new Map<string, RateLimitEntry>()
 
 // Cleanup stale entries every 5 minutes to prevent memory leaks
 if (typeof setInterval !== 'undefined') {
-  setInterval(() => {
-    const now = Date.now()
-    for (const [key, entry] of rateLimitMap) {
-      if (now > entry.resetTime) {
-        rateLimitMap.delete(key)
+  if (!(globalThis as any)._inMemoryRateLimitCleanupInterval) {
+    (globalThis as any)._inMemoryRateLimitCleanupInterval = setInterval(() => {
+      const now = Date.now()
+      for (const [key, entry] of rateLimitMap) {
+        if (now > entry.resetTime) {
+          rateLimitMap.delete(key)
+        }
       }
-    }
-  }, 5 * 60 * 1000)
+    }, 5 * 60 * 1000)
+  }
 }
 
 /**

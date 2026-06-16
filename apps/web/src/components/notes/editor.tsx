@@ -351,7 +351,7 @@ export function NoteEditor({
   content?: NoteContent,
   onChange?: (snapshot: { content: NoteContent, body: string | null, excerpt: string | null }) => void
 }) {
-  const { setFocusedNoteId, markNoteActivity, clearActiveNoteActivity, updateNoteLocal } = useNotesStore()
+  const setFocusedNoteId = useNotesStore(s => s.setFocusedNoteId); const markNoteActivity = useNotesStore(s => s.markNoteActivity); const clearActiveNoteActivity = useNotesStore(s => s.clearActiveNoteActivity); const updateNoteLocal = useNotesStore(s => s.updateNoteLocal)
   const editorRef = useRef<Editor | null>(null)
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null)

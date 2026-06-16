@@ -1,6 +1,6 @@
 
 
-import { supabase, isGhostClient } from "@synq/shared"
+import { supabase, isGhostClient } from '../supabase/supabase'
 import { hlc } from '../hlc'
 import {
   applyNoteCrdtUpdate,
@@ -90,7 +90,7 @@ export function initSyncManager(): void {
   console.log(`[SyncManager] Initialized. Online: ${isOnline}`)
 
   if (isOnline) {
-    scheduleFlush(500) 
+    scheduleFlush(3000) 
   }
 }
 

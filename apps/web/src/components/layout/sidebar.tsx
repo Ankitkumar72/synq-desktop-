@@ -28,8 +28,9 @@ const NAV_ITEMS = [
 
 export function LinearSidebar() {
   const pathname = usePathname()
-  const { user } = useUserStore()
-  const { openSettings, openSearch } = useUIStore()
+  const user = useUserStore(s => s.user)
+  const openSettings = useUIStore(s => s.openSettings)
+  const openSearch = useUIStore(s => s.openSearch)
   const name = getUserDisplayName(user)
   const initials = getUserInitials(user)
 

@@ -17,26 +17,21 @@ import { Session, RealtimePostgresChangesPayload, RealtimeChannel } from '@supab
 import { bindNoteBroadcastChannel, getNoteSyncClientId, NOTE_BROADCAST_EVENT, type NoteBroadcastPayload } from "@synq/shared"
 import { initSyncManager, destroySyncManager } from "@synq/shared"
 import { destroyAllYDocs, applyRemoteUpdate, applyRemoteUpdateIfLoaded, hasYDoc } from "@synq/shared"
-import { getLocalLastSeq, getNoteCrdtUpdates, setLocalLastSeq, toUint8Update, type NoteCrdtUpdateRow } from "@synq/shared"
+import { getLocalLastSeq, getNoteCrdtUpdates, setLocalLastSeq, toUint8Update, type NoteCrdtUpdateRow, processWithTimeBudget } from "@synq/shared"
 
-// Realtime config
 const MAX_REALTIME_RETRIES = 5
 const RETRY_BASE_DELAY_MS = 2000
 const INITIAL_SUBSCRIBE_DELAY_MS = 250
-// Poll intervals (ms)
-const POLL_INTERVAL_REALTIME_DOWN = 10_000  // 10s when realtime is down
-// const POLL_INTERVAL_REALTIME_UP = 30_000    // 30s when realtime is healthy
-const HEALTH_CHECK_INTERVAL = 60_000        // 60s health check
-const HEALTH_CHECK_GRACE_MS = 30_000        // Don't health-check within 30s of a subscribe attempt
+const POLL_INTERVAL_REALTIME_DOWN = 10_000
+const HEALTH_CHECK_INTERVAL = 60_000
+const HEALTH_CHECK_GRACE_MS = 30_000
 
 
 export function DatabaseProvider({ children }: { children: React.ReactNode }) {
   const [deviceLimitExceeded, setDeviceLimitExceeded] = useState(false)
   const [deviceInfo, setDeviceInfo] = useState<DeviceRegistrationResult | null>(null)
   
-  // Prevent double-initialization
   const initStarted = useRef(false)
-  // Single realtime channel (all tables multiplexed on one channel)
   const channelRef = useRef<RealtimeChannel | null>(null)
   const retryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -44,24 +39,21 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
   const lastPollAtRef = useRef(0)
   const healthCheckTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const realtimeConnectedRef = useRef(false)
-  const isSubscribingRef = useRef(false)            // Lock: prevents concurrent subscriptions
-  const lastSubscribeAttemptRef = useRef<number>(0)  // Timestamp of last subscribe attempt
-  const subscriptionGenRef = useRef(0)               // Generation counter — ignores stale callbacks
+  const isSubscribingRef = useRef(false)
+  const lastSubscribeAttemptRef = useRef<number>(0)
+  const subscriptionGenRef = useRef(0)
   const currentUserIdRef = useRef<string | null>(null)
   const oplogBufferRef = useRef<Map<string, NoteCrdtUpdateRow[]>>(new Map())
   const oplogDrainTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
-
-  // -------------------------------------------------------------------------
-  // Fetch data from Supabase
-  // -------------------------------------------------------------------------
 
   const fetchData = useCallback(async () => {
     try {
       const { data, error } = await supabase.rpc('get_bootstrap_data')
       
       if (error) {
-        console.error('[DatabaseProvider] Error fetching bootstrap data:', error)
-        // Fallback to separate fetches if RPC fails
+        if (error.code !== 'PGRST202') {
+          console.error('[DatabaseProvider] Error fetching bootstrap data:', error)
+        }
         const promises = [
           useTaskStore.getState().fetchTasks(),
           useNotesStore.getState().fetchNotes(),
@@ -88,13 +80,6 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
-  // -------------------------------------------------------------------------
-  // CRDT-aware Realtime event handlers
-  // -------------------------------------------------------------------------
-
-  /**
-   * Notes handler — uses per-field LWW merge with mobile sync bridge.
-   */
   const handleRemoteNotes = useCallback((payload: RealtimePostgresChangesPayload<Note>) => {
     const { eventType, new: newRecord, old: oldRecord } = payload
     const notesStore = useNotesStore.getState()
@@ -110,10 +95,6 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
-  /**
-   * Note broadcast handler — for low-latency peer-to-peer updates.
-   * Feeds into the same CRDT merge path.
-   */
   const handleRemoteNoteBroadcast = useCallback((payload: NoteBroadcastPayload) => {
     if (payload.sender_id === getNoteSyncClientId()) return
 
@@ -139,9 +120,6 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
     })
   }, [handleRemoteNotes])
 
-  /**
-   * Tasks handler — uses per-field LWW-Register CRDT merge.
-   */
   const handleRemoteTasks = useCallback((payload: RealtimePostgresChangesPayload<Task>) => {
     const { eventType, new: newRecord, old: oldRecord } = payload
     const store = useTaskStore.getState()
@@ -159,9 +137,6 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
-  /**
-   * Projects handler — uses per-field LWW-Register CRDT merge.
-   */
   const handleRemoteProjects = useCallback((payload: RealtimePostgresChangesPayload<Project>) => {
     const { eventType, new: newRecord, old: oldRecord } = payload
     const store = useProjectStore.getState()
@@ -178,9 +153,6 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
-  /**
-   * Events handler — uses per-field LWW-Register CRDT merge.
-   */
   const handleRemoteEvents = useCallback((payload: RealtimePostgresChangesPayload<CalendarEvent>) => {
     const { eventType, new: newRecord, old: oldRecord } = payload
     const store = useEventStore.getState()
@@ -197,9 +169,6 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
-  /**
-   * Folders handler — uses per-field LWW-Register CRDT merge.
-   */
   const handleRemoteFolders = useCallback((payload: RealtimePostgresChangesPayload<Folder>) => {
     const { eventType, new: newRecord, old: oldRecord } = payload
     const store = useFolderStore.getState()
@@ -216,9 +185,6 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
-  /**
-   * CRDT Documents handler — for binary Yjs state updates.
-   */
   const handleRemoteCRDT = useCallback((payload: RealtimePostgresChangesPayload<{ entity_id?: string; state?: number[] }>) => {
     const { eventType, new: newRecord } = payload
     
@@ -239,19 +205,19 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
     let cursor = getLocalLastSeq(noteId)
     let sawGap = false
 
-    for (const row of sorted) {
+    await processWithTimeBudget(sorted, (row) => {
       const seq = Number(row.seq || 0)
-      if (seq <= cursor) continue
+      if (seq <= cursor) return
       if (seq > cursor + 1) {
         sawGap = true
-        break
+        return false
       }
       const update = toUint8Update(row.update_data)
       if (update) {
         applyRemoteUpdateIfLoaded(noteId, update)
       }
       cursor = seq
-    }
+    })
 
     if (cursor > 0) {
       setLocalLastSeq(noteId, cursor)
@@ -262,15 +228,16 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
     try {
       const catchUp = await getNoteCrdtUpdates(noteId, cursor, 500)
       const catchUpSorted = [...catchUp].sort((a, b) => Number(a.seq || 0) - Number(b.seq || 0))
-      for (const row of catchUpSorted) {
+      
+      await processWithTimeBudget(catchUpSorted, (row) => {
         const seq = Number(row.seq || 0)
-        if (seq <= cursor) continue
+        if (seq <= cursor) return
         const update = toUint8Update(row.update_data)
         if (update) {
           applyRemoteUpdateIfLoaded(noteId, update)
         }
         cursor = seq
-      }
+      })
       if (cursor > 0) {
         setLocalLastSeq(noteId, cursor)
       }
@@ -411,7 +378,6 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
         realtimeConnectedRef.current = true
         isSubscribingRef.current = false
         bindNoteBroadcastChannel(channel)
-        // Avoid duplicate fetch right after bootstrap; do a catch-up fetch only on reconnect.
         if (attempt > 0) {
           fetchData().catch(e => console.error('[Realtime] Sync fetch failed:', e))
         }
@@ -462,9 +428,8 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
   const startPollFallback = useCallback(() => {
     if (pollTimerRef.current) clearInterval(pollTimerRef.current)
     pollTimerRef.current = setInterval(() => {
-      if (typeof document !== 'undefined' && document.hidden) return // Pause in background
+      if (typeof document !== 'undefined' && document.hidden) return
       
-      // Do not poll the database constantly if Realtime is actively connected!
       if (realtimeConnectedRef.current) return
       
       const now = Date.now()
@@ -476,7 +441,7 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
   const startHealthCheck = useCallback(() => {
     if (healthCheckTimerRef.current) clearInterval(healthCheckTimerRef.current)
     healthCheckTimerRef.current = setInterval(() => {
-      if (typeof document !== 'undefined' && document.hidden) return // Pause in background
+      if (typeof document !== 'undefined' && document.hidden) return
       if (!currentUserIdRef.current || isSubscribingRef.current) return
       const timeSinceLastAttempt = Date.now() - lastSubscribeAttemptRef.current
       if (timeSinceLastAttempt < HEALTH_CHECK_GRACE_MS) return
@@ -495,7 +460,6 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
 
       try {
         if (session) {
-          // Force reset any stale persisted loading states
           useTaskStore.setState({ isLoading: false, error: null })
           useNotesStore.setState({ isLoading: false, error: null })
           useEventStore.setState({ isLoading: false, error: null })
@@ -523,9 +487,13 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
           setDeviceInfo(null)
 
           if (mounted) {
-            subscribeToRealtime()
-            startPollFallback()
-            startHealthCheck()
+            setTimeout(() => {
+              if (mounted) {
+                subscribeToRealtime()
+                startPollFallback()
+                startHealthCheck()
+              }
+            }, 1500)
           }
         } else {
           currentUserIdRef.current = null
@@ -555,7 +523,7 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
         return
       }
       if (_event === 'SIGNED_OUT') {
-        initStarted.current = false // Allow re-init on next sign-in
+        initStarted.current = false
         if (mounted) executeInit(null)
       } else if (session && mounted) {
         executeInit(session)

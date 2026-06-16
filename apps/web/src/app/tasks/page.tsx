@@ -43,7 +43,7 @@ interface DisplayTask {
 
 export default function TasksPage() {
   const [view, setView] = useState<'list' | 'kanban'>('list')
-  const { tasks, updateTask, deleteTask, fetchTasks, isLoading: tasksLoading, error: tasksError } = useTaskStore()
+  const tasks = useTaskStore(s => s.tasks); const updateTask = useTaskStore(s => s.updateTask); const deleteTask = useTaskStore(s => s.deleteTask); const fetchTasks = useTaskStore(s => s.fetchTasks); const tasksLoading = useTaskStore(s => s.isLoading); const tasksError = useTaskStore(s => s.error)
   const [searchQuery, setSearchQuery] = useState("")
 
   useEffect(() => {

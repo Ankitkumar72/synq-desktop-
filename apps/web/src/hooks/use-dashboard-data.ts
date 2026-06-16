@@ -8,10 +8,10 @@ import { useEventStore } from "@synq/shared"
 import { useProjectStore } from "@synq/shared"
 
 export function useDashboardData() {
-  const { tasks } = useTaskStore()
-  const { notes } = useNotesStore()
-  const { events } = useEventStore()
-  const { projects } = useProjectStore()
+  const tasks = useTaskStore(s => s.tasks)
+  const notes = useNotesStore(s => s.notes)
+  const events = useEventStore(s => s.events)
+  const projects = useProjectStore(s => s.projects)
 
   return useMemo(() => {
     // Filter out deleted items

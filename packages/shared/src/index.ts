@@ -36,3 +36,6 @@ export * from './constants';
 
 // notes
 export * from './notes/note-content';
+
+// utils
+export * from './utils/performance';

@@ -212,7 +212,9 @@ export const useEventStore = create<EventState>()(
 
       fetchEvents: async (includeDeleted = false, prefetchedData?: CalendarEvent[]) => {
         if (!supabase || get().isLoading) return
-        set({ isLoading: true, error: null })
+        if (get().events.length === 0) {
+          set({ isLoading: true, error: null })
+        }
         
         let userId = useUserStore.getState().user?.id
         if (!userId) {

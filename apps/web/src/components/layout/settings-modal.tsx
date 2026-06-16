@@ -36,9 +36,12 @@ import { format } from "date-fns"
 type Tab = "account" | "preferences" | "notifications" | "connections" | "people" | "import"
 
 export function SettingsModal() {
-  const { user } = useUserStore()
-  const { isSettingsOpen, setSettingsOpen } = useUIStore()
-  const { planTier, isPro, isAdmin } = useProfileStore()
+  const user = useUserStore(s => s.user)
+  const isSettingsOpen = useUIStore(s => s.isSettingsOpen)
+  const setSettingsOpen = useUIStore(s => s.setSettingsOpen)
+  const planTier = useProfileStore(s => s.planTier)
+  const isPro = useProfileStore(s => s.isPro)
+  const isAdmin = useProfileStore(s => s.isAdmin)
   const { stats } = useDashboardData()
   const [activeTab, setActiveTab] = React.useState<Tab>("account")
 

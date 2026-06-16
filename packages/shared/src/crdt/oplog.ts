@@ -1,6 +1,6 @@
-import { supabase, isGhostClient } from "@synq/shared"
+import { supabase, isGhostClient } from '../supabase/supabase'
 import { hlc } from '../hlc'
-import { del as idbDel, get as idbGet, keys as idbKeys, set as idbSet } from 'idb-keyval'
+import { del as idbDel, get as idbGet, keys as idbKeys, set as idbSet, getMany as idbGetMany } from 'idb-keyval'
 
 const __DEV__ = process.env.NODE_ENV !== 'production'
 export class NonRetryableRpcError extends Error {
@@ -170,9 +170,12 @@ export async function enqueueQueuedNoteCrdtUpdate(input: ApplyNoteCrdtUpdateInpu
 export async function getQueuedNoteCrdtUpdates(): Promise<QueuedNoteCrdtUpdate[]> {
   const allKeys = await idbKeys()
   const queueKeys = (allKeys as string[]).filter((k) => typeof k === 'string' && k.startsWith(OPLOG_QUEUE_PREFIX))
+  if (queueKeys.length === 0) return []
+
+  const values = await idbGetMany(queueKeys)
+  
   const pending: QueuedNoteCrdtUpdate[] = []
-  for (const key of queueKeys) {
-    const op = await idbGet<QueuedNoteCrdtUpdate>(key)
+  for (const op of values) {
     if (op) pending.push(op)
   }
   return pending.sort((a, b) => a.queuedAt - b.queuedAt)

@@ -28,8 +28,9 @@ import Image from "next/image"
 
 export default function AccountPage() {
   const router = useRouter()
-  const { user } = useUserStore()
-  const { planTier, isPro } = useProfileStore()
+  const user = useUserStore(s => s.user)
+  const planTier = useProfileStore(s => s.planTier)
+  const isPro = useProfileStore(s => s.isPro)
   const { stats } = useDashboardData()
 
   const handleLogout = async () => {

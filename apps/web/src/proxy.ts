@@ -1,11 +1,6 @@
 import { type NextRequest, NextResponse } from 'next/server'
 import { updateSession } from "@synq/shared"
 
-// ─────────────────────────────────────────────────────
-// In-memory rate limiter for the proxy layer
-// Runs before auth/session logic to block abusive traffic early
-// ─────────────────────────────────────────────────────
-
 interface RateLimitEntry {
   count: number
   resetTime: number
@@ -13,19 +8,20 @@ interface RateLimitEntry {
 
 const rateLimitMap = new Map<string, RateLimitEntry>()
 
-const PROXY_RATE_LIMIT = 120   // max requests per window
-const PROXY_WINDOW_MS = 60_000 // 1 minute window
+const PROXY_RATE_LIMIT = 120
+const PROXY_WINDOW_MS = 60_000
 
-// Periodic cleanup to prevent memory bloat
 if (typeof setInterval !== 'undefined') {
-  setInterval(() => {
-    const now = Date.now()
-    for (const [key, entry] of rateLimitMap) {
-      if (now > entry.resetTime) {
-        rateLimitMap.delete(key)
+  if (!(globalThis as any)._proxyRateLimitCleanupInterval) {
+    (globalThis as any)._proxyRateLimitCleanupInterval = setInterval(() => {
+      const now = Date.now()
+      for (const [key, entry] of rateLimitMap) {
+        if (now > entry.resetTime) {
+          rateLimitMap.delete(key)
+        }
       }
-    }
-  }, 5 * 60 * 1000)
+    }, 5 * 60 * 1000)
+  }
 }
 
 function checkProxyRateLimit(identifier: string): {
@@ -49,14 +45,7 @@ function checkProxyRateLimit(identifier: string): {
   return { allowed: true, remaining: PROXY_RATE_LIMIT - entry.count, resetTime: entry.resetTime }
 }
 
-/**
- * Proxy function replaces Middleware in Next.js 16.0+
- * It handles:
- * 1. IP-level rate limiting (first line of defense)
- * 2. Supabase session refreshing and route protection
- */
 export async function proxy(request: NextRequest) {
-  // Get client IP — use forwarded header in production, fall back to a default
   const clientIp =
     request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ??
     request.headers.get('x-real-ip') ??
@@ -84,10 +73,8 @@ export async function proxy(request: NextRequest) {
     )
   }
 
-  // If rate limit passes, continue to session handling + route protection
   const response = await updateSession(request)
 
-  // Attach rate limit headers to every response for client visibility
   response.headers.set('X-RateLimit-Limit', String(PROXY_RATE_LIMIT))
   response.headers.set('X-RateLimit-Remaining', String(remaining))
   response.headers.set('X-RateLimit-Reset', new Date(resetTime).toISOString())
@@ -97,13 +84,6 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    /*
-     * Match all request paths except for the ones starting with:
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     * - public assets (svg, png, etc)
-     */
     '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 }

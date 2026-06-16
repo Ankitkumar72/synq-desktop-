@@ -46,9 +46,11 @@ export async function updateSession(request: NextRequest) {
   )
 
   const {
-    data: { user },
+    data: { session },
     error,
-  } = await supabase.auth.getUser()
+  } = await supabase.auth.getSession()
+
+  const user = session?.user
 
   if (error && (error.message.includes('refresh_token_not_found') || error.message.includes('Refresh Token Not Found') || (error as { code?: string }).code === 'refresh_token_not_found')) {
     // If the token is dead, clear cookies to prevent an infinite error loop.

@@ -11,9 +11,12 @@ import { QuickCreateModal } from "@/components/layout/quick-create";
 
 export function LayoutContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const { isInitialized, setInitialized } = useUserStore();
+  const isInitialized = useUserStore(s => s.isInitialized); const setInitialized = useUserStore(s => s.setInitialized);
   const [showTimeoutMessage, setShowTimeoutMessage] = useState(false);
-  const { openSearch, isCreateOpen, setCreateOpen, createType } = useUIStore();
+  const openSearch = useUIStore(s => s.openSearch);
+  const isCreateOpen = useUIStore(s => s.isCreateOpen);
+  const setCreateOpen = useUIStore(s => s.setCreateOpen);
+  const createType = useUIStore(s => s.createType);
   const isAuthPage = pathname === "/login" || pathname === "/signup";
 
   useEffect(() => {

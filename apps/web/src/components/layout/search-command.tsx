@@ -57,7 +57,10 @@ function getSnippet(text: string, tokens: string[]): string {
 
 
 export function SearchCommand() {
-  const { isSearchOpen, closeSearch, recentSearches, addRecentSearch } = useUIStore()
+  const isSearchOpen = useUIStore(s => s.isSearchOpen)
+  const closeSearch = useUIStore(s => s.closeSearch)
+  const recentSearches = useUIStore(s => s.recentSearches)
+  const addRecentSearch = useUIStore(s => s.addRecentSearch)
   const [query, setQuery] = React.useState("")
   const [activeFilter, setActiveFilter] = React.useState<FilterType>("all")
   const [selectedIndex, setSelectedIndex] = React.useState(0)
