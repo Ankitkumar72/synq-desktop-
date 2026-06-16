@@ -38,7 +38,12 @@ export const useTaskStore = create<TaskState>()(
       setTasks: (tasks) => set({ tasks }),
       fetchTasks: async (includeDeleted = false, prefetchedData?: Task[]) => {
         if (!supabase || get().isLoading) return
-        set({ isLoading: true, error: null })
+
+        // If we don't have prefetched data, we are doing a background fetch.
+        // We only set isLoading to true if we don't have any tasks loaded locally to avoid blocking UI during background sync.
+        if (get().tasks.length === 0) {
+          set({ isLoading: true, error: null })
+        }
         
         let userId = useUserStore.getState().user?.id
         if (!userId) {

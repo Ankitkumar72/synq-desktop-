@@ -56,8 +56,10 @@ export default function CalendarPage() {
   const [selectedDate, setSelectedDate] = useState(new Date())
   const [miniCalendarMonth, setMiniCalendarMonth] = useState(new Date())
 
-  const { events, fetchEvents } = useEventStore()
-  const { tasks, fetchTasks } = useTaskStore()
+  const events = useEventStore(s => s.events)
+  const fetchEvents = useEventStore(s => s.fetchEvents)
+  const tasks = useTaskStore(s => s.tasks)
+  const fetchTasks = useTaskStore(s => s.fetchTasks)
   const hasMounted = useHasMounted()
 
   const [selectedItem, setSelectedItem] = useState<(Task & { type: 'task' }) | (CalendarEvent & { type: 'event' }) | null>(null)

@@ -18,14 +18,16 @@ const PROXY_WINDOW_MS = 60_000 // 1 minute window
 
 // Periodic cleanup to prevent memory bloat
 if (typeof setInterval !== 'undefined') {
-  setInterval(() => {
-    const now = Date.now()
-    for (const [key, entry] of rateLimitMap) {
-      if (now > entry.resetTime) {
-        rateLimitMap.delete(key)
+  if (!(globalThis as any)._proxyRateLimitCleanupInterval) {
+    (globalThis as any)._proxyRateLimitCleanupInterval = setInterval(() => {
+      const now = Date.now()
+      for (const [key, entry] of rateLimitMap) {
+        if (now > entry.resetTime) {
+          rateLimitMap.delete(key)
+        }
       }
-    }
-  }, 5 * 60 * 1000)
+    }, 5 * 60 * 1000)
+  }
 }
 
 function checkProxyRateLimit(identifier: string): {

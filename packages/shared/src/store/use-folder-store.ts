@@ -34,7 +34,9 @@ export const useFolderStore = create<FolderState>()(
 
       fetchFolders: async (includeDeleted = false, prefetchedData?: Folder[]) => {
         if (!supabase || get().isLoading) return
-        set({ isLoading: true, error: null })
+        if (get().folders.length === 0) {
+          set({ isLoading: true, error: null })
+        }
 
         let userId = useUserStore.getState().user?.id
         if (!userId) {

@@ -36,7 +36,7 @@ import { format } from "date-fns"
 type Tab = "account" | "preferences" | "notifications" | "connections" | "people" | "import"
 
 export function SettingsModal() {
-  const { user } = useUserStore()
+  const user = useUserStore(s => s.user)
   const { isSettingsOpen, setSettingsOpen } = useUIStore()
   const { planTier, isPro, isAdmin } = useProfileStore()
   const { stats } = useDashboardData()

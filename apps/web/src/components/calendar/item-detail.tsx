@@ -28,9 +28,10 @@ interface ItemDetailProps {
 }
 
 export function ItemDetail({ item, open, onOpenChange, onEdit }: ItemDetailProps) {
-  const { updateTask, deleteTask } = useTaskStore()
-  const { deleteEvent } = useEventStore()
-  const { projects } = useProjectStore()
+  const updateTask = useTaskStore(s => s.updateTask)
+  const deleteTask = useTaskStore(s => s.deleteTask)
+  const deleteEvent = useEventStore(s => s.deleteEvent)
+  const projects = useProjectStore(s => s.projects)
 
   if (!item) return null
 

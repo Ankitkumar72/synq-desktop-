@@ -57,7 +57,7 @@ import styles from './editor-content.module.css'
 
 const lowlight = createLowlight(common)
 
-const SAVE_DEBOUNCE_MS = 800
+const SAVE_DEBOUNCE_MS = 250
 const RETRY_DELAY_MS = 3000
 const MAX_PERSIST_RETRIES = 3
 const __DEV__ = process.env.NODE_ENV !== 'production'
@@ -351,7 +351,10 @@ export function NoteEditor({
   content?: NoteContent,
   onChange?: (snapshot: { content: NoteContent, body: string | null, excerpt: string | null }) => void
 }) {
-  const { setFocusedNoteId, markNoteActivity, clearActiveNoteActivity, updateNoteLocal } = useNotesStore()
+  const setFocusedNoteId = useNotesStore(s => s.setFocusedNoteId)
+  const markNoteActivity = useNotesStore(s => s.markNoteActivity)
+  const clearActiveNoteActivity = useNotesStore(s => s.clearActiveNoteActivity)
+  const updateNoteLocal = useNotesStore(s => s.updateNoteLocal)
   const editorRef = useRef<Editor | null>(null)
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null)
