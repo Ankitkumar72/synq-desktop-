@@ -48,7 +48,10 @@ const COLOR_OPTIONS = [
 
 export default function ProjectsPage() {
   const router = useRouter()
-  const { projects, deleteProject, addProject, toggleFavorite } = useProjectStore()
+  const projects = useProjectStore(s => s.projects)
+  const deleteProject = useProjectStore(s => s.deleteProject)
+  const addProject = useProjectStore(s => s.addProject)
+  const toggleFavorite = useProjectStore(s => s.toggleFavorite)
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedStatus, setSelectedStatus] = useState<string[]>([])
 

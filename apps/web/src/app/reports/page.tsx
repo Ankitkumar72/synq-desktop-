@@ -19,10 +19,10 @@ import { useHasMounted } from '@/hooks/use-has-mounted'
 
 export default function ReportsPage() {
   const hasMounted = useHasMounted()
-  const { tasks } = useTaskStore()
-  const { projects } = useProjectStore()
-  const { notes } = useNotesStore()
-  const { events } = useEventStore()
+  const tasks = useTaskStore(s => s.tasks)
+  const projects = useProjectStore(s => s.projects)
+  const notes = useNotesStore(s => s.notes)
+  const events = useEventStore(s => s.events)
 
   // Derived Statistics
   const stats = useMemo(() => {

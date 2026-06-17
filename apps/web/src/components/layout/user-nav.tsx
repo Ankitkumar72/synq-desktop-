@@ -21,7 +21,7 @@ import { getUserDisplayName, getUserInitials } from '@/lib/user-utils'
 import { Badge } from '@/components/ui/badge'
 
 export function UserNav() {
-  const { user } = useUserStore()
+  const user = useUserStore(s => s.user)
   const { openSettings } = useUIStore()
   const { planTier, isAdmin } = useProfileStore()
 

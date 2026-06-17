@@ -17,8 +17,11 @@ export default function FolderPage() {
   const router = useRouter()
   const folderId = params.id as string
 
-  const { projects } = useProjectStore()
-  const { notes, fetchNotes, deleteNote, addNote } = useNotesStore()
+  const projects = useProjectStore(s => s.projects)
+  const notes = useNotesStore(s => s.notes)
+  const fetchNotes = useNotesStore(s => s.fetchNotes)
+  const deleteNote = useNotesStore(s => s.deleteNote)
+  const addNote = useNotesStore(s => s.addNote)
   const [searchQuery, setSearchQuery] = useState("")
 
   const folder = projects.find(p => p.id === folderId)

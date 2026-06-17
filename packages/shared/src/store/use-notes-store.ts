@@ -7,10 +7,10 @@ import { supabase } from '../supabase/supabase'
 import { useUserStore } from './use-user-store'
 import { enqueueOperation } from '../crdt/offline-queue'
 import { triggerFlush, getOnlineStatus, saveYDocToSupabase } from '../crdt/sync-manager'
-import { 
-  getOrCreateYDoc, 
-  setActiveEdit, 
-  markLocallyModified, 
+import {
+  getOrCreateYDoc,
+  setActiveEdit,
+  markLocallyModified,
   applyMobileBodyUpdate,
   getPlainTextFromYDoc,
   getExcerptFromYDoc,
@@ -84,13 +84,13 @@ export const useNotesStore = create<NotesState>()(
       error: null,
       focusedNoteId: null,
       setFocusedNoteId: (id) => set({ focusedNoteId: id }),
-      
+
       markNoteActivity: (id) => {
         set({ activeEditNoteId: id, activeEditAt: Date.now() })
         // Tell the CRDT doc manager this note is being actively edited
         setActiveEdit(id, true)
       },
-      
+
       clearActiveNoteActivity: (id) => {
         set((state) => {
           if (!id || state.activeEditNoteId === id) {
@@ -104,8 +104,8 @@ export const useNotesStore = create<NotesState>()(
         })
       },
 
-      setNotes: (notes) => set((state) => ({ 
-        notes, 
+      setNotes: (notes) => set((state) => ({
+        notes,
         selectedNoteId: state.selectedNoteId || (notes.length > 0 ? notes[0].id : null)
       })),
 
@@ -130,15 +130,15 @@ export const useNotesStore = create<NotesState>()(
 
           const timestamp = hlc.increment()
           const now = new Date().toISOString()
-          
+
           // Robust UUID generation
-          const noteId = (typeof crypto !== 'undefined' && crypto.randomUUID) 
-            ? crypto.randomUUID() 
+          const noteId = (typeof crypto !== 'undefined' && crypto.randomUUID)
+            ? crypto.randomUUID()
             : `local-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-          
+
           const newFieldVersions: Record<string, string> = {}
           const defaultFields = ['title', 'content', 'body', 'excerpt', 'pinned', 'category', 'priority', 'folder_id', 'updated_at', 'created_at']
-          
+
           defaultFields.forEach(key => {
             newFieldVersions[key] = timestamp
           })
@@ -164,7 +164,7 @@ export const useNotesStore = create<NotesState>()(
           getOrCreateYDoc(noteId)
 
           // OPTIMISTIC UPDATE: Add to local state immediately
-          set((state) => ({ 
+          set((state) => ({
             notes: [optimisticNote, ...state.notes],
             selectedNoteId: fullNote.id // Auto-select new note
           }))
@@ -187,7 +187,7 @@ export const useNotesStore = create<NotesState>()(
               })
               triggerFlush()
             } else if (data?.[0]) {
-              set((state) => ({ 
+              set((state) => ({
                 notes: state.notes.map(n => n.id === noteId ? data[0] : n)
               }))
             }
@@ -200,7 +200,7 @@ export const useNotesStore = create<NotesState>()(
               hlcTimestamp: timestamp,
             })
           }
-          
+
           console.log('[NotesStore] Note created successfully:', noteId);
           return noteId
         } catch (err) {
@@ -215,7 +215,7 @@ export const useNotesStore = create<NotesState>()(
         const timestamp = hlc.increment()
         const existingNote = get().notes.find(n => n.id === id)
         const newFieldVersions: Record<string, string> = { ...(existingNote?.field_versions || {}) }
-        
+
         Object.keys(updates).forEach(key => {
           newFieldVersions[key] = timestamp
         })
@@ -277,7 +277,7 @@ export const useNotesStore = create<NotesState>()(
 
         set((state) => {
           const existingIndex = state.notes.findIndex(n => n.id === remoteNote.id)
-          
+
           if (existingIndex === -1) {
             // New note arrived from remote
             // Only initialize from body if structured content is missing
@@ -292,7 +292,7 @@ export const useNotesStore = create<NotesState>()(
           const isActivelyEditing =
             state.activeEditNoteId === remoteNote.id &&
             (Date.now() - state.activeEditAt) < ACTIVE_NOTE_EDIT_GRACE_MS
-          
+
           // If the whole record is newer, or we don't have field versions, merge it
           if (HLC.compare(remoteNote.hlc_timestamp, existing.hlc_timestamp) > 0) {
             const mergedNode = { ...existing }
@@ -351,7 +351,7 @@ export const useNotesStore = create<NotesState>()(
 
             mergedNode.hlc_timestamp = remoteNote.hlc_timestamp
             mergedNode.field_versions = mergedFieldVersions
-            
+
             const newNotes = [...state.notes]
             newNotes[existingIndex] = mergedNode
             return { notes: newNotes }
@@ -389,13 +389,13 @@ export const useNotesStore = create<NotesState>()(
         if (!supabase) return console.warn('Supabase not configured')
         const now = new Date().toISOString()
         const timestamp = hlc.increment()
-        
+
         const existingNote = get().notes.find(n => n.id === id)
         const newFieldVersions: Record<string, string> = { ...(existingNote?.field_versions || {}) }
         newFieldVersions['deleted_at'] = timestamp
         newFieldVersions['is_deleted'] = timestamp
         newFieldVersions['updated_at'] = timestamp
-        
+
         // Optimistic update
         set(state => ({
           notes: state.notes.map(n => n.id === id ? { ...n, deleted_at: now, is_deleted: true, field_versions: newFieldVersions } : n)
@@ -404,7 +404,7 @@ export const useNotesStore = create<NotesState>()(
         // Clean up Yjs doc
         destroyYDoc(id)
 
-        const payload = { 
+        const payload = {
           [COLUMNS.DELETED_AT]: now,
           [COLUMNS.IS_DELETED]: true,
           deleted_hlc: timestamp,
@@ -428,19 +428,19 @@ export const useNotesStore = create<NotesState>()(
       restoreNote: async (id) => {
         if (!supabase) return console.warn('Supabase not configured')
         const timestamp = hlc.increment()
-        
+
         const existingNote = get().notes.find(n => n.id === id)
         const newFieldVersions: Record<string, string> = { ...(existingNote?.field_versions || {}) }
         newFieldVersions['deleted_at'] = timestamp
         newFieldVersions['is_deleted'] = timestamp
         newFieldVersions['updated_at'] = timestamp
-        
+
         // Optimistic update
         set(state => ({
           notes: state.notes.map(n => n.id === id ? { ...n, deleted_at: undefined, is_deleted: false, field_versions: newFieldVersions } : n)
         }))
 
-        const payload = { 
+        const payload = {
           [COLUMNS.DELETED_AT]: null,
           [COLUMNS.IS_DELETED]: false,
           deleted_hlc: null,
@@ -463,7 +463,7 @@ export const useNotesStore = create<NotesState>()(
 
       permanentlyDeleteNote: async (id) => {
         if (!supabase) return console.warn('Supabase not configured')
-        
+
         // Clean up Yjs doc
         destroyYDoc(id)
 
@@ -488,16 +488,19 @@ export const useNotesStore = create<NotesState>()(
 
       fetchNotes: async (includeDeleted = false, prefetchedData?: Note[]) => {
         if (!supabase || get().isLoading) return
-        
+
         const userId = useUserStore.getState().user?.id
         if (!userId) {
           console.warn('[NotesStore] fetchNotes called without authenticated user')
           return
         }
 
+        if (get().notes.length === 0) {
+          set({ isLoading: true, error: null })
+        }
+
         try {
-          set({ isLoading: true });
-          
+
           let data = prefetchedData;
           if (!data) {
             // Fetch all notes in one query (up to 500)
@@ -508,11 +511,11 @@ export const useNotesStore = create<NotesState>()(
             if (!includeDeleted) {
               query = query.eq(COLUMNS.IS_DELETED, false);
             }
-            
+
             const res = await query
               .order('updated_at', { ascending: false })
               .limit(500);
-            
+
             if (res.error) {
               console.error('[NotesStore] Error fetching notes:', {
                 message: res.error.message,
@@ -531,7 +534,7 @@ export const useNotesStore = create<NotesState>()(
           if (data) {
             const currentNotes = get().notes
             const merged = mergeNotesList(currentNotes, data.map(sanitizeNote), true, includeDeleted)
-            
+
             set({ notes: merged, isLoading: false });
           } else {
             set({ isLoading: false });
@@ -545,19 +548,19 @@ export const useNotesStore = create<NotesState>()(
       pinNote: async (id, isPinned) => {
         const timestamp = hlc.increment()
         const now = new Date().toISOString()
-        
+
         const existingNote = get().notes.find(n => n.id === id)
         const newFieldVersions: Record<string, string> = { ...(existingNote?.field_versions || {}) }
         newFieldVersions['pinned'] = timestamp
         newFieldVersions['updated_at'] = timestamp
-        
+
         set((state) => ({
           notes: state.notes.map((n) => (n.id === id ? { ...n, pinned: isPinned, updated_at: now, hlc_timestamp: timestamp, field_versions: newFieldVersions } : n))
         }))
-        
+
         if (!supabase) return
 
-        const payload = { 
+        const payload = {
           [COLUMNS.PINNED]: isPinned,
           hlc_timestamp: timestamp,
           field_versions: newFieldVersions,
@@ -577,12 +580,12 @@ export const useNotesStore = create<NotesState>()(
       },
 
       clearStore: () => {
-        set({ 
-          notes: [], 
-          selectedNoteId: null, 
+        set({
+          notes: [],
+          selectedNoteId: null,
           activeEditNoteId: null,
           activeEditAt: 0,
-          focusedNoteId: null 
+          focusedNoteId: null
         })
       }
     }),
@@ -599,7 +602,7 @@ export const useNotesStore = create<NotesState>()(
 /**
  * Merge a list of fetched notes with the current local list.
  * Used during fetchNotes to avoid clobbering local optimistic state.
- * 
+ *
  * @param local Current local notes
  * @param remote Notes fetched from server
  * @param isComprehensive If true, we assume the remote list represents the full state (for the given filter)
@@ -617,7 +620,7 @@ function mergeNotesList(local: Note[], remote: Note[], isComprehensive = false, 
       // Item exists in both: Merge using HLC
       const remoteHlc = remoteNote.hlc_timestamp || ''
       const localHlc = localNote.hlc_timestamp || ''
-      
+
       if (HLC.compare(remoteHlc, localHlc) >= 0) {
         merged.set(localNote.id, remoteNote)
       } else {
@@ -628,16 +631,16 @@ function mergeNotesList(local: Note[], remote: Note[], isComprehensive = false, 
       if (isComprehensive) {
         // If it's a new local item (unsynced), we MUST keep it
         const isNewLocal = localNote.id.startsWith('local-') || !localNote.user_id
-        
+
         if (isNewLocal) {
           merged.set(localNote.id, localNote)
         } else {
           // It was a server item, but now it's missing from a comprehensive fetch.
           if (includesDeleted) {
             // We fetched EVERYTHING (including trash) and it's missing -> Hard Delete on server.
-            continue 
+            continue
           } else {
-            // We only fetched active items. 
+            // We only fetched active items.
             if (localNote.is_deleted) {
               merged.set(localNote.id, localNote)
             } else {

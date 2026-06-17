@@ -93,9 +93,18 @@ const TrashItemRow = memo(({
 TrashItemRow.displayName = 'TrashItemRow'
 
 export default function TrashPage() {
-  const { notes, restoreNote, permanentlyDeleteNote, fetchNotes } = useNotesStore()
-  const { tasks, restoreTask, permanentlyDeleteTask, fetchTasks } = useTaskStore()
-  const { events, restoreEvent, permanentlyDeleteEvent, fetchEvents } = useEventStore()
+  const notes = useNotesStore(s => s.notes)
+  const restoreNote = useNotesStore(s => s.restoreNote)
+  const permanentlyDeleteNote = useNotesStore(s => s.permanentlyDeleteNote)
+  const fetchNotes = useNotesStore(s => s.fetchNotes)
+  const tasks = useTaskStore(s => s.tasks)
+  const restoreTask = useTaskStore(s => s.restoreTask)
+  const permanentlyDeleteTask = useTaskStore(s => s.permanentlyDeleteTask)
+  const fetchTasks = useTaskStore(s => s.fetchTasks)
+  const events = useEventStore(s => s.events)
+  const restoreEvent = useEventStore(s => s.restoreEvent)
+  const permanentlyDeleteEvent = useEventStore(s => s.permanentlyDeleteEvent)
+  const fetchEvents = useEventStore(s => s.fetchEvents)
   
   const [activeCategory, setActiveCategory] = useState<Category>('notes')
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())

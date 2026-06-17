@@ -101,10 +101,13 @@ export default function DashboardPage() {
   const hasMounted = useHasMounted()
   const router = useRouter()
 
-  const { tasks, updateTask } = useTaskStore()
-  const { notes, addNote } = useNotesStore()
-  const { user } = useUserStore()
-  const { events, fetchEvents } = useEventStore()
+  const tasks = useTaskStore(s => s.tasks)
+  const updateTask = useTaskStore(s => s.updateTask)
+  const notes = useNotesStore(s => s.notes)
+  const addNote = useNotesStore(s => s.addNote)
+  const user = useUserStore(s => s.user)
+  const events = useEventStore(s => s.events)
+  const fetchEvents = useEventStore(s => s.fetchEvents)
   const [scratchContent, setScratchContent] = useState("")
 
   const handleCreateNote = async () => {

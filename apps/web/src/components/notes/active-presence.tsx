@@ -32,7 +32,7 @@ function getUserColor(userId: string): string {
 }
 
 export function ActivePresenceAvatars({ noteId }: { noteId: string }) {
-  const { user } = useUserStore()
+  const user = useUserStore(s => s.user)
   const [activeUsers, setActiveUsers] = useState<PresenceUser[]>([])
 
   useEffect(() => {

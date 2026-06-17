@@ -63,8 +63,16 @@ function NoteSidebarItem({
 
 
 function NotesPageContent() {
-  const { notes, selectedNoteId, setSelectedNoteId, addNote, updateNote, deleteNote, pinNote, updateNoteLocal } = useNotesStore()
-  const { projects, fetchProjects } = useProjectStore()
+  const notes = useNotesStore(s => s.notes)
+  const selectedNoteId = useNotesStore(s => s.selectedNoteId)
+  const setSelectedNoteId = useNotesStore(s => s.setSelectedNoteId)
+  const addNote = useNotesStore(s => s.addNote)
+  const updateNote = useNotesStore(s => s.updateNote)
+  const deleteNote = useNotesStore(s => s.deleteNote)
+  const pinNote = useNotesStore(s => s.pinNote)
+  const updateNoteLocal = useNotesStore(s => s.updateNoteLocal)
+  const projects = useProjectStore(s => s.projects)
+  const fetchProjects = useProjectStore(s => s.fetchProjects)
   const { isSidebarOpen } = useUIStore()
   const searchParams = useSearchParams()
   const urlNoteId = searchParams.get("id")
