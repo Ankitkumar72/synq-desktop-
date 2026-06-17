@@ -126,7 +126,7 @@ function NotesPageContent() {
     }
   }, [selectedNoteId])
 
-  const debouncedUpdate = useDebounce(updateNote, 250)
+  const debouncedUpdate = useDebounce(updateNote, 800)
 
   const filteredNotes = useMemo(() => {
     return notes

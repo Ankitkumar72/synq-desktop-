@@ -39,6 +39,7 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
   const lastPollAtRef = useRef(0)
   const healthCheckTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const realtimeConnectedRef = useRef(false)
+  const isPollingRef = useRef(false)
   const isSubscribingRef = useRef(false)
   const lastSubscribeAttemptRef = useRef<number>(0)
   const subscriptionGenRef = useRef(0)
@@ -54,14 +55,20 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
         if (error.code !== 'PGRST202') {
           console.error('[DatabaseProvider] Error fetching bootstrap data:', error)
         }
-        const promises = [
-          useTaskStore.getState().fetchTasks(),
-          useNotesStore.getState().fetchNotes(),
-          useEventStore.getState().fetchEvents(),
-          useProjectStore.getState().fetchProjects(),
-          useFolderStore.getState().fetchFolders()
+        const fetchFns = [
+          () => useTaskStore.getState().fetchTasks(),
+          () => useNotesStore.getState().fetchNotes(),
+          () => useEventStore.getState().fetchEvents(),
+          () => useProjectStore.getState().fetchProjects(),
+          () => useFolderStore.getState().fetchFolders()
         ]
-        await Promise.allSettled(promises)
+        for (const fn of fetchFns) {
+          try {
+            await fn()
+          } catch (e) {
+            console.error('[DatabaseProvider] Sequential fetch error:', e)
+          }
+        }
         return
       }
 
@@ -427,14 +434,21 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
 
   const startPollFallback = useCallback(() => {
     if (pollTimerRef.current) clearInterval(pollTimerRef.current)
-    pollTimerRef.current = setInterval(() => {
+    pollTimerRef.current = setInterval(async () => {
       if (typeof document !== 'undefined' && document.hidden) return
       
-      if (realtimeConnectedRef.current) return
+      if (realtimeConnectedRef.current || isPollingRef.current) return
       
       const now = Date.now()
       lastPollAtRef.current = now
-      fetchData().catch(err => console.error('[Poll] Error:', err))
+      isPollingRef.current = true
+      try {
+        await fetchData()
+      } catch (err) {
+        console.error('[Poll] Error:', err)
+      } finally {
+        isPollingRef.current = false
+      }
     }, POLL_INTERVAL_REALTIME_DOWN)
   }, [fetchData])
 

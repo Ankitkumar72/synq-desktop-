@@ -356,6 +356,7 @@ export function NoteEditor({
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const isSavingRef = useRef(false)
+  const pendingSaveRef = useRef(false)
   const hasPendingLocalChangeRef = useRef(false)
   const pendingUpdatesRef = useRef<Uint8Array[]>([])
   const onChangeRef = useRef(onChange)
@@ -385,10 +386,17 @@ export function NoteEditor({
 
   const persistNow = useCallback(async (broadcast: boolean, forceSnapshot = false) => {
     const userId = useUserStore.getState().user?.id
-    if (!userId || isSavingRef.current) return
+    if (!userId) return
+
+    if (isSavingRef.current) {
+      pendingSaveRef.current = true
+      return
+    }
+
     if (pendingUpdatesRef.current.length === 0 && !hasPendingLocalChangeRef.current) return
 
     isSavingRef.current = true
+    pendingSaveRef.current = false
     const pendingBatch = pendingUpdatesRef.current.splice(0)
     const now = new Date().toISOString()
     const currentEditor = editorRef.current
@@ -460,6 +468,12 @@ export function NoteEditor({
       return
     } finally {
       isSavingRef.current = false
+      if (pendingSaveRef.current) {
+        pendingSaveRef.current = false
+        setTimeout(() => {
+          void persistNowRef.current(true)
+        }, 10)
+      }
     }
 
     if (!broadcast) return
