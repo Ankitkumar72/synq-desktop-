@@ -34,9 +34,6 @@ export const useProjectStore = create<ProjectState>()(
 
       fetchProjects: async (includeDeleted = false, prefetchedData?: Project[]) => {
         if (!supabase || get().isLoading) return
-        if (get().projects.length === 0) {
-          set({ isLoading: true, error: null })
-        }
 
         let userId = useUserStore.getState().user?.id
         if (!userId) {
@@ -47,6 +44,10 @@ export const useProjectStore = create<ProjectState>()(
         if (!userId) {
           set({ error: 'No authenticated user', isLoading: false })
           return
+        }
+
+        if (get().projects.length === 0) {
+          set({ isLoading: true, error: null })
         }
 
         try {

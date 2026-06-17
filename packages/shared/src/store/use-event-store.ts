@@ -212,9 +212,6 @@ export const useEventStore = create<EventState>()(
 
       fetchEvents: async (includeDeleted = false, prefetchedData?: CalendarEvent[]) => {
         if (!supabase || get().isLoading) return
-        if (get().events.length === 0) {
-          set({ isLoading: true, error: null })
-        }
         
         let userId = useUserStore.getState().user?.id
         if (!userId) {
@@ -226,6 +223,10 @@ export const useEventStore = create<EventState>()(
           console.warn('[EventStore] fetchEvents called without authenticated user')
           set({ isLoading: false, error: 'No authenticated user' })
           return
+        }
+
+        if (get().events.length === 0) {
+          set({ isLoading: true, error: null })
         }
 
         try {

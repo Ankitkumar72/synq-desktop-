@@ -57,7 +57,7 @@ import styles from './editor-content.module.css'
 
 const lowlight = createLowlight(common)
 
-const SAVE_DEBOUNCE_MS = 250
+const SAVE_DEBOUNCE_MS = 400
 const RETRY_DELAY_MS = 3000
 const MAX_PERSIST_RETRIES = 3
 const __DEV__ = process.env.NODE_ENV !== 'production'

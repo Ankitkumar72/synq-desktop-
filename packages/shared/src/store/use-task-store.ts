@@ -39,12 +39,6 @@ export const useTaskStore = create<TaskState>()(
       fetchTasks: async (includeDeleted = false, prefetchedData?: Task[]) => {
         if (!supabase || get().isLoading) return
 
-        // If we don't have prefetched data, we are doing a background fetch.
-        // We only set isLoading to true if we don't have any tasks loaded locally to avoid blocking UI during background sync.
-        if (get().tasks.length === 0) {
-          set({ isLoading: true, error: null })
-        }
-        
         let userId = useUserStore.getState().user?.id
         if (!userId) {
           const { data: { user } } = await supabase.auth.getUser()
@@ -56,22 +50,28 @@ export const useTaskStore = create<TaskState>()(
           return
         }
 
+        // If we don't have prefetched data, we are doing a background fetch.
+        // We only set isLoading to true if we don't have any tasks loaded locally to avoid blocking UI during background sync.
+        if (get().tasks.length === 0) {
+          set({ isLoading: true, error: null })
+        }
+
         try {
           let data = prefetchedData;
-          
+
           if (!data) {
             // RLS automatically filters by user_id (auth.uid() = user_id)
             let query = supabase
               .from('tasks')
               .select('*')
               .eq('user_id', userId)
-            
+
             if (!includeDeleted) {
               query = query.eq('is_deleted', false)
             }
-            
+
             const res = await query.order('created_at', { ascending: false })
-            
+
             if (res.error) {
               console.error('[TaskStore] Error fetching tasks:', {
                 message: res.error.message,
@@ -103,9 +103,9 @@ export const useTaskStore = create<TaskState>()(
 
       addTask: async (t) => {
         if (!supabase) return console.warn('Supabase not configured')
-        
+
         let userId = useUserStore.getState().user?.id
-        
+
         // Robust fallback: fetch user directly if store is empty
         if (!userId) {
           const { data: { user } } = await supabase.auth.getUser()
@@ -135,14 +135,14 @@ export const useTaskStore = create<TaskState>()(
         const now = new Date().toISOString()
         const newFieldVersions: Record<string, string> = {}
         const defaultFields = ['title', 'description', 'status', 'priority', 'due_date', 'start_at', 'end_at', 'project_id', 'assignee_id', 'order', 'recurrence_rule', 'parent_recurring_id', 'updated_at', 'created_at']
-        
+
         defaultFields.forEach(key => {
           newFieldVersions[key] = timestamp
         })
 
         const taskId = crypto.randomUUID()
-        const taskPayload = { 
-          ...t, 
+        const taskPayload = {
+          ...t,
           id: taskId,
           due_date: formattedDate,
           start_at: startAt,
@@ -170,7 +170,7 @@ export const useTaskStore = create<TaskState>()(
             .from('tasks')
             .insert([taskPayload])
             .select()
-          
+
           if (error) {
             console.error('[TaskStore] Error adding task:', {
               message: error.message,
@@ -189,8 +189,8 @@ export const useTaskStore = create<TaskState>()(
               triggerFlush()
             } else if (data?.[0]) {
               // Replace temp task with real one
-              set(state => ({ 
-                tasks: state.tasks.map(task => 
+              set(state => ({
+                tasks: state.tasks.map(task =>
                   task.id === taskId ? data[0] : task
                 )
               }))
@@ -209,16 +209,16 @@ export const useTaskStore = create<TaskState>()(
 
       updateTask: async (id, updates) => {
         if (!supabase) return console.warn('Supabase not configured')
-        
+
         const timestamp = hlc.increment()
         const now = new Date().toISOString()
         const currentTask = get().tasks.find(t => t.id === id)
-        
+
         // Build field versions for the updated fields
         const updatedKeys = Object.keys(updates).filter(k => !SKIP_FIELDS.includes(k))
         const existingVersions = currentTask?.field_versions || {}
         const newVersions = stampFields(existingVersions, updatedKeys, timestamp)
-        
+
         const normalizedUpdates = { ...updates }
         if (normalizedUpdates.due_date && normalizedUpdates.due_date.includes('T')) {
           normalizedUpdates.start_at = normalizedUpdates.start_at || normalizedUpdates.due_date
@@ -269,12 +269,12 @@ export const useTaskStore = create<TaskState>()(
         if (!supabase) return console.warn('Supabase not configured')
         const now = new Date().toISOString()
         const timestamp = hlc.increment()
-        
+
         set(state => ({
           tasks: state.tasks.filter(t => t.id !== id)
         }))
 
-        const payload = { 
+        const payload = {
           deleted_at: now,
           is_deleted: true,
           deleted_hlc: timestamp,
@@ -298,8 +298,8 @@ export const useTaskStore = create<TaskState>()(
         if (!supabase) return console.warn('Supabase not configured')
         const timestamp = hlc.increment()
         const now = new Date().toISOString()
-        
-        const payload = { 
+
+        const payload = {
           deleted_at: null,
           is_deleted: false,
           deleted_hlc: null,
@@ -322,7 +322,7 @@ export const useTaskStore = create<TaskState>()(
 
       permanentlyDeleteTask: async (id) => {
         if (!supabase) return console.warn('Supabase not configured')
-        
+
         set(state => ({
           tasks: state.tasks.filter(t => t.id !== id)
         }))
@@ -386,9 +386,9 @@ export const useTaskStore = create<TaskState>()(
           const tasksMap = new Map(state.tasks.map(t => [t.id, t]))
           const reordered = orderedIds.map(id => tasksMap.get(id)).filter(Boolean) as Task[]
           const rest = state.tasks.filter(t => !orderedIds.includes(t.id))
-          
+
           const finalTasks = [...reordered, ...rest].map((t, i) => ({ ...t, order: i }))
-          
+
           // Persist order to Supabase via queue
           for (const task of finalTasks) {
             if (orderedIds.includes(task.id)) {
@@ -472,7 +472,7 @@ export const useTaskStore = create<TaskState>()(
 /**
  * Merge a list of fetched tasks with the current local list.
  * Used during fetchTasks to avoid clobbering local optimistic state.
- * 
+ *
  * @param local Current local tasks
  * @param remote Tasks fetched from server
  * @param isComprehensive If true, we assume the remote list represents the full state (for the given filter)
@@ -490,7 +490,7 @@ function mergeTaskList(local: Task[], remote: Task[], isComprehensive = false, i
       // Item exists in both: Merge using HLC
       const remoteHlc = remoteTask.hlc_timestamp || ''
       const localHlc = localTask.hlc_timestamp || ''
-      
+
       if (HLC.compare(remoteHlc, localHlc) >= 0) {
         merged.set(localTask.id, remoteTask)
       } else {
@@ -501,18 +501,18 @@ function mergeTaskList(local: Task[], remote: Task[], isComprehensive = false, i
       if (isComprehensive) {
         // If it's a new local item (unsynced), we MUST keep it
         const isNewLocal = localTask.id.startsWith('local-') || !localTask.user_id
-        
+
         if (isNewLocal) {
           merged.set(localTask.id, localTask)
         } else {
           // It was a server item, but now it's missing from a comprehensive fetch.
-          
+
           if (includesDeleted) {
             // We fetched EVERYTHING (including trash) and it's missing -> Hard Delete on server.
             // Remove it from local.
-            continue 
+            continue
           } else {
-            // We only fetched active items. 
+            // We only fetched active items.
             // If local is active, but missing from remote -> It was either deleted or moved to trash.
             // If local is ALREADY marked as deleted, we keep it (it wouldn't be in the remote active list anyway).
             if (localTask.is_deleted) {

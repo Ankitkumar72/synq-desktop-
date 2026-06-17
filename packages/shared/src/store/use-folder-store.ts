@@ -34,9 +34,6 @@ export const useFolderStore = create<FolderState>()(
 
       fetchFolders: async (includeDeleted = false, prefetchedData?: Folder[]) => {
         if (!supabase || get().isLoading) return
-        if (get().folders.length === 0) {
-          set({ isLoading: true, error: null })
-        }
 
         let userId = useUserStore.getState().user?.id
         if (!userId) {
@@ -47,6 +44,10 @@ export const useFolderStore = create<FolderState>()(
         if (!userId) {
           set({ error: 'No authenticated user', isLoading: false })
           return
+        }
+
+        if (get().folders.length === 0) {
+          set({ isLoading: true, error: null })
         }
 
         try {

@@ -489,14 +489,14 @@ export const useNotesStore = create<NotesState>()(
       fetchNotes: async (includeDeleted = false, prefetchedData?: Note[]) => {
         if (!supabase || get().isLoading) return
 
-        if (get().notes.length === 0) {
-          set({ isLoading: true, error: null })
-        }
-
         const userId = useUserStore.getState().user?.id
         if (!userId) {
           console.warn('[NotesStore] fetchNotes called without authenticated user')
           return
+        }
+
+        if (get().notes.length === 0) {
+          set({ isLoading: true, error: null })
         }
 
         try {

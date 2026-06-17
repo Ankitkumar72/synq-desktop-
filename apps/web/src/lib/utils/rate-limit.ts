@@ -144,7 +144,9 @@ interface RateLimitEntry {
 
 const rateLimitMap = new Map<string, RateLimitEntry>()
 
-// Cleanup stale entries every 5 minutes to prevent memory leaks
+// Cleanup stale entries every 5 minutes to prevent memory leaks.
+// We use globalThis to prevent Next.js HMR from spawning duplicate
+// cleanup intervals on every hot reload during development.
 if (typeof setInterval !== 'undefined') {
   if (!(globalThis as any)._inMemoryRateLimitCleanupInterval) {
     (globalThis as any)._inMemoryRateLimitCleanupInterval = setInterval(() => {

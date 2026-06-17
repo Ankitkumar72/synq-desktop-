@@ -16,7 +16,9 @@ const rateLimitMap = new Map<string, RateLimitEntry>()
 const PROXY_RATE_LIMIT = 120   // max requests per window
 const PROXY_WINDOW_MS = 60_000 // 1 minute window
 
-// Periodic cleanup to prevent memory bloat
+// Periodic cleanup to prevent memory bloat.
+// We use globalThis to prevent Next.js HMR from spawning duplicate
+// cleanup intervals on every hot reload during development.
 if (typeof setInterval !== 'undefined') {
   if (!(globalThis as any)._proxyRateLimitCleanupInterval) {
     (globalThis as any)._proxyRateLimitCleanupInterval = setInterval(() => {
