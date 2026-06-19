@@ -25,10 +25,19 @@ function Avatar({
   )
 }
 
-function AvatarImage({ className, src, ...props }: AvatarPrimitive.Image.Props) {
-  // Ensure src is always a primitive string — @base-ui sets img.src directly
-  // and will throw if it receives an object or non-primitive value.
+const avatarErrorCache = new Set<string>()
+
+function AvatarImage({ className, src, onLoadingStatusChange, onError, ...props }: AvatarPrimitive.Image.Props & { onLoadingStatusChange?: (status: 'idle' | 'loading' | 'loaded' | 'error') => void }) {
   const safeSrc = typeof src === "string" && src ? src : undefined
+  const [hasError, setHasError] = React.useState(() => safeSrc ? avatarErrorCache.has(safeSrc) : false)
+
+  React.useEffect(() => {
+    if (safeSrc) {
+      setHasError(avatarErrorCache.has(safeSrc))
+    }
+  }, [safeSrc])
+
+  const finalSrc = hasError ? undefined : safeSrc
 
   return (
     <AvatarPrimitive.Image
@@ -37,7 +46,21 @@ function AvatarImage({ className, src, ...props }: AvatarPrimitive.Image.Props) 
         "aspect-square size-full rounded-full object-cover",
         className
       )}
-      src={safeSrc}
+      src={finalSrc}
+      onLoadingStatusChange={(status) => {
+        if (status === 'error' && safeSrc) {
+          avatarErrorCache.add(safeSrc)
+          setHasError(true)
+        }
+        if (onLoadingStatusChange) onLoadingStatusChange(status)
+      }}
+      onError={(e) => {
+        if (safeSrc) {
+          avatarErrorCache.add(safeSrc)
+          setHasError(true)
+        }
+        if (onError) onError(e)
+      }}
       {...props}
     />
   )
