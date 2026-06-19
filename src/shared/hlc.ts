@@ -1,30 +1,15 @@
-/**
- * Hybrid Logical Clock (HLC) Implementation
- * 
- * Used for decentralized conflict resolution (Last Write Wins).
- * Format: ${timestamp}:${counter}:${nodeId}
- * 
- * - timestamp: ISO 8601 or milliseconds (we use milliseconds for compactness)
- * - counter: hex value for events in the same millisecond
- * - nodeId: identifier for the client — unique per browser tab for CRDT correctness
- */
-
-/**
- * Generate a unique node ID per browser tab.
- * Uses sessionStorage to ensure stability within a tab, but uniqueness across tabs.
- */
 function getTabNodeId(): string {
   if (typeof window === 'undefined') return 'server'
-  
+
   const storageKey = 'synq-hlc-node-id'
   let nodeId = sessionStorage.getItem(storageKey)
-  
+
   if (!nodeId) {
     // Generate a unique ID: 'web-XXXX' where XXXX is a random hex
     nodeId = `web-${Math.random().toString(16).slice(2, 6)}`
     sessionStorage.setItem(storageKey, nodeId)
   }
-  
+
   return nodeId
 }
 
@@ -49,7 +34,7 @@ export class HLC {
    */
   increment(): string {
     const now = Date.now();
-    
+
     if (now > this.lastTimestamp) {
       this.lastTimestamp = now;
       this.counter = 0;
@@ -62,10 +47,10 @@ export class HLC {
   toString(): string {
     // Switching to simple decimal counter to match mobile app expectations (:0:node instead of :0000:node)
     const hlcString = `${this.lastTimestamp}:${this.counter}:${this.nodeId}`;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     if (!(globalThis as any).hlc_logged) {
       console.log(`[HLC] Sync initialized: ${this.nodeId} (v2-decimal)`);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       (globalThis as any).hlc_logged = true;
     }
     return hlcString;
@@ -82,7 +67,7 @@ export class HLC {
 
     const now = Date.now();
     this.lastTimestamp = Math.max(this.lastTimestamp, remoteTimestamp, now);
-    
+
     if (this.lastTimestamp === remoteTimestamp) {
       this.counter = Math.max(this.counter, remoteCounter) + 1;
     } else if (this.lastTimestamp === now) {
@@ -103,19 +88,19 @@ export class HLC {
    */
   static compare(a: string, b: string): number {
     if (a === b) return 0;
-    
+
     const [aTime, aCounter, aNode] = a.split(':');
     const [bTime, bCounter, bNode] = b.split(':');
-    
+
     const timeDiff = parseInt(aTime, 10) - parseInt(bTime, 10);
     if (timeDiff !== 0) return timeDiff;
-    
+
     const counterDiff = parseInt(aCounter, 10) - parseInt(bCounter, 10);
     if (counterDiff !== 0) return counterDiff;
 
     // Deterministic tie-break: higher node ID wins (lexicographic)
     if (aNode && bNode) return aNode.localeCompare(bNode);
-    
+
     return 0;
   }
 

@@ -343,12 +343,12 @@ export const useNotesStore = create<NotesState>()(
 
               if (hasRemoteFieldVersions) {
                 if (remoteV && (!localV || HLC.compare(remoteV, localV) > 0)) {
-                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                   
                   (mergedNode as any)[key] = value
                   mergedFieldVersions[key] = remoteV
                 }
               } else if (value !== undefined) {
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                 
                 (mergedNode as any)[key] = value
                 mergedFieldVersions[key] = remoteNote.hlc_timestamp
               }

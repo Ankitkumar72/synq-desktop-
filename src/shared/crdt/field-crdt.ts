@@ -46,7 +46,7 @@ export function compareWithTieBreak(
  * @param skipFields - Fields to skip during merge (e.g. 'id', 'user_id', 'created_at')
  * @returns Merged record with combined field versions
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 export function mergeFields<T extends Record<string, any>>(
   local: T,
   remote: T,

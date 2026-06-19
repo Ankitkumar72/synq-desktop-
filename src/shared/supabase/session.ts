@@ -18,8 +18,27 @@ export async function updateSession(request: NextRequest) {
    */
   if (!url || !key) {
     // Return early if keys are missing to prevent crash during build/prerender
-    // Return a Ghost client for type compatibility if needed, but here we just pass through
     return supabaseResponse
+  }
+
+  const isAuthPage = request.nextUrl.pathname.startsWith('/login') || 
+                     request.nextUrl.pathname.startsWith('/signup') || 
+                     request.nextUrl.pathname.startsWith('/auth') ||
+                     request.nextUrl.pathname.startsWith('/debug-connectivity')
+
+  // OPTIMIZATION: Check for auth cookie early to skip getSession
+  const hasAuthCookie = request.cookies.getAll().some(c => c.name.includes('-auth-token'))
+
+  if (!hasAuthCookie) {
+    if (!isAuthPage && !request.nextUrl.pathname.startsWith('/_next')) {
+      const redirectUrl = request.nextUrl.clone()
+      redirectUrl.pathname = '/login'
+      return NextResponse.redirect(redirectUrl)
+    }
+    // For auth pages without cookie, just proceed without initializing Supabase
+    if (isAuthPage) {
+      return supabaseResponse
+    }
   }
 
   const supabase = createServerClient(
@@ -57,19 +76,14 @@ export async function updateSession(request: NextRequest) {
     await supabase.auth.signOut()
   }
 
-  const isAuthPage = request.nextUrl.pathname.startsWith('/login') || 
-                     request.nextUrl.pathname.startsWith('/signup') || 
-                     request.nextUrl.pathname.startsWith('/auth') ||
-                     request.nextUrl.pathname.startsWith('/debug-connectivity')
-
   if (
     !user &&
     !isAuthPage &&
     !request.nextUrl.pathname.startsWith('/_next')
   ) {
-    const url = request.nextUrl.clone()
-    url.pathname = '/login'
-    return NextResponse.redirect(url)
+    const redirectUrl = request.nextUrl.clone()
+    redirectUrl.pathname = '/login'
+    return NextResponse.redirect(redirectUrl)
   }
 
   // If user is logged in, and tries to go to auth pages, redirect to dashboard

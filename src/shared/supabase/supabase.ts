@@ -16,7 +16,7 @@ function ensureClient(): SupabaseClient {
 export const supabase = new Proxy({} as unknown as SupabaseClient, {
   get: (_target, prop) => {
     const client = ensureClient();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const value = (client as any)[prop];
     if (typeof value === 'function' && !value.__isGhost) {
       return value.bind(client);
@@ -28,6 +28,6 @@ export const supabase = new Proxy({} as unknown as SupabaseClient, {
 /** Returns true when the supabase singleton is a GhostClient (no env vars configured). */
 export function isGhostClient(): boolean {
   const client = ensureClient();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   return !!(client as any).__isGhost;
 }

@@ -9,7 +9,7 @@ export function createGhostClient<T = unknown>(): T {
   const noop = () => {};
   
   // nonThenableGhost lacks the 'then' property entirely, so JS engine stops unwrapping promises.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const nonThenableGhost: any = new Proxy(noop, {
     get: (_target, prop) => {
       if (prop === '__isGhost') return true;
@@ -31,7 +31,7 @@ export function createGhostClient<T = unknown>(): T {
   });
 
   // ghost acts as the entry point and provides a 'then' method that resolves to nonThenableGhost
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const ghost: any = new Proxy(noop, {
     get: (_target, prop) => {
       if (prop === '__isGhost') return true;
