@@ -1,7 +1,7 @@
 
 # dependencies
-/node_modules
-/.pnp
+node_modules/
+.pnp
 .pnp.*
 .yarn/*
 !.yarn/patches
@@ -10,13 +10,19 @@
 !.yarn/versions
 
 # testing
-/coverage
+coverage/
 
 # next.js
 .next/
 .next-build/
 out/
 build
+
+# playwright
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
 
 # misc
 .DS_Store
@@ -59,3 +65,28 @@ next-env.d.ts
 # local scratch and editor state
 /scratch/
 .obsidian/
+
+# --- Workspace Specific Rules ---
+
+# apps/web
+apps/web/public/sw.js
+apps/web/public/sw.js.map
+apps/web/public/swe-worker*
+
+# apps/mobile (Expo / Native)
+apps/mobile/.expo/
+apps/mobile/dist/
+apps/mobile/web-build/
+apps/mobile/expo-env.d.ts
+apps/mobile/.kotlin/
+apps/mobile/ios/
+apps/mobile/android/
+
+# React Native / Expo extensions
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+.metro-health-check*

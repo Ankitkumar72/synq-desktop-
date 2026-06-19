@@ -1,0 +1,110 @@
+"use client"
+
+import {
+  Settings,
+  LayoutDashboard,
+  Calendar,
+  FileText,
+  Search,
+  Folder,
+  Trash2
+} from "lucide-react"
+import { cn } from "@/lib/utils"
+import Link from "next/link"
+import { usePathname } from "next/navigation"
+import { useUserStore } from "@/shared"
+import { useUIStore } from "@/shared"
+
+
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { getUserDisplayName, getUserInitials } from "@/lib/user-utils"
+
+const NAV_ITEMS = [
+  { name: "Dashboard", href: "/", icon: LayoutDashboard },
+  { name: "Calendar", href: "/calendar", icon: Calendar },
+  { name: "Notes", href: "/notes", icon: FileText },
+  { name: "Folders", href: "/folders", icon: Folder },
+]
+
+export function LinearSidebar() {
+  const pathname = usePathname()
+  const user = useUserStore(s => s.user)
+  const openSettings = useUIStore(s => s.openSettings)
+  const openSearch = useUIStore(s => s.openSearch)
+  const name = getUserDisplayName(user)
+  const initials = getUserInitials(user)
+
+  return (
+    <aside className="w-[240px] bg-[#090909] flex flex-col p-3 shrink-0 relative z-40">
+
+
+
+      {/* User Profile */}
+      <div className="flex items-center gap-3 mb-4 p-2">
+        <div className="relative">
+          <Avatar className="w-[30px] h-[30px] rounded-lg border-none bg-[#262626]" size="sm">
+            <AvatarImage src={user?.user_metadata?.avatar_url} alt={name} loading="eager" />
+            <AvatarFallback className="rounded-lg font-bold text-white bg-[#262626]">
+              {initials}
+            </AvatarFallback>
+          </Avatar>
+          {/* Online Indicator */}
+          <span className="absolute w-2 h-2 bg-[#04C40A] rounded-full -bottom-0.5 -right-0.5 border-2 border-[#090909] z-10"></span>
+        </div>
+        <span className="font-bold text-[16px] text-white truncate">{name}</span>
+      </div>
+
+      {/* Search */}
+      <div 
+        onClick={openSearch}
+        className="flex items-center justify-between bg-[#1F1F1F] border border-[#2E2E2E] rounded-lg px-3 py-1.5 mb-4 text-[#999999] cursor-pointer hover:bg-white/[0.02] transition-colors"
+      >
+        <div className="flex items-center gap-2 text-[13px]">
+          <Search className="w-4 h-4" /> Quick Search
+        </div>
+      </div>
+
+      {/* Navigation */}
+      <nav className="flex flex-col gap-1 flex-1">
+        {NAV_ITEMS.map((item) => {
+          const isActive = pathname === item.href
+          const Icon = item.icon
+          return (
+            <Link key={item.name} href={item.href}>
+              <div className={cn(
+                "flex items-center gap-3 px-4 py-2 rounded-lg cursor-pointer transition-colors",
+                isActive
+                  ? "bg-[#1F1F1F] text-white"
+                  : "text-[#999999] hover:bg-[#1F1F1F] hover:text-white"
+              )}>
+                <Icon className="w-4 h-4" />
+                <span className="text-[13px] font-medium">{item.name}</span>
+              </div>
+            </Link>
+          )
+        })}
+      </nav>
+
+      {/* Bottom Actions */}
+      <div className="pt-2 space-y-1">
+        <Link href="/trash">
+          <div className={cn(
+            "flex items-center gap-3 px-4 py-2 rounded-lg cursor-pointer transition-colors mb-1",
+            pathname === "/trash" ? "bg-[#1F1F1F] text-white" : "text-[#999999] hover:bg-[#1F1F1F] hover:text-white"
+          )}>
+            <Trash2 className="w-4 h-4" />
+            <span className="text-[13px] font-medium">Trash</span>
+          </div>
+        </Link>
+
+        <button
+          onClick={openSettings}
+          className="w-full flex items-center gap-3 px-4 py-2 text-[#999999] hover:bg-[#1F1F1F] hover:text-white rounded-lg transition-colors text-[13px] font-medium"
+        >
+          <Settings className="w-4 h-4" />
+          <span>Settings</span>
+        </button>
+      </div>
+    </aside>
+  )
+}
