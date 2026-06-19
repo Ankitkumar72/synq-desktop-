@@ -24,6 +24,8 @@ interface ProjectState {
   deleteProject: (id: string) => Promise<void>
   toggleFavorite: (id: string, isFavorite: boolean) => Promise<void>
   mergeProjectLocal: (remote: Project) => void
+  restoreProject: (id: string) => Promise<void>
+  permanentlyDeleteProject: (id: string) => Promise<void>
   clearStore: () => void
 }
 
@@ -220,7 +222,7 @@ export const useProjectStore = create<ProjectState>()(
         const timestamp = hlc.increment()
 
         set((state) => ({
-          projects: state.projects.filter((p) => p.id !== id),
+          projects: state.projects.map((p) => p.id === id ? { ...p, deleted_at: now, is_deleted: true, deleted_hlc: timestamp, hlc_timestamp: timestamp, updated_at: now } : p),
         }))
 
         const payload = {
@@ -240,6 +242,54 @@ export const useProjectStore = create<ProjectState>()(
           }
         } else {
           await enqueueOperation({ entityType: 'project', entityId: id, operationType: 'update', payload, hlcTimestamp: timestamp })
+        }
+      },
+
+      restoreProject: async (id) => {
+        if (!supabase) return console.warn('Supabase not configured')
+        const timestamp = hlc.increment()
+        const now = new Date().toISOString()
+
+        set((state) => ({
+          projects: state.projects.map((p) => p.id === id ? { ...p, deleted_at: null, is_deleted: false, deleted_hlc: null, hlc_timestamp: timestamp, updated_at: now } : p),
+        }))
+
+        const payload = {
+          deleted_at: null,
+          is_deleted: false,
+          deleted_hlc: null,
+          hlc_timestamp: timestamp,
+          updated_at: now,
+        }
+
+        if (getOnlineStatus()) {
+          const { error } = await supabase.from('projects').update(payload).eq('id', id)
+          if (error) {
+            console.error('Error restoring project:', error)
+            await enqueueOperation({ entityType: 'project', entityId: id, operationType: 'update', payload, hlcTimestamp: timestamp })
+            triggerFlush()
+          }
+        } else {
+          await enqueueOperation({ entityType: 'project', entityId: id, operationType: 'update', payload, hlcTimestamp: timestamp })
+        }
+      },
+
+      permanentlyDeleteProject: async (id) => {
+        if (!supabase) return console.warn('Supabase not configured')
+
+        set((state) => ({
+          projects: state.projects.filter((p) => p.id !== id),
+        }))
+
+        if (getOnlineStatus()) {
+          const { error } = await supabase.from('projects').delete().eq('id', id)
+          if (error) {
+            console.error('Error permanently deleting project:', error)
+            await enqueueOperation({ entityType: 'project', entityId: id, operationType: 'hard_delete', payload: {}, hlcTimestamp: hlc.increment() })
+            triggerFlush()
+          }
+        } else {
+          await enqueueOperation({ entityType: 'project', entityId: id, operationType: 'hard_delete', payload: {}, hlcTimestamp: hlc.increment() })
         }
       },
 

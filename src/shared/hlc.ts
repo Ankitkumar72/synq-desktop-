@@ -1,16 +1,15 @@
+let memoryNodeId: string | null = null
+
 function getTabNodeId(): string {
   if (typeof window === 'undefined') return 'server'
 
-  const storageKey = 'synq-hlc-node-id'
-  let nodeId = sessionStorage.getItem(storageKey)
-
-  if (!nodeId) {
+  if (!memoryNodeId) {
     // Generate a unique ID: 'web-XXXX' where XXXX is a random hex
-    nodeId = `web-${Math.random().toString(16).slice(2, 6)}`
-    sessionStorage.setItem(storageKey, nodeId)
+    // Using memory-only ensures duplicated tabs get unique IDs, preventing CRDT and sync loops.
+    memoryNodeId = `web-${Math.random().toString(16).slice(2, 6)}`
   }
 
-  return nodeId
+  return memoryNodeId
 }
 
 export class HLC {

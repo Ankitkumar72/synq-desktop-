@@ -78,7 +78,7 @@ function NoteCard({ note, initials }: { note: Note, initials: string }) {
       {/* card-content */}
       <div className="px-4 pb-4 flex flex-col flex-1 min-h-0">
         <h4 className="text-[#E8E8E8] text-[13px] font-semibold leading-snug group-hover:text-white transition-colors line-clamp-2 mb-1.5">
-          {note.title || "Untitled"}
+          {note.title || "Untitled Note"}
         </h4>
         {note.excerpt && (
           <p className="text-[#555] text-[11px] leading-relaxed line-clamp-2">
@@ -109,7 +109,7 @@ export default function DashboardPage() {
 
   const handleCreateNote = async () => {
     const newId = await addNote({
-      title: "Untitled Note",
+      title: "",
       content: createEmptyNoteContent(),
       body: null,
       excerpt: null,

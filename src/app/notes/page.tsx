@@ -70,7 +70,7 @@ function NoteSidebarItem({
           "text-[13px] truncate flex-1 tracking-tight font-medium",
           isSelected ? "text-white" : "text-neutral-300 group-hover:text-neutral-200"
         )}>
-          {note.title || "Untitled"}
+          {note.title || "Untitled Note"}
         </span>
       </button>
     </NoteContextMenu>
@@ -165,7 +165,7 @@ function NotesPageContent() {
 
   const handleAddNote = async () => {
     const newId = await addNote({
-      title: "Untitled Note",
+      title: "",
       content: createEmptyNoteContent(),
       body: null,
       excerpt: null,
@@ -398,7 +398,7 @@ function NotesPageContent() {
               <header className="h-12 border-b border-neutral-800/50 flex items-center justify-between px-6 shrink-0">
                 <div className="flex items-center gap-3">
                   <span className="text-[13px] text-neutral-500 font-medium truncate max-w-[300px]">
-                    {selectedNote.title || "Untitled"}
+                    {selectedNote.title || "Untitled Note"}
                   </span>
                 </div>
 
@@ -423,7 +423,7 @@ function NotesPageContent() {
                       debouncedUpdate(selectedNote.id, { title: e.target.value })
                     }}
                     className="w-full text-[32px] font-bold tracking-tight border-none bg-transparent focus-visible:outline-none mb-6 placeholder:text-neutral-800 text-neutral-100 selection:bg-neutral-700 leading-tight"
-                    placeholder="Untitled"
+                    placeholder="Untitled Note"
                   />
 
                   <NoteEditor

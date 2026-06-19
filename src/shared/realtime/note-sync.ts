@@ -9,34 +9,26 @@ export interface NoteBroadcastPayload extends Pick<Note, 'id' | 'content' | 'bod
 }
 
 let noteBroadcastChannel: RealtimeChannel | null = null
-let fallbackClientId: string | null = null
+
+let memoryClientId: string | null = null
 
 function createFallbackClientId() {
-  if (!fallbackClientId) {
-    fallbackClientId = `web-${Math.random().toString(36).slice(2, 10)}`
+  if (!memoryClientId) {
+    memoryClientId = `web-${Math.random().toString(36).slice(2, 10)}`
   }
-
-  return fallbackClientId
+  return memoryClientId
 }
 
 export function getNoteSyncClientId() {
   if (typeof window === 'undefined') return createFallbackClientId()
 
-  const storageKey = 'synq-note-sync-client-id'
-
-  try {
-    const existing = window.sessionStorage.getItem(storageKey)
-    if (existing) return existing
-
-    const created = (typeof crypto !== 'undefined' && crypto.randomUUID)
+  if (!memoryClientId) {
+    memoryClientId = (typeof crypto !== 'undefined' && crypto.randomUUID)
       ? `web-${crypto.randomUUID()}`
       : createFallbackClientId()
-
-    window.sessionStorage.setItem(storageKey, created)
-    return created
-  } catch {
-    return createFallbackClientId()
   }
+
+  return memoryClientId
 }
 
 export function bindNoteBroadcastChannel(channel: RealtimeChannel | null) {

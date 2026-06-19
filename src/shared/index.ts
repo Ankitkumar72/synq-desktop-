@@ -20,7 +20,7 @@ export * from './supabase/debug-supabase';
 export * from './supabase/ghost';
 export * from './supabase/session';
 export * from './supabase/supabase'; // Add the supabase singleton proxy
-
+export * from './supabase/storage';
 // crdt
 export * from './crdt/crdt-doc';
 export * from './crdt/field-crdt';

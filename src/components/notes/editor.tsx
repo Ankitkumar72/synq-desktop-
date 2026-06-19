@@ -38,6 +38,8 @@ import {
   markLocallyModified,
   waitForPersistence,
   applyRemoteUpdate,
+  compressImage,
+  uploadImage,
 } from "@/shared"
 import { saveYDocToSupabase, loadYDocFromSupabase, triggerFlush } from "@/shared"
 import { getLocalLastSeq, getNoteCrdtUpdates, setLocalLastSeq, toUint8Update, enqueueQueuedNoteCrdtUpdate } from "@/shared"
@@ -851,16 +853,45 @@ export function NoteEditor({
     attributes: {
       class: `${styles.editorContent} max-w-none focus:outline-none min-h-[calc(100vh-300px)] pt-2 pb-32`,
     },
-    // Prevent huge image uploads (Limit base64 footprint in DB)
-    handlePaste(view: unknown, event: ClipboardEvent) {
+    // Process image: insert instant base64 preview, then upload and replace URL
+    handlePaste(view: any, event: ClipboardEvent) {
       const items = event.clipboardData?.items
       if (items) {
         for (const item of Array.from(items)) {
           if (item.type.startsWith('image/')) {
             const file = item.getAsFile()
-            if (file && file.size > 500 * 1024) {
-              showToast("Image is too large. Max size is 500KB.")
+            if (file) {
+              const pos = view.state.selection.from
               event.preventDefault()
+              
+              showToast("Processing image...")
+              compressImage(file, 1600).then(({ blob, dataUrl }) => {
+                // Insert instantly as base64 preview
+                const tr = view.state.tr
+                tr.insert(pos, view.state.schema.nodes.image.create({ src: dataUrl }))
+                view.dispatch(tr)
+                
+                showToast("Uploading image...")
+                // Upload in background
+                uploadImage(blob, 'jpg').then((url) => {
+                  if (url) {
+                    let imagePos = -1
+                    view.state.doc.descendants((node: any, p: number) => {
+                      if (node.type.name === 'image' && node.attrs.src === dataUrl) {
+                        imagePos = p
+                      }
+                    })
+                    if (imagePos !== -1) {
+                      const trUpdate = view.state.tr
+                      trUpdate.setNodeMarkup(imagePos, null, { src: url })
+                      view.dispatch(trUpdate)
+                    }
+                  } else {
+                    showToast("Failed to upload image.")
+                  }
+                }).catch(() => showToast("Image upload failed."))
+              }).catch(() => showToast("Image compression failed."))
+              
               return true
             }
           }
@@ -868,17 +899,45 @@ export function NoteEditor({
       }
       return false
     },
-    handleDrop(view: unknown, event: DragEvent, _slice: unknown, moved: boolean) {
+    handleDrop(view: any, event: DragEvent, _slice: unknown, moved: boolean) {
       if (moved) return false
       const files = event.dataTransfer?.files
       if (files) {
+        let handled = false
+        const pos = view.posAtCoords({ left: event.clientX, top: event.clientY })?.pos || view.state.selection.from
         for (const file of Array.from(files)) {
-          if (file.type.startsWith('image/') && file.size > 500 * 1024) {
-            showToast("Image is too large. Max size is 500KB.")
+          if (file.type.startsWith('image/')) {
             event.preventDefault()
-            return true
+            handled = true
+            
+            showToast("Processing image...")
+            compressImage(file, 1600).then(({ blob, dataUrl }) => {
+              const tr = view.state.tr
+              tr.insert(pos, view.state.schema.nodes.image.create({ src: dataUrl }))
+              view.dispatch(tr)
+              
+              showToast("Uploading image...")
+              uploadImage(blob, 'jpg').then((url) => {
+                if (url) {
+                  let imagePos = -1
+                  view.state.doc.descendants((node: any, p: number) => {
+                    if (node.type.name === 'image' && node.attrs.src === dataUrl) {
+                      imagePos = p
+                    }
+                  })
+                  if (imagePos !== -1) {
+                    const trUpdate = view.state.tr
+                    trUpdate.setNodeMarkup(imagePos, null, { src: url })
+                    view.dispatch(trUpdate)
+                  }
+                } else {
+                  showToast("Failed to upload image.")
+                }
+              }).catch(() => showToast("Image upload failed."))
+            }).catch(() => showToast("Image compression failed."))
           }
         }
+        if (handled) return true
       }
       return false
     },
@@ -1049,7 +1108,7 @@ export function NoteEditor({
         if (fragmentLength > 0 && contentValue && typeof contentValue === 'object') {
           const jsonStr = JSON.stringify(contentValue)
 
-          if (plainText.length < 50 && jsonStr.length > 500) {
+          if (plainText.length < 50 && jsonStr.length > 500 && !jsonStr.includes('"type":"image"')) {
             isYjsCorrupted = true
           }
         }
@@ -1120,29 +1179,6 @@ export function NoteEditor({
       }
     }
   }, [isLoading, editor, ydoc, id])
-
-  useEffect(() => {
-    if (editor && !editor.isDestroyed && !isLoading) {
-      let modified = false
-      editor.state.doc.descendants((node, pos) => {
-        if (node.type.name === 'image' && node.attrs.src?.startsWith('data:image/')) {
-          const size = Math.floor(node.attrs.src.length * 0.75)
-          if (size > 500 * 1024) {
-
-            setTimeout(() => {
-              if (!editor.isDestroyed) {
-                editor.commands.deleteRange({ from: pos, to: pos + node.nodeSize })
-              }
-            }, 0)
-            modified = true
-          }
-        }
-      })
-      if (modified) {
-        showToast("Removed oversized base64 images from document to protect performance.")
-      }
-    }
-  }, [editor, isLoading])
 
   useEffect(() => {
     return () => {

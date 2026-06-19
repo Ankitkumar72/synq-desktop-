@@ -1,89 +1,79 @@
 "use client"
 
 import { useState, useMemo, useEffect, useCallback, memo } from "react"
-import { 
-  StickyNote, 
-  CheckSquare, 
-  Calendar,
-  RotateCcw,
-  Trash2
-} from "lucide-react"
-import { motion, AnimatePresence } from "framer-motion"
-import { AnimatePage } from "@/components/layout/animate-page"
-import { useNotesStore } from "@/shared"
-import { useTaskStore } from "@/shared"
-import { useEventStore } from "@/shared"
+import { useNotesStore, useTaskStore, useEventStore, useProjectStore } from "@/shared"
 import { isExpired } from "@/lib/utils/trash-utils"
-
 import { cn } from "@/lib/utils"
-import { Note, Task, CalendarEvent } from "@/shared"
+import { Note, Task, CalendarEvent, Project } from "@/shared"
+import { FileText, CheckCircle, Calendar, Folder, Check } from "lucide-react"
 
-type UnifiedTrashItem = Note | Task | CalendarEvent
-type Category = 'notes' | 'tasks' | 'events'
+type UnifiedTrashItem = Note | Task | CalendarEvent | Project
+type Category = 'tasks' | 'projects' | 'notes' | 'events'
 
-const TrashItemRow = memo(({ 
-  item, 
-  isSelected, 
-  onToggle, 
-  onRestore, 
-  onDelete, 
-  category 
-}: { 
-  item: UnifiedTrashItem, 
-  isSelected: boolean, 
-  onToggle: (id: string) => void,
+const TABS = [
+  { id: 'projects', label: 'Recently deleted folders', disabled: false },
+  { id: 'tasks', label: 'Recently deleted tasks', disabled: false },
+  { id: 'notes', label: 'Recently deleted notes', disabled: false },
+  { id: 'events', label: 'Recently deleted events', disabled: false },
+] as const;
+
+const TrashItemRow = memo(({
+  item,
+  onRestore,
+  onDelete,
+  category,
+  isSelected,
+  onToggleSelect
+}: {
+  item: UnifiedTrashItem,
   onRestore: (id: string) => void,
   onDelete: (id: string) => void,
-  category: Category
+  category: Category,
+  isSelected: boolean,
+  onToggleSelect: (id: string) => void
 }) => {
-  return (
-    <div
-      className={cn(
-        "relative px-8 py-4 flex items-center gap-6 transition-colors duration-200",
-        isSelected ? "bg-white/[0.04]" : "hover:bg-white/[0.01]"
-      )}
-    >
-      <div className="w-5 flex items-center justify-center">
-        <input 
-          type="checkbox" 
-          checked={isSelected}
-          onChange={() => onToggle(item.id)}
-          className="w-4 h-4 rounded bg-transparent border-white/10 checked:bg-white checked:border-white transition-all appearance-none cursor-pointer border"
-        />
-      </div>
-      
-      <div className="w-32 text-sm text-white/40 font-medium">
-        {new Date(item.deleted_at!).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' })}
-      </div>
-      <div className="w-24 text-sm text-white/20 font-mono">
-        {new Date(item.deleted_at!).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }).toLowerCase()}
-      </div>
+  const title = (item as any).title || (item as any).name || "Untitled"
 
-      <div className="flex-1 flex items-center gap-3 min-w-0">
-        <div className="w-7 h-7 rounded border border-white/[0.03] flex items-center justify-center text-white/10 shrink-0">
-          {category === 'notes' ? <StickyNote className="w-4 h-4" strokeWidth={1.5} /> : 
-           category === 'tasks' ? <CheckSquare className="w-4 h-4" strokeWidth={1.5} /> :
-           <Calendar className="w-4 h-4" strokeWidth={1.5} />}
+  return (
+    <div 
+      className={cn(
+        "group relative flex items-center justify-between px-6 py-3 transition-colors cursor-default",
+        isSelected ? "bg-white/[0.04]" : "hover:bg-white/[0.03]"
+      )}
+      onClick={() => onToggleSelect(item.id)}
+    >
+      <div className="flex items-center gap-4 min-w-0">
+        <div 
+          className={cn(
+            "w-4 h-4 rounded border flex items-center justify-center transition-colors cursor-pointer shrink-0",
+            isSelected ? "bg-white/20 border-white/40" : "border-white/10 group-hover:border-white/30"
+          )}
+        >
+          {isSelected && <Check className="w-3 h-3 text-white" />}
         </div>
-        <span className="text-base font-medium text-white/70 truncate">
-          {item.title || "Untitled"}
+        <div className="flex items-center justify-center shrink-0 w-6 h-6">
+          {category === 'notes' ? <FileText className="w-[18px] h-[18px] text-[#888]" /> :
+            category === 'tasks' ? <CheckCircle className="w-[18px] h-[18px] text-[#888]" /> :
+              category === 'projects' ? <Folder className="w-[18px] h-[18px] text-[#888]" /> :
+                <Calendar className="w-[18px] h-[18px] text-[#888]" />}
+        </div>
+        <span className="text-[15px] font-medium text-white/90 truncate select-none">
+          {title}
         </span>
       </div>
 
-      <div className="flex items-center gap-3 w-40 justify-end">
-        <button 
-          onClick={() => onRestore(item.id)}
-          className="p-2 rounded-lg text-white/20 hover:text-white hover:bg-white/5 transition-all"
-          title="Restore"
+      <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+        <button
+          onClick={(e) => { e.stopPropagation(); onRestore(item.id); }}
+          className="px-4 py-2 rounded-lg text-[14px] font-medium text-white/60 hover:text-white hover:bg-white/10 transition-colors"
         >
-          <RotateCcw className="w-4 h-4" />
+          Restore
         </button>
-        <button 
-          onClick={() => onDelete(item.id)}
-          className="p-2 rounded-lg text-rose-500/20 hover:text-rose-500 hover:bg-rose-500/10 transition-all"
-          title="Delete Forever"
+        <button
+          onClick={(e) => { e.stopPropagation(); onDelete(item.id); }}
+          className="px-4 py-2 rounded-lg text-[14px] font-medium text-rose-500/80 hover:text-rose-500 hover:bg-rose-500/10 transition-colors"
         >
-          <Trash2 className="w-4 h-4" />
+          Delete
         </button>
       </div>
     </div>
@@ -96,35 +86,32 @@ export default function TrashPage() {
   const notes = useNotesStore(s => s.notes); const restoreNote = useNotesStore(s => s.restoreNote); const permanentlyDeleteNote = useNotesStore(s => s.permanentlyDeleteNote); const fetchNotes = useNotesStore(s => s.fetchNotes)
   const tasks = useTaskStore(s => s.tasks); const restoreTask = useTaskStore(s => s.restoreTask); const permanentlyDeleteTask = useTaskStore(s => s.permanentlyDeleteTask); const fetchTasks = useTaskStore(s => s.fetchTasks)
   const events = useEventStore(s => s.events); const restoreEvent = useEventStore(s => s.restoreEvent); const permanentlyDeleteEvent = useEventStore(s => s.permanentlyDeleteEvent); const fetchEvents = useEventStore(s => s.fetchEvents)
-  
-  const [activeCategory, setActiveCategory] = useState<Category>('notes')
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
-  
-  const [prevCategory, setPrevCategory] = useState<Category>(activeCategory)
-  if (activeCategory !== prevCategory) {
-    setPrevCategory(activeCategory)
-    setSelectedIds(new Set())
-  }
+  const projects = useProjectStore(s => s.projects); const restoreProject = useProjectStore(s => s.restoreProject); const permanentlyDeleteProject = useProjectStore(s => s.permanentlyDeleteProject); const fetchProjects = useProjectStore(s => s.fetchProjects)
+
+  const [activeCategory, setActiveCategory] = useState<Category>('projects')
 
   useEffect(() => {
     fetchTasks(true)
     fetchEvents(true)
     fetchNotes(true)
-  }, [fetchTasks, fetchEvents, fetchNotes])
+    fetchProjects(true)
+  }, [fetchTasks, fetchEvents, fetchNotes, fetchProjects])
 
-  // Auto-purge items older than 15 days
+  // Auto-purge items older than 14 days
   useEffect(() => {
     const purgeExpired = async () => {
       const expiredNotes = notes.filter(n => n.deleted_at && isExpired(n.deleted_at))
       const expiredTasks = tasks.filter(t => t.deleted_at && isExpired(t.deleted_at))
       const expiredEvents = events.filter(e => e.deleted_at && isExpired(e.deleted_at))
-      
+      const expiredProjects = projects.filter(p => p.deleted_at && isExpired(p.deleted_at))
+
       for (const note of expiredNotes) await permanentlyDeleteNote(note.id)
       for (const task of expiredTasks) await permanentlyDeleteTask(task.id)
       for (const event of expiredEvents) await permanentlyDeleteEvent(event.id)
+      for (const project of expiredProjects) await permanentlyDeleteProject(project.id)
     }
     purgeExpired()
-  }, [notes, tasks, events, permanentlyDeleteNote, permanentlyDeleteTask, permanentlyDeleteEvent])
+  }, [notes, tasks, events, projects, permanentlyDeleteNote, permanentlyDeleteTask, permanentlyDeleteEvent, permanentlyDeleteProject])
 
   const filterItems = useCallback((items: UnifiedTrashItem[]) =>
     items
@@ -134,204 +121,166 @@ export default function TrashPage() {
   const trashedNotes = useMemo(() => filterItems(notes as Note[]), [notes, filterItems])
   const trashedTasks = useMemo(() => filterItems(tasks as Task[]), [tasks, filterItems])
   const trashedEvents = useMemo(() => filterItems(events as CalendarEvent[]), [events, filterItems])
+  const trashedProjects = useMemo(() => filterItems(projects as Project[]), [projects, filterItems])
 
-  const currentItems = activeCategory === 'notes' ? trashedNotes : activeCategory === 'tasks' ? trashedTasks : trashedEvents
+  const currentItems = activeCategory === 'notes' ? trashedNotes
+    : activeCategory === 'tasks' ? trashedTasks
+      : activeCategory === 'projects' ? trashedProjects
+        : activeCategory === 'events' ? trashedEvents
+          : []
 
-  const emptyCategory = async () => {
-    if (currentItems.length === 0) return
-    if (confirm(`Permanently delete all ${activeCategory} in trash?`)) {
-      for (const item of currentItems) {
-        if (activeCategory === 'notes') await permanentlyDeleteNote(item.id)
-        else if (activeCategory === 'tasks') await permanentlyDeleteTask(item.id)
-        else await permanentlyDeleteEvent(item.id)
-      }
+  const activeTabObj = TABS.find(t => t.id === activeCategory)
+
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+
+  const handleToggleSelectAll = () => {
+    if (selectedIds.size === currentItems.length && currentItems.length > 0) {
+      setSelectedIds(new Set())
+    } else {
+      setSelectedIds(new Set(currentItems.map(i => i.id)))
     }
   }
 
-  const toggleSelection = (id: string) => {
+  const handleToggleSelect = useCallback((id: string) => {
     setSelectedIds(prev => {
       const next = new Set(prev)
       if (next.has(id)) next.delete(id)
       else next.add(id)
       return next
     })
-  }
+  }, [])
 
-  const toggleAll = () => {
-    if (selectedIds.size === currentItems.length) setSelectedIds(new Set())
-    else setSelectedIds(new Set(currentItems.map(i => i.id)))
-  }
-
-  const batchRestore = async () => {
-    if (selectedIds.size === 0) return
+  const handleBulkRestore = async () => {
     for (const id of selectedIds) {
-      if (activeCategory === 'notes') await restoreNote(id)
-      else if (activeCategory === 'tasks') await restoreTask(id)
-      else await restoreEvent(id)
+      if (activeCategory === 'notes') restoreNote(id)
+      else if (activeCategory === 'tasks') restoreTask(id)
+      else if (activeCategory === 'projects') restoreProject(id)
+      else restoreEvent(id)
     }
     setSelectedIds(new Set())
   }
 
-  const batchDelete = async () => {
-    if (selectedIds.size === 0) return
-    if (confirm(`Permanently delete ${selectedIds.size} items?`)) {
-      for (const id of selectedIds) {
-        if (activeCategory === 'notes') await permanentlyDeleteNote(id)
-        else if (activeCategory === 'tasks') await permanentlyDeleteTask(id)
-        else await permanentlyDeleteEvent(id)
-      }
-      setSelectedIds(new Set())
+  const handleBulkDelete = async () => {
+    for (const id of selectedIds) {
+      if (activeCategory === 'notes') permanentlyDeleteNote(id)
+      else if (activeCategory === 'tasks') permanentlyDeleteTask(id)
+      else if (activeCategory === 'projects') permanentlyDeleteProject(id)
+      else permanentlyDeleteEvent(id)
     }
+    setSelectedIds(new Set())
   }
 
   return (
-    <AnimatePage className="h-full bg-transparent flex flex-col font-sans overflow-hidden min-h-0">
-      {/* Subtle Background Glow */}
-      <div className="absolute inset-0 pointer-events-none">
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-[300px] bg-gradient-to-b from-white/[0.01] to-transparent" />
-      </div>
+    <div className="h-full bg-[#111111] flex flex-col font-sans overflow-hidden min-h-0 text-white">
 
-      <header className="relative z-10 py-10 border-b border-white/[0.04] bg-transparent backdrop-blur-md">
-        <div className="max-w-5xl mx-auto px-10 flex items-center justify-between">
-          <div className="space-y-2">
-            <h1 className="text-4xl font-semibold text-white tracking-tight">Trash</h1>
-            <p className="text-sm text-white/30">Items are permanently removed after 15 days</p>
-          </div>
-
-          <div className="flex items-center gap-8">
-
-            <nav className="flex items-center gap-1 bg-white/[0.03] p-1 rounded-full border border-white/[0.05]">
-              {(['notes', 'tasks', 'events'] as const).map((cat) => (
-                <button
-                  key={cat}
-                  onClick={() => setActiveCategory(cat)}
-                  className={cn(
-                    "px-6 py-2 rounded-full text-sm font-medium transition-all duration-200 relative",
-                    activeCategory === cat ? "text-white" : "text-white/30 hover:text-white/50"
-                  )}
-                >
-                  {activeCategory === cat && (
-                    <motion.div 
-                      layoutId="active-cat"
-                      className="absolute inset-0 bg-white/5 rounded-full"
-                      transition={{ type: "spring", bounce: 0, duration: 0.4 }}
-                    />
-                  )}
-                  <span className="relative z-10 capitalize">{cat}</span>
-                </button>
-              ))}
-            </nav>
+      {/* Header */}
+      <header className="px-6 py-4 border-b border-white/[0.08]">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div 
+              onClick={handleToggleSelectAll}
+              className={cn(
+                "w-4 h-4 rounded border flex items-center justify-center transition-colors cursor-pointer shrink-0",
+                selectedIds.size > 0 && selectedIds.size === currentItems.length 
+                  ? "bg-white/20 border-white/40" 
+                  : selectedIds.size > 0 
+                    ? "bg-white/10 border-white/30"
+                    : "border-white/10 hover:border-white/30"
+              )}
+            >
+              {selectedIds.size > 0 && selectedIds.size === currentItems.length && <Check className="w-3 h-3 text-white" />}
+              {selectedIds.size > 0 && selectedIds.size !== currentItems.length && <div className="w-2 h-0.5 bg-white rounded-full" />}
+            </div>
             
-            {currentItems.length > 0 && (
-              <button 
-                onClick={emptyCategory}
-                className="text-xs font-medium text-white/10 hover:text-white/40 transition-colors"
-              >
-                Empty All
-              </button>
+            {selectedIds.size > 0 ? (
+              <span className="text-[14px] font-medium text-white/90">
+                {selectedIds.size} selected
+              </span>
+            ) : (
+              <div className="flex items-center text-[14px] font-medium text-white/90">
+                {activeTabObj?.label} <span className="text-[#888] ml-2">{currentItems.length}</span>
+              </div>
             )}
           </div>
+          
+          {selectedIds.size > 0 && (
+            <div className="flex items-center gap-2">
+              <button 
+                onClick={handleBulkRestore}
+                className="px-3 py-1.5 rounded-lg text-[13px] font-medium bg-white/10 hover:bg-white/15 text-white transition-colors"
+              >
+                Restore Selected
+              </button>
+              <button 
+                onClick={handleBulkDelete}
+                className="px-3 py-1.5 rounded-lg text-[13px] font-medium bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 transition-colors"
+              >
+                Delete Selected
+              </button>
+            </div>
+          )}
         </div>
       </header>
 
-      <main className="relative z-10 flex-1 overflow-auto custom-scrollbar py-12 min-h-0">
-        <div className="max-w-5xl mx-auto px-10">
-          <AnimatePresence mode="wait">
-            {currentItems.length === 0 ? (
-              <motion.div 
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="h-[400px] flex flex-col items-center justify-center"
-              >
-                <p className="text-[12px] text-white/10 font-medium tracking-tight">No items in trash</p>
-              </motion.div>
-            ) : (
-              <div className="space-y-6">
-                <AnimatePresence>
-                  {selectedIds.size > 0 && (
-                    <motion.div 
-                      layout
-                      initial={{ opacity: 0, scale: 0.95, y: -20 }}
-                      animate={{ opacity: 1, scale: 1, y: 0 }}
-                      exit={{ opacity: 0, scale: 0.95, y: -20 }}
-                      className="flex items-center gap-6 px-8 py-5 bg-white/[0.03] rounded-2xl border border-white/[0.08] shadow-2xl backdrop-blur-xl z-20 sticky top-4"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="w-6 h-6 rounded-full bg-white flex items-center justify-center">
-                          <span className="text-[10px] text-black font-bold">{selectedIds.size}</span>
-                        </div>
-                        <span className="text-sm text-white/90 font-semibold tracking-tight">Items Selected</span>
-                      </div>
-                      
-                      <div className="h-6 w-px bg-white/10 mx-2" />
-                      
-                      <div className="flex items-center gap-4">
-                        <button 
-                          onClick={batchRestore} 
-                          className="px-4 py-1.5 text-xs font-semibold text-white bg-white/5 hover:bg-white/10 border border-white/10 rounded-full transition-all active:scale-95"
-                        >
-                          Restore Selected
-                        </button>
-                        <button 
-                          onClick={batchDelete} 
-                          className="px-4 py-1.5 text-xs font-semibold text-rose-400 bg-rose-500/10 hover:bg-rose-500/20 border border-white/0 hover:border-rose-500/20 rounded-full transition-all active:scale-95"
-                        >
-                          Delete Forever
-                        </button>
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-
-                <motion.div 
-                  initial={{ opacity: 0, y: 4 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="border border-white/[0.03] rounded-lg overflow-hidden bg-[#050505]"
-                >
-                {/* List Header */}
-                <div className="px-8 py-4 border-b border-white/[0.03] flex items-center gap-6 text-[11px] text-white/20 font-medium uppercase tracking-[0.15em] bg-white/[0.01]">
-                  <div className="w-5 flex items-center justify-center">
-                    <input 
-                      type="checkbox" 
-                      checked={selectedIds.size === currentItems.length && currentItems.length > 0}
-                      onChange={toggleAll}
-                      className="w-4 h-4 rounded bg-transparent border-white/10 checked:bg-white checked:border-white transition-all appearance-none cursor-pointer border"
-                    />
-                  </div>
-                  <div className="w-32">Date</div>
-                  <div className="w-24">Time</div>
-                  <div className="flex-1">Title</div>
-                  <div className="w-40 text-right pr-20">Actions</div>
-                </div>
-
-                <div className="divide-y divide-white/[0.02]">
-                  {currentItems.map((item) => (
-                    <TrashItemRow
-                      key={item.id}
-                      item={item}
-                      isSelected={selectedIds.has(item.id)}
-                      onToggle={toggleSelection}
-                      onRestore={(id) => {
-                        if (activeCategory === 'notes') restoreNote(id)
-                        else if (activeCategory === 'tasks') restoreTask(id)
-                        else restoreEvent(id)
-                      }}
-                      onDelete={(id) => {
-                        if (activeCategory === 'notes') permanentlyDeleteNote(id)
-                        else if (activeCategory === 'tasks') permanentlyDeleteTask(id)
-                        else permanentlyDeleteEvent(id)
-                      }}
-                      category={activeCategory}
-                    />
-                  ))}
-                </div>
-                </motion.div>
-              </div>
+      {/* Tabs */}
+      <div className="flex items-center gap-2 px-6 pt-5 pb-6 overflow-x-auto custom-scrollbar">
+        {TABS.map(tab => (
+          <button
+            key={tab.id}
+            disabled={tab.disabled}
+            onClick={() => {
+              if (!tab.disabled) {
+                setActiveCategory(tab.id as Category)
+                setSelectedIds(new Set())
+              }
+            }}
+            className={cn(
+              "px-4 py-1.5 rounded-full text-[13px] font-medium whitespace-nowrap transition-all duration-200 border",
+              activeCategory === tab.id
+                ? "border-white/20 text-white bg-transparent"
+                : "border-white/[0.04] text-white/40 bg-transparent hover:text-white/70 hover:border-white/10",
+              tab.disabled && "opacity-30 cursor-not-allowed hover:text-white/40 hover:border-white/[0.04]"
             )}
-          </AnimatePresence>
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* List */}
+      <main className="flex-1 overflow-auto custom-scrollbar min-h-0">
+        <div className="flex flex-col">
+          {currentItems.length === 0 ? (
+            <div className="px-6 py-8 text-[13px] text-white/30 font-medium">
+              No items in trash.
+            </div>
+          ) : (
+            <div className="py-2 divide-y divide-white/[0.04]">
+              {currentItems.map((item) => (
+                <TrashItemRow
+                  key={item.id}
+                  item={item}
+                  isSelected={selectedIds.has(item.id)}
+                  onToggleSelect={handleToggleSelect}
+                  onRestore={(id) => {
+                    if (activeCategory === 'notes') restoreNote(id)
+                    else if (activeCategory === 'tasks') restoreTask(id)
+                    else if (activeCategory === 'projects') restoreProject(id)
+                    else restoreEvent(id)
+                  }}
+                  onDelete={(id) => {
+                    if (activeCategory === 'notes') permanentlyDeleteNote(id)
+                    else if (activeCategory === 'tasks') permanentlyDeleteTask(id)
+                    else if (activeCategory === 'projects') permanentlyDeleteProject(id)
+                    else permanentlyDeleteEvent(id)
+                  }}
+                  category={activeCategory as Category}
+                />
+              ))}
+            </div>
+          )}
         </div>
       </main>
-    </AnimatePage>
+    </div>
   )
 }
