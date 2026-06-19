@@ -5,10 +5,6 @@ import {
   FolderKanban,
   MoreHorizontal,
   Search,
-  LayoutGrid,
-  List,
-  ArrowRight,
-  Filter,
   Pin,
   PinOff,
   ChevronsUpDown,
@@ -24,14 +20,6 @@ import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useRouter } from "next/navigation"
-import {
-  Card as UICard,
-  CardContent as UICardContent,
-  CardHeader as UICardHeader,
-  CardTitle as UICardTitle
-} from "@/components/ui/card"
-import { Progress, ProgressIndicator, ProgressTrack } from "@/components/ui/progress"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { useProjectStore, useNotesStore } from "@/shared"
 import {
   DropdownMenu,
@@ -73,7 +61,6 @@ export default function ProjectsPage() {
   const projects = useProjectStore(s => s.projects); const deleteProject = useProjectStore(s => s.deleteProject); const addProject = useProjectStore(s => s.addProject); const toggleFavorite = useProjectStore(s => s.toggleFavorite); const updateProject = useProjectStore(s => s.updateProject)
   const notes = useNotesStore(s => s.notes)
   const [searchQuery, setSearchQuery] = useState("")
-  const [selectedStatus, setSelectedStatus] = useState<string[]>([])
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set())
   type SortField = 'name' | 'date' | 'type' | 'size' | 'tags' | 'date_created' | 'date_modified' | 'date_taken' | 'dimensions' | 'rating'
   const [sortColumn, setSortColumn] = useState<SortField>('name')
@@ -166,13 +153,6 @@ export default function ProjectsPage() {
   const [color, setColor] = useState('bg-gradient-to-br from-blue-500 to-indigo-600 text-white border-transparent')
   const [isFavorite, setIsFavorite] = useState(false)
 
-  const toggleStatus = (status: string) => {
-    setSelectedStatus(prev =>
-      prev.includes(status)
-        ? prev.filter(s => s !== status)
-        : [...prev, status]
-    )
-  }
 
   const handleCreateFolder = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -196,10 +176,8 @@ export default function ProjectsPage() {
   }
 
   const filteredProjects = projects.filter((project) => {
-    const matchesSearch = project.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    return project.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       project.description?.toLowerCase().includes(searchQuery.toLowerCase())
-    const matchesStatus = selectedStatus.length === 0 || selectedStatus.includes(project.status)
-    return matchesSearch && matchesStatus
   })
 
   const sortedProjects = [...filteredProjects].sort((a, b) => {
