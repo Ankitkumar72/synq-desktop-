@@ -202,6 +202,8 @@ export async function initYDocFromMarkdown(noteId: string, markdown: string): Pr
   return ydoc
 }
 
+import { isEmptyQuillDelta } from '../../lib/utils/quill-utils'
+
 /**
  * Apply a plain-text body update from mobile (Flutter).
  * This is the Mobile → Web bridge:
@@ -223,7 +225,11 @@ export function applyMobileBodyUpdate(noteId: string, newBody: string): void {
     const editor = new Editor({
       extensions: getHeadlessExtensions(ydoc)
     })
-    editor.commands.setContent(newBody)
+    if (!isEmptyQuillDelta(newBody)) {
+      editor.commands.setContent(newBody)
+    } else {
+      editor.commands.setContent('')
+    }
     editor.destroy()
   }, 'mobile-sync')  // Origin tag to identify this transaction
 }

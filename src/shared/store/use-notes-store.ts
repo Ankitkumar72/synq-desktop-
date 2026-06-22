@@ -19,6 +19,7 @@ import {
 } from '../crdt/crdt-doc'
 import { getPlainTextFromStoredContent } from '../notes/note-content'
 import { idbStorage } from './idb-storage'
+import { isEmptyQuillDelta } from '../../lib/utils/quill-utils'
 
 const mobileSyncDebounceTimers = new Map<string, NodeJS.Timeout>()
 export function sanitizeNote(note: Partial<Note>): Note {
@@ -288,7 +289,7 @@ export const useNotesStore = create<NotesState>()(
             // Only initialize from body if structured content is missing
             if (remoteNote.body && !remoteNote.content) {
               // We don't await this as it's a background initialization
-              initYDocFromMarkdown(remoteNote.id, typeof remoteNote.body === 'string' ? remoteNote.body : '')
+              initYDocFromMarkdown(remoteNote.id, typeof remoteNote.body === 'string' && !isEmptyQuillDelta(remoteNote.body) ? remoteNote.body : '')
             }
             return { notes: [sanitizeNote(remoteNote), ...state.notes] }
           }
@@ -319,8 +320,10 @@ export const useNotesStore = create<NotesState>()(
                   if (!remoteNodeId.startsWith('web') && typeof remoteNote.body === 'string') {
                     // Mobile edit detected — update Yjs doc
                     const ydoc = new Y.Doc();
-                    const ytext = ydoc.getText('content');
-                    ytext.insert(0, remoteNote.body);
+                    if (!isEmptyQuillDelta(remoteNote.body)) {
+                      const ytext = ydoc.getText('content');
+                      ytext.insert(0, remoteNote.body);
+                    }
                     const update = Y.encodeStateAsUpdate(ydoc);
                     
                     mergedNode.content = Array.from(update);
