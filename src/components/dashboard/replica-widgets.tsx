@@ -14,7 +14,7 @@ export function NotesGrid({ items, onDelete }: { items: Note[], onDelete?: (id: 
           key={note.id}
           id={note.id}
           title={note.title}
-          content={note.excerpt || note.body || getPlainTextFromStoredContent(note.content ?? null)}
+          content={note.excerpt || (note.body === '{"ops":[{"insert":"\\n"}]}' || note.body?.trim() === '' ? null : note.body) || getPlainTextFromStoredContent(note.content ?? null)}
           time={note.updated_at ? format(new Date(note.updated_at), 'MMM d') : ''}
           onDelete={onDelete}
         />

@@ -320,14 +320,17 @@ export const useNotesStore = create<NotesState>()(
                   if (!remoteNodeId.startsWith('web') && typeof remoteNote.body === 'string') {
                     // Mobile edit detected — update Yjs doc
                     const ydoc = new Y.Doc();
+                    let finalBody = remoteNote.body;
                     if (!isEmptyQuillDelta(remoteNote.body)) {
                       const ytext = ydoc.getText('content');
                       ytext.insert(0, remoteNote.body);
+                    } else {
+                      finalBody = '';
                     }
                     const update = Y.encodeStateAsUpdate(ydoc);
                     
                     mergedNode.content = Array.from(update);
-                    mergedNode.body = remoteNote.body;
+                    mergedNode.body = finalBody;
                     
                     // Persist mobile-origin body changes to CRDT in a controlled path
                     // (without re-triggering the destructive loop in editor.tsx)
