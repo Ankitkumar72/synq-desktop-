@@ -11,6 +11,8 @@
 
 import * as Y from 'yjs'
 import { IndexeddbPersistence } from 'y-indexeddb'
+import { Editor } from '@tiptap/core'
+import { getHeadlessExtensions } from './headless-extensions'
 
 const IDB_PREFIX = 'synq-ydoc-'
 const MAX_CACHED_DOCS = 10
@@ -178,7 +180,7 @@ export function getStateDiff(noteId: string, remoteStateVector: Uint8Array): Uin
  * This converts JSON content to plain text and inserts it into the Y.Doc's
  * XML fragment. TipTap's collaboration extension will then maintain it.
  */
-export async function initYDocFromPlainText(noteId: string, plainText: string): Promise<Y.Doc> {
+export async function initYDocFromMarkdown(noteId: string, markdown: string): Promise<Y.Doc> {
   const ydoc = getOrCreateYDoc(noteId)
   
   // Wait for IndexedDB persistence to finish loading before checking fragment length
@@ -187,16 +189,13 @@ export async function initYDocFromPlainText(noteId: string, plainText: string): 
   const fragment = ydoc.getXmlFragment('content')
   
   // Only initialize if the fragment is empty (don't overwrite existing CRDT state)
-  if (fragment.length === 0 && plainText.trim()) {
+  if (fragment.length === 0 && markdown.trim()) {
     ydoc.transact(() => {
-      const paragraphs = plainText.split('\n')
-      for (const para of paragraphs) {
-        const element = new Y.XmlElement('paragraph')
-        if (para.trim()) {
-          element.insert(0, [new Y.XmlText(para)])
-        }
-        fragment.push([element])
-      }
+      const editor = new Editor({
+        extensions: getHeadlessExtensions(ydoc)
+      })
+      editor.commands.setContent(markdown)
+      editor.destroy()
     })
   }
   
@@ -218,26 +217,14 @@ export function applyMobileBodyUpdate(noteId: string, newBody: string): void {
     return
   }
 
-
-
   const ydoc = getOrCreateYDoc(noteId)
-  const fragment = ydoc.getXmlFragment('content')
 
   ydoc.transact(() => {
-    // Clear existing content
-    while (fragment.length > 0) {
-      fragment.delete(0, 1)
-    }
-
-    // Insert new content from mobile's plain text
-    const paragraphs = (newBody || '').split('\n')
-    for (const para of paragraphs) {
-      const element = new Y.XmlElement('paragraph')
-      if (para.trim()) {
-        element.insert(0, [new Y.XmlText(para)])
-      }
-      fragment.push([element])
-    }
+    const editor = new Editor({
+      extensions: getHeadlessExtensions(ydoc)
+    })
+    editor.commands.setContent(newBody)
+    editor.destroy()
   }, 'mobile-sync')  // Origin tag to identify this transaction
 }
 
@@ -267,56 +254,26 @@ export function setActiveEdit(noteId: string, active: boolean): void {
 }
 
 /**
- * Extract plain text from a Y.Doc's content fragment.
+ * Extract markdown from a Y.Doc's content fragment.
  * Used to generate the `body` field for Flutter compatibility.
  */
-export function getPlainTextFromYDoc(noteId: string): string {
+export function getMarkdownFromYDoc(noteId: string): string {
   const ydoc = docCache.get(noteId)
   if (!ydoc) return ''
 
-  let text = ''
-  ydoc.transact(() => {
-    const fragment = ydoc.getXmlFragment('content')
-    text = extractTextFromFragment(fragment)
+  const editor = new Editor({
+    extensions: getHeadlessExtensions(ydoc)
   })
+  const text = (editor.storage as any).markdown.getMarkdown()
+  editor.destroy()
   return text
-}
-
-function extractTextFromFragment(fragment: Y.XmlFragment): string {
-  const parts: string[] = []
-
-  for (let i = 0; i < fragment.length; i++) {
-    const child = fragment.get(i)
-    if (child instanceof Y.XmlText) {
-      parts.push(child.toString())
-    } else if (child instanceof Y.XmlElement) {
-      parts.push(extractTextFromElement(child))
-    }
-  }
-
-  return parts.join('\n')
-}
-
-function extractTextFromElement(element: Y.XmlElement): string {
-  const parts: string[] = []
-
-  for (let i = 0; i < element.length; i++) {
-    const child = element.get(i)
-    if (child instanceof Y.XmlText) {
-      parts.push(child.toString())
-    } else if (child instanceof Y.XmlElement) {
-      parts.push(extractTextFromElement(child))
-    }
-  }
-
-  return parts.join('')
 }
 
 /**
  * Build an excerpt from Y.Doc content.
  */
 export function getExcerptFromYDoc(noteId: string): string | null {
-  const text = getPlainTextFromYDoc(noteId)
+  const text = getMarkdownFromYDoc(noteId)
   if (!text) return null
   return text.length > 100 ? `${text.slice(0, 100)}...` : text
 }

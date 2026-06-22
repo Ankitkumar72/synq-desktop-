@@ -467,6 +467,15 @@ export const useTaskStore = create<TaskState>()(
     {
       name: 'synq-tasks',
       storage: createJSONStorage(() => idbStorage),
+      merge: (persistedState: any, currentState: TaskState) => {
+        if (!persistedState) return currentState;
+        return {
+          ...currentState,
+          ...persistedState,
+          tasks: mergeTaskList(currentState.tasks || [], persistedState.tasks || []),
+          _hasHydrated: true,
+        };
+      },
       onRehydrateStorage: () => (state) => {
         if (state) state.setHasHydrated(true)
       },

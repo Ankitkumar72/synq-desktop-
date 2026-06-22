@@ -67,6 +67,7 @@ export default function AccountPage() {
                     alt={name} 
                     width={96} 
                     height={96} 
+                    referrerPolicy="no-referrer"
                     className="w-full h-full object-cover" 
                   />
                 ) : (

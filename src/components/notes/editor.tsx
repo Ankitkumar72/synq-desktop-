@@ -1,29 +1,11 @@
 "use client"
 
 import { useEditor, EditorContent } from '@tiptap/react'
-import StarterKit from '@tiptap/starter-kit'
-import Collaboration from '@tiptap/extension-collaboration'
-import { Markdown } from 'tiptap-markdown'
-import Link from '@tiptap/extension-link'
-import Underline from '@tiptap/extension-underline'
-import TaskList from '@tiptap/extension-task-list'
-import TaskItem from '@tiptap/extension-task-item'
-import Highlight from '@tiptap/extension-highlight'
-import Image from '@tiptap/extension-image'
-import { Table } from '@tiptap/extension-table'
-import { TableRow } from '@tiptap/extension-table-row'
-import { TableHeader } from '@tiptap/extension-table-header'
-import { TableCell } from '@tiptap/extension-table-cell'
-import GapCursor from '@tiptap/extension-gapcursor'
-import Dropcursor from '@tiptap/extension-dropcursor'
-import Focus from '@tiptap/extension-focus'
-import { TrailingNode } from './trailing-node'
+
 import * as Y from 'yjs'
 import { z } from 'zod'
 import { Loader2 } from "lucide-react"
-import Placeholder from '@tiptap/extension-placeholder'
-import { SlashCommand, suggestionConfig } from './slash-command'
-import { CalloutNode } from './callout-node'
+
 import { NoteBubbleMenu } from './bubble-menu'
 import { TableBubbleMenu } from './table-bubble-menu'
 import { Skeleton } from "@/components/ui/skeleton"
@@ -34,7 +16,7 @@ import {
   acquireYDoc,
   releaseYDoc,
   setActiveEdit,
-  getPlainTextFromYDoc,
+  getMarkdownFromYDoc,
   markLocallyModified,
   waitForPersistence,
   applyRemoteUpdate,
@@ -49,15 +31,12 @@ import type { NoteContent } from "@/shared"
 import { getEditorContentValue } from "@/shared"
 import { sendNoteBroadcast } from "@/shared"
 import { hlc } from "@/shared"
-import { TextStyle, Color, FontFamily, FontSize } from '@tiptap/extension-text-style'
-import TextAlign from '@tiptap/extension-text-align'
-import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight'
-import { common, createLowlight } from 'lowlight'
+
 import DOMPurify from 'dompurify'
-import GlobalDragHandle from 'tiptap-extension-global-drag-handle'
+
 import styles from './editor-content.module.css'
 
-const lowlight = createLowlight(common)
+import { getEditorExtensions } from './editor-extensions'
 
 const SAVE_DEBOUNCE_MS = 800
 const RETRY_DELAY_MS = 3000
@@ -403,8 +382,8 @@ export function NoteEditor({
     const now = new Date().toISOString()
     const currentEditor = editorRef.current
     const body = currentEditor && !currentEditor.isDestroyed
-      ? currentEditor.state.doc.textContent
-      : getPlainTextFromYDoc(id)
+      ? (currentEditor.storage as any).markdown.getMarkdown()
+      : getMarkdownFromYDoc(id)
     const excerpt = body.length > 100 ? `${body.slice(0, 100)}...` : body
 
     const contentVal = currentEditor && !currentEditor.isDestroyed ? currentEditor.getJSON() : null
@@ -695,8 +674,8 @@ export function NoteEditor({
             const nowStr = new Date().toISOString()
 
             const body = editorRef.current && !editorRef.current.isDestroyed
-              ? editorRef.current.state.doc.textContent
-              : getPlainTextFromYDoc(id)
+              ? (editorRef.current.storage as any).markdown.getMarkdown()
+              : getMarkdownFromYDoc(id)
             const excerpt = body.length > 100 ? `${body.slice(0, 100)}...` : body
 
             const contentVal = editorRef.current && !editorRef.current.isDestroyed
@@ -748,106 +727,7 @@ export function NoteEditor({
     }
   }, [id, ydoc, persistNow])
 
-  const extensions = useMemo(() => [
-    StarterKit.configure({
-
-      undoRedo: false,
-      link: false,
-      underline: false,
-      codeBlock: false, 
-      gapcursor: false,
-      dropcursor: false,
-    }),
-    CodeBlockLowlight.configure({
-      lowlight,
-      defaultLanguage: 'typescript',
-      HTMLAttributes: {
-        class: 'hljs',
-      },
-    }),
-    Collaboration.configure({
-      document: ydoc,
-      field: 'content',
-    }),
-    Link.configure({
-      openOnClick: false,
-      HTMLAttributes: {
-        class: 'text-[#2eaadc] underline hover:text-[#2eaadc]/80 transition-colors cursor-pointer',
-      },
-    }),
-    Underline,
-    TaskList,
-    TaskItem.configure({
-      nested: true,
-    }),
-    Highlight.configure({
-      multicolor: true,
-    }),
-    Image.configure({
-      allowBase64: true,
-    }),
-    Table.configure({
-      resizable: true,
-    }),
-    TableRow,
-    TableHeader,
-    TableCell,
-    TextStyle,
-    Color,
-    FontFamily,
-    FontSize,
-    TextAlign.configure({
-      types: ['heading', 'paragraph', 'tableCell', 'tableHeader'],
-    }),
-    Markdown.configure({
-      html: true,
-      tightLists: true,
-      tightListClass: 'tight',
-      bulletListMarker: '-',
-      linkify: true,
-      breaks: true,
-      transformPastedText: true,
-      transformCopiedText: true,
-    }),
-    Placeholder.configure({
-      placeholder: ({ node }) => {
-        if (node.type.name === 'heading') {
-          return `Heading ${node.attrs.level}`
-        }
-        if (node.type.name === 'callout') {
-          return 'Type something...'
-        }
-        if (node.type.name === 'paragraph') {
-          return "Type '/' for commands"
-        }
-        if (node.type.name === 'codeBlock') {
-          return '// Write code...'
-        }
-        return ""
-      },
-      showOnlyWhenEditable: true,
-      showOnlyCurrent: true,
-      includeChildren: true,
-    }),
-    CalloutNode,
-    SlashCommand.configure({
-      suggestion: suggestionConfig,
-    }),
-    GlobalDragHandle.configure({
-      dragHandleWidth: 20,
-      scrollTreshold: 100,
-    }),
-    GapCursor,
-    Dropcursor.configure({
-      color: '#2eaadc',
-      width: 2,
-    }),
-    Focus.configure({
-      className: 'is-block-focused',
-      mode: 'deepest',
-    }),
-    TrailingNode,
-  ], [ydoc])
+  const extensions = useMemo(() => getEditorExtensions(ydoc), [ydoc])
 
   const editorProps = useMemo(() => ({
     attributes: {
@@ -1097,7 +977,7 @@ export function NoteEditor({
       let isPlain = true
       let isYjsCorrupted = false
 
-      const plainText = getPlainTextFromYDoc(id)
+      const plainText = getMarkdownFromYDoc(id)
       const contentValue = getEditorContentValue(contentRef.current ?? null)
 
       ydoc.transact(() => {
@@ -1202,8 +1082,8 @@ export function NoteEditor({
         }
 
         const body = editorRef.current && !editorRef.current.isDestroyed
-          ? editorRef.current.state.doc.textContent
-          : getPlainTextFromYDoc(id)
+          ? (editorRef.current.storage as any).markdown.getMarkdown()
+          : getMarkdownFromYDoc(id)
         const excerpt = body.length > 100 ? `${body.slice(0, 100)}...` : body
 
         const userId = useUserStore.getState().user?.id

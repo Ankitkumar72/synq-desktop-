@@ -334,6 +334,7 @@ export function QuickCreateModal({
                           alt={name} 
                           width={20} 
                           height={20} 
+                          referrerPolicy="no-referrer"
                           className="w-full h-full object-cover" 
                         />
                       ) : (

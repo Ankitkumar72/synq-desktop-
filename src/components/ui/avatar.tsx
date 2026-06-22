@@ -47,6 +47,7 @@ function AvatarImage({ className, src, onLoadingStatusChange, onError, ...props 
         className
       )}
       src={finalSrc}
+      referrerPolicy="no-referrer"
       onLoadingStatusChange={(status) => {
         if (status === 'error' && safeSrc) {
           avatarErrorCache.add(safeSrc)

@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
+import { persist, createJSONStorage } from 'zustand/middleware'
 import { CalendarEvent } from '../types'
 import { hlc, HLC } from '../hlc'
 import { supabase } from '../supabase/supabase'
@@ -7,6 +7,7 @@ import { useUserStore } from './use-user-store'
 import { mergeFields, stampFields } from '../crdt/field-crdt'
 import { enqueueOperation } from '../crdt/offline-queue'
 import { triggerFlush, getOnlineStatus } from '../crdt/sync-manager'
+import { idbStorage } from './idb-storage'
 
 const SKIP_FIELDS = ['id', 'user_id', 'created_at', 'field_versions', 'hlc_timestamp', 'deleted_hlc']
 
@@ -14,6 +15,8 @@ interface EventState {
   events: CalendarEvent[]
   isLoading: boolean
   error: string | null
+  _hasHydrated: boolean
+  setHasHydrated: (state: boolean) => void
   setEvents: (events: CalendarEvent[]) => void
   addEvent: (event: Omit<CalendarEvent, 'id' | 'created_at' | 'updated_at'>) => Promise<void>
   updateEvent: (id: string, updates: Partial<CalendarEvent>) => Promise<void>
@@ -31,6 +34,8 @@ export const useEventStore = create<EventState>()(
       events: [],
       isLoading: false,
       error: null,
+      _hasHydrated: false,
+      setHasHydrated: (state) => set({ _hasHydrated: state }),
       setEvents: (events) => set({ events }),
 
       addEvent: async (e) => {
@@ -317,10 +322,23 @@ export const useEventStore = create<EventState>()(
     }),
     {
       name: 'synq-events',
+      storage: createJSONStorage(() => idbStorage),
+      onRehydrateStorage: () => (state) => {
+        if (state) state.setHasHydrated(true)
+      },
       partialize: (state) =>
         Object.fromEntries(
-          Object.entries(state).filter(([key]) => !['isLoading', 'error'].includes(key))
+          Object.entries(state).filter(([key]) => !['isLoading', 'error', '_hasHydrated'].includes(key))
         ) as EventState,
+      merge: (persistedState: any, currentState: EventState) => {
+        if (!persistedState) return currentState;
+        return {
+          ...currentState,
+          ...persistedState,
+          events: mergeEventsList(currentState.events || [], persistedState.events || []),
+          _hasHydrated: true,
+        };
+      },
     }
   )
 )

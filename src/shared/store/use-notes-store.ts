@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
+import * as Y from 'yjs'
 import { TABLES, COLUMNS } from '../constants'
 import { hlc, HLC } from '../hlc'
 import { Note } from '../types'
@@ -11,10 +12,9 @@ import {
   getOrCreateYDoc,
   setActiveEdit,
   markLocallyModified,
-  applyMobileBodyUpdate,
-  getPlainTextFromYDoc,
+  getMarkdownFromYDoc,
   getExcerptFromYDoc,
-  initYDocFromPlainText,
+  initYDocFromMarkdown,
   destroyYDoc,
 } from '../crdt/crdt-doc'
 import { getPlainTextFromStoredContent } from '../notes/note-content'
@@ -288,7 +288,7 @@ export const useNotesStore = create<NotesState>()(
             // Only initialize from body if structured content is missing
             if (remoteNote.body && !remoteNote.content) {
               // We don't await this as it's a background initialization
-              initYDocFromPlainText(remoteNote.id, getPlainTextFromStoredContent(remoteNote.body))
+              initYDocFromMarkdown(remoteNote.id, typeof remoteNote.body === 'string' ? remoteNote.body : '')
             }
             return { notes: [sanitizeNote(remoteNote), ...state.notes] }
           }
@@ -316,9 +316,16 @@ export const useNotesStore = create<NotesState>()(
                 if (remoteV && (!localV || HLC.compare(remoteV, localV) > 0)) {
                   // This body change came from mobile — bridge to Yjs
                   const remoteNodeId = HLC.extractNodeId(remoteNote.hlc_timestamp)
-                  if (!remoteNodeId.startsWith('web')) {
+                  if (!remoteNodeId.startsWith('web') && typeof remoteNote.body === 'string') {
                     // Mobile edit detected — update Yjs doc
-                    applyMobileBodyUpdate(remoteNote.id, getPlainTextFromStoredContent(value as string))
+                    const ydoc = new Y.Doc();
+                    const ytext = ydoc.getText('content');
+                    ytext.insert(0, remoteNote.body);
+                    const update = Y.encodeStateAsUpdate(ydoc);
+                    
+                    mergedNode.content = Array.from(update);
+                    mergedNode.body = remoteNote.body;
+                    
                     // Persist mobile-origin body changes to CRDT in a controlled path
                     // (without re-triggering the destructive loop in editor.tsx)
                     const timer = mobileSyncDebounceTimers.get(remoteNote.id)
@@ -375,7 +382,7 @@ export const useNotesStore = create<NotesState>()(
         if (!userId) return
 
         // Get body/excerpt from Yjs doc
-        const body = getPlainTextFromYDoc(id)
+        const body = getMarkdownFromYDoc(id)
         const excerpt = getExcerptFromYDoc(id)
 
         const updates: Partial<Note> = { body, excerpt }
@@ -605,6 +612,15 @@ export const useNotesStore = create<NotesState>()(
         Object.fromEntries(
           Object.entries(state).filter(([key]) => !['isLoading', 'error', '_hasHydrated'].includes(key))
         ) as NotesState,
+      merge: (persistedState: any, currentState: NotesState) => {
+        if (!persistedState) return currentState;
+        return {
+          ...currentState,
+          ...persistedState,
+          notes: mergeNotesList(currentState.notes || [], persistedState.notes || []),
+          _hasHydrated: true,
+        };
+      },
     }
   )
 )

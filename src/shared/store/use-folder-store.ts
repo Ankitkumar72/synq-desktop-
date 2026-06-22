@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
+import { persist, createJSONStorage } from 'zustand/middleware'
 import { Folder } from '../types'
 import { hlc, HLC } from '../hlc'
 import { supabase } from '../supabase/supabase'
@@ -8,6 +8,7 @@ import { mergeFields, stampFields } from '../crdt/field-crdt'
 import { enqueueOperation } from '../crdt/offline-queue'
 import { triggerFlush, getOnlineStatus } from '../crdt/sync-manager'
 import { TABLES, COLUMNS } from '../constants'
+import { idbStorage } from './idb-storage'
 
 const SKIP_FIELDS = ['id', 'user_id', 'created_at', 'field_versions', 'hlc_timestamp', 'deleted_hlc']
 
@@ -15,6 +16,8 @@ interface FolderState {
   folders: Folder[]
   isLoading: boolean
   error: string | null
+  _hasHydrated: boolean
+  setHasHydrated: (state: boolean) => void
   setFolders: (folders: Folder[]) => void
   fetchFolders: (includeDeleted?: boolean, prefetchedData?: Folder[]) => Promise<void>
   addFolder: (folder: Omit<Folder, 'id' | 'created_at' | 'updated_at'>) => Promise<void>
@@ -30,6 +33,8 @@ export const useFolderStore = create<FolderState>()(
       folders: [],
       isLoading: false,
       error: null,
+      _hasHydrated: false,
+      setHasHydrated: (state) => set({ _hasHydrated: state }),
       setFolders: (folders) => set({ folders }),
 
       fetchFolders: async (includeDeleted = false, prefetchedData?: Folder[]) => {
@@ -289,10 +294,23 @@ export const useFolderStore = create<FolderState>()(
     }),
     {
       name: 'synq-folders',
+      storage: createJSONStorage(() => idbStorage),
+      onRehydrateStorage: () => (state) => {
+        if (state) state.setHasHydrated(true)
+      },
       partialize: (state) =>
         Object.fromEntries(
-          Object.entries(state).filter(([key]) => !['isLoading', 'error'].includes(key))
+          Object.entries(state).filter(([key]) => !['isLoading', 'error', '_hasHydrated'].includes(key))
         ) as FolderState,
+      merge: (persistedState: any, currentState: FolderState) => {
+        if (!persistedState) return currentState;
+        return {
+          ...currentState,
+          ...persistedState,
+          folders: mergeFolderList(currentState.folders || [], persistedState.folders || []),
+          _hasHydrated: true,
+        };
+      },
     }
   )
 )

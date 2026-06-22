@@ -161,21 +161,22 @@
     @apply border-white/10 bg-[#111111]/80;
   }
 
-  .custom-scrollbar::-webkit-scrollbar {
+  ::-webkit-scrollbar, .custom-scrollbar::-webkit-scrollbar {
     width: 6px;
+    height: 6px;
   }
 
-  .custom-scrollbar::-webkit-scrollbar-track {
+  ::-webkit-scrollbar-track, .custom-scrollbar::-webkit-scrollbar-track {
     @apply bg-transparent;
   }
 
-  .custom-scrollbar::-webkit-scrollbar-thumb {
-    @apply bg-white/[0.03] rounded-full border-[1.5px] border-transparent bg-clip-padding;
+  ::-webkit-scrollbar-thumb, .custom-scrollbar::-webkit-scrollbar-thumb {
+    @apply bg-white/[0.15] rounded-full border-[1.5px] border-transparent bg-clip-padding;
     transition: background 0.2s ease;
   }
 
-  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-    @apply bg-white/[0.08];
+  ::-webkit-scrollbar-thumb:hover, .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    @apply bg-white/[0.25];
   }
 
   .active-note-glow {

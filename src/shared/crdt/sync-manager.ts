@@ -16,7 +16,7 @@ import {
   type QueuedOperation,
   RETRY_BACKOFF_MS,
 } from './offline-queue'
-import { getDocState, markLocallyModified, getPlainTextFromYDoc, getExcerptFromYDoc } from './crdt-doc'
+import { getDocState, markLocallyModified, getMarkdownFromYDoc, getExcerptFromYDoc } from './crdt-doc'
 
 const __DEV__ = process.env.NODE_ENV !== 'production'
 
@@ -239,7 +239,7 @@ interface SaveYDocOptions {
 export async function saveYDocToSupabase(noteId: string, userId: string, options: SaveYDocOptions = {}): Promise<void> {
   const state = getDocState(noteId)
   const updateData = options.updateData && options.updateData.length > 0 ? options.updateData : state
-  const body = getPlainTextFromYDoc(noteId)
+  const body = getMarkdownFromYDoc(noteId)
   const excerpt = getExcerptFromYDoc(noteId)
   const timestamp = hlc.increment()
   const updatedAt = new Date().toISOString()

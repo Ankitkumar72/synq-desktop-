@@ -375,6 +375,15 @@ export const useProjectStore = create<ProjectState>()(
         Object.fromEntries(
           Object.entries(state).filter(([key]) => !['isLoading', 'error', '_hasHydrated'].includes(key))
         ) as ProjectState,
+      merge: (persistedState: any, currentState: ProjectState) => {
+        if (!persistedState) return currentState;
+        return {
+          ...currentState,
+          ...persistedState,
+          projects: mergeProjectList(currentState.projects || [], persistedState.projects || []),
+          _hasHydrated: true,
+        };
+      },
     }
   )
 )
