@@ -101,10 +101,17 @@ function NotesPageContent() {
     const currentUrlId = searchParams.get("id")
     if (currentUrlId && currentUrlId !== selectedNoteId) {
       if (!hasSyncedFromUrl.current || currentUrlId !== lastUrlId.current) {
-        const noteExists = notes.some(n => n.id === currentUrlId)
+        const noteExists = notes.some(n => n.id === currentUrlId && !n.is_deleted && !n.deleted_at && !n.is_task)
         if (noteExists) {
           setSelectedNoteId(currentUrlId)
           lastUrlId.current = currentUrlId
+          hasSyncedFromUrl.current = true
+        } else {
+          // If the URL note doesn't exist or is deleted, clear it from URL
+          const url = new URL(window.location.href)
+          url.searchParams.delete('id')
+          window.history.replaceState(null, '', url.toString())
+          lastUrlId.current = null
           hasSyncedFromUrl.current = true
         }
       }
@@ -158,10 +165,10 @@ function NotesPageContent() {
   }, [notes, selectedNoteId])
 
   useEffect(() => {
-    if (selectedNote?.is_deleted) {
+    if (selectedNote?.is_deleted || selectedNote?.deleted_at) {
       setSelectedNoteId(null)
     }
-  }, [selectedNote?.is_deleted, setSelectedNoteId])
+  }, [selectedNote?.is_deleted, selectedNote?.deleted_at, setSelectedNoteId])
 
   const handleAddNote = async () => {
     const newId = await addNote({
