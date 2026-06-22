@@ -14,7 +14,7 @@ export function isEmptyQuillDelta(body: string | null | undefined): boolean {
         return true;
       }
     }
-  } catch (e) {
+  } catch {
     // If it's not valid JSON, it's not an empty Quill Delta
   }
   
