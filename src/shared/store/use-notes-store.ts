@@ -286,8 +286,11 @@ export const useNotesStore = create<NotesState>()(
 
           if (existingIndex === -1) {
             // New note arrived from remote
-            // Only initialize from body if structured content is missing
-            if (remoteNote.body && !remoteNote.content) {
+            // Only initialize from body if structured content is missing or empty
+            const hasRealContent = remoteNote.content && 
+              (Array.isArray(remoteNote.content) ? remoteNote.content.length > 0 : Object.keys(remoteNote.content).length > 0);
+            
+            if (remoteNote.body && !hasRealContent) {
               // We don't await this as it's a background initialization
               initYDocFromMarkdown(remoteNote.id, typeof remoteNote.body === 'string' && !isEmptyQuillDelta(remoteNote.body) ? remoteNote.body : '')
             }
@@ -314,7 +317,12 @@ export const useNotesStore = create<NotesState>()(
               if (key === 'body' && !isActivelyEditing) {
                 const remoteV = remoteFields[key]
                 const localV = localFields[key]
-                if (remoteV && (!localV || HLC.compare(remoteV, localV) > 0)) {
+                
+                const shouldBridge = hasRemoteFieldVersions 
+                  ? (remoteV && (!localV || HLC.compare(remoteV, localV) > 0))
+                  : (value !== undefined && value !== existing.body);
+
+                if (shouldBridge) {
                   // This body change came from mobile — bridge to Yjs
                   const remoteNodeId = HLC.extractNodeId(remoteNote.hlc_timestamp)
                   if (!remoteNodeId.startsWith('web') && typeof remoteNote.body === 'string') {
