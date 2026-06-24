@@ -86,6 +86,7 @@ CREATE TABLE notes (
 
   -- Flutter-specific fields
   body TEXT,
+  content_markdown TEXT,
   category TEXT DEFAULT 'personal',
   priority TEXT DEFAULT 'none',
   is_task BOOLEAN DEFAULT false,
@@ -143,6 +144,7 @@ CREATE TABLE notes (
 
   -- Flutter-specific fields
   body TEXT,
+  content_markdown TEXT,
   category TEXT DEFAULT 'personal',
   priority TEXT DEFAULT 'none',
   is_task BOOLEAN DEFAULT false,

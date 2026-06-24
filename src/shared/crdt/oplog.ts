@@ -94,7 +94,10 @@ export async function applyNoteCrdtUpdate(input: ApplyNoteCrdtUpdateInput): Prom
   if (input.content !== undefined) {
     const { error: contentError } = await supabase
       .from('notes')
-      .update({ content: input.content })
+      .update({ 
+        content: input.content,
+        content_markdown: input.body 
+      })
       .eq('id', input.noteId)
 
     if (contentError) {

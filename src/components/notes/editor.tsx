@@ -22,6 +22,7 @@ import {
   applyRemoteUpdate,
   compressImage,
   uploadImage,
+  initYDocFromMarkdown,
 } from "@/shared"
 import { saveYDocToSupabase, loadYDocFromSupabase, triggerFlush } from "@/shared"
 import { getLocalLastSeq, getNoteCrdtUpdates, setLocalLastSeq, toUint8Update, enqueueQueuedNoteCrdtUpdate } from "@/shared"
@@ -348,6 +349,7 @@ export function NoteEditor({
   const updatesSinceSnapshotRef = useRef(0)
   const lastSnapshotTimeRef = useRef(Date.now())
   const persistRetryCountRef = useRef(0)
+  const hasHydratedMeaningfulContentRef = useRef(false)
 
   useEffect(() => {
     const activeId = id
@@ -387,6 +389,18 @@ export function NoteEditor({
     const excerpt = body.length > 100 ? `${body.slice(0, 100)}...` : body
 
     const contentVal = currentEditor && !currentEditor.isDestroyed ? currentEditor.getJSON() : null
+
+    // Autosave Guard: Do not overwrite non-empty body with empty extraction if not hydrated properly
+    const storeNote = useNotesStore.getState().notes.find(n => n.id === id)
+    if (!body.trim() && storeNote?.body && storeNote.body.trim().length > 0) {
+      if (!hasHydratedMeaningfulContentRef.current) {
+        console.warn(`[NoteEditor] Prevented autosave of empty editor over existing body for ${id.slice(0, 8)}…`)
+        isSavingRef.current = false
+        pendingSaveRef.current = false
+        hasPendingLocalChangeRef.current = false
+        return
+      }
+    }
 
     markLocallyModified(id)
     updateNoteLocal(id, { body, excerpt, content: contentVal || undefined, updated_at: now })
@@ -562,6 +576,21 @@ export function NoteEditor({
               applyRemoteUpdate(id, remoteDoc.state)
             }
             remoteSeq = remoteDoc.lastSeq
+          }
+
+          // Safe Hydration Rule: Hydrate from body if no meaningful remote editor state and body exists
+          const currentMarkdown = getMarkdownFromYDoc(id)
+          const hasMeaningfulCRDT = currentMarkdown.trim().length > 0
+          
+          const storeNote = useNotesStore.getState().notes.find(n => n.id === id)
+          const hasMeaningfulContent = storeNote?.content && (Array.isArray(storeNote.content) ? storeNote.content.length > 0 : Object.keys(storeNote.content).length > 0)
+          
+          if (!hasMeaningfulCRDT && !hasMeaningfulContent && storeNote?.body && storeNote.body.trim().length > 0) {
+            await initYDocFromMarkdown(id, typeof storeNote.body === 'string' ? storeNote.body : '')
+            console.log(`[NoteEditor] Hydrated YDoc from existing body for ${id.slice(0, 8)}…`)
+            hasHydratedMeaningfulContentRef.current = true
+          } else if (hasMeaningfulCRDT || hasMeaningfulContent) {
+            hasHydratedMeaningfulContentRef.current = true
           }
         } catch (err) {
           const isTimeout = err instanceof Error && err.message.includes('timeout')
@@ -985,7 +1014,7 @@ export function NoteEditor({
         fragmentLength = fragment.length
         isPlain = isFlatPlainTextFragment(fragment)
 
-        if (fragmentLength > 0 && contentValue && typeof contentValue === 'object') {
+        if (fragmentLength > 0 && contentValue && typeof contentValue === 'object' && !Array.isArray(contentValue)) {
           const jsonStr = JSON.stringify(contentValue)
 
           if (plainText.length < 50 && jsonStr.length > 500 && !jsonStr.includes('"type":"image"')) {
@@ -1052,6 +1081,8 @@ export function NoteEditor({
               console.error('[NoteEditor] Failed to parse raw markdown content, skipping seed to preserve integrity:', err)
               if (__DEV__) console.groupEnd()
             }
+          } else if (Array.isArray(contentValue)) {
+            console.warn('[NoteEditor] Ignoring invalid array content to preserve editor integrity.')
           } else {
             editor.commands.setContent(contentValue)
           }

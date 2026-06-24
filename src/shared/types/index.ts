@@ -71,6 +71,7 @@ export interface Note {
   title: string
   content?: NoteContent
   body?: string | null // Plain text for Flutter (Mobile)
+  content_markdown?: string | null
   excerpt?: string | null
   tags: string[]
   category?: string

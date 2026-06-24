@@ -338,6 +338,7 @@ export async function saveYDocToSupabase(noteId: string, userId: string, options
 
   const noteUpdate: Record<string, unknown> = {
     body,
+    content_markdown: body,
     excerpt,
     hlc_timestamp: timestamp,
     updated_at: updatedAt,

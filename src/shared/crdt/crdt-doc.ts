@@ -194,7 +194,20 @@ export async function initYDocFromMarkdown(noteId: string, markdown: string): Pr
       const editor = new Editor({
         extensions: getHeadlessExtensions(ydoc)
       })
-      editor.commands.setContent(markdown)
+      let cleanMarkdown = markdown;
+      if (cleanMarkdown) {
+        cleanMarkdown = cleanMarkdown.replace(/<bold>([\s\S]*?)<\/bold>/gi, '**$1**')
+          .replace(/<italic>([\s\S]*?)<\/italic>/gi, '*$1*')
+          .replace(/<code>([\s\S]*?)<\/code>/gi, '`$1`')
+          .replace(/<underline>([\s\S]*?)<\/underline>/gi, '<u>$1</u>')
+          .replace(/<link[^>]*href=["']([^"']*)["'][^>]*>([\s\S]*?)<\/link>/gi, '[$2]($1)');
+      }
+      try {
+        const parsedNode = (editor.storage as any).markdown.parser.parse(cleanMarkdown)
+        editor.commands.setContent(parsedNode)
+      } catch {
+        editor.commands.setContent(cleanMarkdown)
+      }
       editor.destroy()
     })
   }
@@ -226,7 +239,20 @@ export function applyMobileBodyUpdate(noteId: string, newBody: string): void {
       extensions: getHeadlessExtensions(ydoc)
     })
     if (!isEmptyQuillDelta(newBody)) {
-      editor.commands.setContent(newBody)
+      let cleanBody = newBody;
+      if (cleanBody) {
+        cleanBody = cleanBody.replace(/<bold>([\s\S]*?)<\/bold>/gi, '**$1**')
+          .replace(/<italic>([\s\S]*?)<\/italic>/gi, '*$1*')
+          .replace(/<code>([\s\S]*?)<\/code>/gi, '`$1`')
+          .replace(/<underline>([\s\S]*?)<\/underline>/gi, '<u>$1</u>')
+          .replace(/<link[^>]*href=["']([^"']*)["'][^>]*>([\s\S]*?)<\/link>/gi, '[$2]($1)');
+      }
+      try {
+        const parsedNode = (editor.storage as any).markdown.parser.parse(cleanBody)
+        editor.commands.setContent(parsedNode)
+      } catch {
+        editor.commands.setContent(cleanBody)
+      }
     } else {
       editor.commands.setContent('')
     }

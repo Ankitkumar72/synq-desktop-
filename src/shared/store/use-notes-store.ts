@@ -1,6 +1,5 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
-import * as Y from 'yjs'
 import { TABLES, COLUMNS } from '../constants'
 import { hlc, HLC } from '../hlc'
 import { Note } from '../types'
@@ -16,6 +15,7 @@ import {
   getExcerptFromYDoc,
   initYDocFromMarkdown,
   destroyYDoc,
+  applyMobileBodyUpdate,
 } from '../crdt/crdt-doc'
 import { getPlainTextFromStoredContent } from '../notes/note-content'
 import { idbStorage } from './idb-storage'
@@ -32,6 +32,7 @@ export function sanitizeNote(note: Partial<Note>): Note {
     title: note.title ?? '',
     content: note.content || null,
     body: normalizedBody,
+    content_markdown: note.content_markdown ?? null,
     excerpt: note.excerpt || null,
     tags: Array.isArray(note.tags) ? note.tags : [],
     category: note.category ?? 'personal',
@@ -290,9 +291,10 @@ export const useNotesStore = create<NotesState>()(
             const hasRealContent = remoteNote.content && 
               (Array.isArray(remoteNote.content) ? remoteNote.content.length > 0 : Object.keys(remoteNote.content).length > 0);
             
-            if (remoteNote.body && !hasRealContent) {
+            const fallbackBody = remoteNote.content_markdown || remoteNote.body;
+            if (fallbackBody && !hasRealContent) {
               // We don't await this as it's a background initialization
-              initYDocFromMarkdown(remoteNote.id, typeof remoteNote.body === 'string' && !isEmptyQuillDelta(remoteNote.body) ? remoteNote.body : '')
+              initYDocFromMarkdown(remoteNote.id, typeof fallbackBody === 'string' && !isEmptyQuillDelta(fallbackBody) ? fallbackBody : '')
             }
             return { notes: [sanitizeNote(remoteNote), ...state.notes] }
           }
@@ -314,31 +316,26 @@ export const useNotesStore = create<NotesState>()(
               if (key === 'field_versions' || key === 'hlc_timestamp') return
 
               // For content/body, check if this came from mobile and update Yjs
-              if (key === 'body' && !isActivelyEditing) {
+              if ((key === 'content_markdown' || (key === 'body' && !remoteNote.content_markdown)) && !isActivelyEditing) {
                 const remoteV = remoteFields[key]
                 const localV = localFields[key]
                 
                 const shouldBridge = hasRemoteFieldVersions 
                   ? (remoteV && (!localV || HLC.compare(remoteV, localV) > 0))
-                  : (value !== undefined && value !== existing.body);
+                  : (value !== undefined && value !== (existing as any)[key]);
 
                 if (shouldBridge) {
                   // This body change came from mobile — bridge to Yjs
                   const remoteNodeId = HLC.extractNodeId(remoteNote.hlc_timestamp)
-                  if (!remoteNodeId.startsWith('web') && typeof remoteNote.body === 'string') {
+                  if (!remoteNodeId.startsWith('web') && typeof value === 'string') {
                     // Mobile edit detected — update Yjs doc
-                    const ydoc = new Y.Doc();
-                    let finalBody = remoteNote.body;
-                    if (!isEmptyQuillDelta(remoteNote.body)) {
-                      const ytext = ydoc.getText('content');
-                      ytext.insert(0, remoteNote.body);
-                    } else {
+                    let finalBody = value;
+                    if (isEmptyQuillDelta(value)) {
                       finalBody = '';
                     }
-                    const update = Y.encodeStateAsUpdate(ydoc);
-                    
-                    mergedNode.content = Array.from(update);
+                    applyMobileBodyUpdate(remoteNote.id, finalBody);
                     mergedNode.body = finalBody;
+                    mergedNode.content_markdown = finalBody;
                     
                     // Persist mobile-origin body changes to CRDT in a controlled path
                     // (without re-triggering the destructive loop in editor.tsx)
@@ -355,7 +352,7 @@ export const useNotesStore = create<NotesState>()(
                 }
               }
 
-              if (isActivelyEditing && (key === 'content' || key === 'body' || key === 'excerpt')) {
+              if (isActivelyEditing && (key === 'content' || key === 'body' || key === 'content_markdown' || key === 'excerpt')) {
                 return
               }
 
@@ -399,7 +396,7 @@ export const useNotesStore = create<NotesState>()(
         const body = getMarkdownFromYDoc(id)
         const excerpt = getExcerptFromYDoc(id)
 
-        const updates: Partial<Note> = { body, excerpt }
+        const updates: Partial<Note> = { body, content_markdown: body, excerpt }
         if (content !== undefined) {
           updates.content = content
         }
