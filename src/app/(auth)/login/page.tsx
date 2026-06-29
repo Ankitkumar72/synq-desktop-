@@ -131,14 +131,7 @@ function LoginContent() {
               <Button
                 variant="outline"
                 type="button"
-                onClick={async () => {
-                  const { createClient } = await import('@/shared/supabase/client')
-                  const supabase = createClient()
-                  const host = window.location.host
-                  const protocol = host.includes('localhost') ? 'http' : 'https'
-                  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || `${protocol}://${host}`
-                  await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: `${siteUrl}/auth/callback` } })
-                }}
+                onClick={() => signInWithGoogle()}
                 className="h-14 w-14 sm:h-16 sm:w-16 rounded-2xl border-stone-200 bg-white text-stone-900 hover:bg-stone-900 hover:text-white hover:border-stone-900 transition-all p-0 flex items-center justify-center shadow-sm active:scale-[0.95] group"
                 title="Continue with Google"
               >
@@ -152,14 +145,7 @@ function LoginContent() {
               <Button
                 variant="outline"
                 type="button"
-                onClick={async () => {
-                  const { createClient } = await import('@/shared/supabase/client')
-                  const supabase = createClient()
-                  const host = window.location.host
-                  const protocol = host.includes('localhost') ? 'http' : 'https'
-                  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || `${protocol}://${host}`
-                  await supabase.auth.signInWithOAuth({ provider: 'github', options: { redirectTo: `${siteUrl}/auth/callback` } })
-                }}
+                onClick={() => signInWithGithub()}
                 className="h-14 w-14 sm:h-16 sm:w-16 rounded-2xl border-stone-200 bg-white text-stone-900 hover:bg-[#181717] hover:text-white hover:border-[#181717] transition-all p-0 flex items-center justify-center shadow-sm active:scale-[0.95] group"
                 title="Continue with Github"
               >
@@ -170,14 +156,7 @@ function LoginContent() {
               <Button
                 variant="outline"
                 type="button"
-                onClick={async () => {
-                  const { createClient } = await import('@/shared/supabase/client')
-                  const supabase = createClient()
-                  const host = window.location.host
-                  const protocol = host.includes('localhost') ? 'http' : 'https'
-                  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || `${protocol}://${host}`
-                  await supabase.auth.signInWithOAuth({ provider: 'linkedin_oidc', options: { redirectTo: `${siteUrl}/auth/callback` } })
-                }}
+                onClick={() => signInWithLinkedin()}
                 className="h-14 w-14 sm:h-16 sm:w-16 rounded-2xl border-stone-200 bg-white text-[#0A66C2] hover:bg-[#0A66C2] hover:text-white hover:border-[#0A66C2] transition-all p-0 flex items-center justify-center shadow-sm active:scale-[0.95] group"
                 title="Continue with LinkedIn"
               >
@@ -188,14 +167,7 @@ function LoginContent() {
               <Button
                 variant="outline"
                 type="button"
-                onClick={async () => {
-                  const { createClient } = await import('@/shared/supabase/client')
-                  const supabase = createClient()
-                  const host = window.location.host
-                  const protocol = host.includes('localhost') ? 'http' : 'https'
-                  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || `${protocol}://${host}`
-                  await supabase.auth.signInWithOAuth({ provider: 'facebook', options: { redirectTo: `${siteUrl}/auth/callback` } })
-                }}
+                onClick={() => signInWithFacebook()}
                 className="h-14 w-14 sm:h-16 sm:w-16 rounded-2xl border-stone-200 bg-white text-[#1877F2] hover:bg-[#1877F2] hover:text-white hover:border-[#1877F2] transition-all p-0 flex items-center justify-center shadow-sm active:scale-[0.95] group"
                 title="Continue with Facebook"
               >

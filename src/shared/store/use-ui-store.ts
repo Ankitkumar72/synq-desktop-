@@ -67,6 +67,17 @@ export const useUIStore = create<UIState>()(
     }),
     {
       name: 'ui-storage',
+      partialize: (state) => ({
+        isSidebarOpen: state.isSidebarOpen,
+        recentSearches: state.recentSearches,
+      }),
+      merge: (persistedState: any, currentState) => ({
+        ...currentState,
+        ...persistedState,
+        isSettingsOpen: false,
+        isSearchOpen: false,
+        isCreateOpen: false,
+      }),
     }
   )
 )
