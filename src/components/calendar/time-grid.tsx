@@ -24,7 +24,7 @@ export function TimeGrid({ children, showCurrentTime = true }: TimeGridProps) {
 
   const [now, setNow] = useState(new Date())
   const [mounted, setMounted] = useState(false)
-  const HOUR_HEIGHT = 80
+  const HOUR_HEIGHT = 48
 
   useEffect(() => {
     const frame = setTimeout(() => {
@@ -58,11 +58,11 @@ export function TimeGrid({ children, showCurrentTime = true }: TimeGridProps) {
       className="flex-1 flex overflow-y-auto relative group/grid bg-[#0A0A0A] scrollbar-thin scrollbar-thumb-white/10"
     >
       {/* Time column */}
-      <div className="w-16 flex flex-col border-r border-white/5 select-none relative z-20 bg-[#0A0A0A]/80 backdrop-blur-sm">
+      <div className="w-16 flex flex-col border-r border-white/10 select-none relative z-20 bg-[#0A0A0A]/95 backdrop-blur-md">
         {hours.map((hour, i) => (
           <div key={i} style={{ height: `${HOUR_HEIGHT}px` }} className="relative px-2 shrink-0">
-            <span className="absolute -top-[7px] right-2 text-right text-[10px] font-medium text-stone-600 tracking-tight uppercase">
-              {i === 0 ? "" : format(hour, "HH:mm")}
+            <span className="absolute -top-[7px] right-2 text-right text-[11px] font-medium text-stone-400 tracking-tight uppercase">
+              {i === 0 ? "" : format(hour, "h a")}
             </span>
           </div>
         ))}
@@ -73,8 +73,8 @@ export function TimeGrid({ children, showCurrentTime = true }: TimeGridProps) {
             className="absolute left-0 right-0 z-50 flex items-center justify-center pointer-events-none transition-all"
             style={{ top: `${currentTimeTop}px`, marginTop: '-8px' }}
           >
-            <div className="bg-[#ef4444] text-white text-[9px] font-bold px-1.5 py-0.5 rounded-[3px] shadow-lg shadow-black/20 tracking-tighter">
-              {format(now, "HH:mm")}
+            <div className="bg-[#ef4444] text-white text-[9px] font-bold px-1.5 py-0.5 rounded-[3px] shadow-lg shadow-black/20 tracking-tighter uppercase">
+              {format(now, "h:mm a")}
             </div>
           </div>
         )}
@@ -90,7 +90,7 @@ export function TimeGrid({ children, showCurrentTime = true }: TimeGridProps) {
             <div 
               key={i} 
               style={{ height: `${HOUR_HEIGHT}px` }}
-              className="border-b border-white/[0.03] last:border-b-0"
+              className="border-b border-white/[0.08] last:border-b-0 relative"
             />
           ))}
         </div>

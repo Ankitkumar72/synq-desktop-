@@ -17,6 +17,9 @@ import {
   endOfDay,
 } from "date-fns"
 import { TimeGrid } from "./time-grid"
+import { useCalendarEngine, useDragSession } from "./hooks/useCalendarEngine"
+import { OverlayRenderer } from "./render/OverlayRenderer"
+import { CalendarItem } from "./types"
 
 interface WeekViewProps {
   currentDate: Date
@@ -31,13 +34,17 @@ const isAllDayEvent = (event: CalendarEvent) => {
   return (end.getTime() - start.getTime()) >= 24 * 60 * 60 * 1000
 }
 
+const getTaskStart = (task: Task) => task.start_at || task.due_date
+
 export function WeekView({ currentDate, events, tasks, onItemClick }: WeekViewProps) {
   const weekDays = useMemo(() => {
     const start = startOfWeek(currentDate)
     return eachDayOfInterval({ start, end: addDays(start, 6) })
   }, [currentDate])
 
-  const HOUR_HEIGHT = 80
+  const HOUR_HEIGHT = 48
+  const { layoutEngine, dragController } = useCalendarEngine({ hourHeight: HOUR_HEIGHT, columnWidth: 100 })
+  const dragSession = useDragSession(dragController)
   
   const [now, setNow] = useState(new Date())
   const [mounted, setMounted] = useState(false)
@@ -100,63 +107,33 @@ export function WeekView({ currentDate, events, tasks, onItemClick }: WeekViewPr
   }
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden bg-[#131313]">
+    <div className="flex-1 flex flex-col overflow-hidden bg-[#0A0A0A]">
+      <OverlayRenderer session={dragSession} />
       {/* Header section wrapping both rows */}
-      <div className="flex flex-col border-b border-white/[0.05] bg-[#131313] pr-[8px]">
+      <div className="flex flex-col border-b border-white/10 bg-[#0A0A0A] pr-[8px]">
         
         {/* Row 1: Days */}
-        <div className="flex border-b border-white/[0.03]">
-          <div className="w-16 border-r border-white/5 shrink-0 flex items-start px-2 py-2">
-            <span className="text-[9px] text-stone-500 font-medium whitespace-nowrap">{timezoneOffset}</span>
+        <div className="flex border-b border-white/10">
+          <div className="w-16 border-r border-white/10 shrink-0 flex items-start px-2 py-2">
+            <span className="text-[10px] text-stone-400 font-medium whitespace-nowrap">{timezoneOffset}</span>
           </div>
           <div className="flex-1 flex">
             {weekDays.map((day, i) => {
               const isToday = isSameDay(day, new Date())
               return (
-                <div key={i} className="flex-1 py-1.5 flex items-center justify-center gap-[6px] border-r border-white/5 last:border-r-0">
+                <div key={i} className="flex-1 py-1.5 flex items-center justify-center gap-[6px] border-r border-white/10 last:border-r-0">
                   <span className={cn(
-                    "text-xs font-medium",
-                    isToday ? "text-stone-300" : "text-stone-500"
+                    "text-xs font-medium uppercase tracking-wider",
+                    isToday ? "text-white" : "text-stone-400"
                   )}>
                     {format(day, 'EEE')}
                   </span>
                   <span className={cn(
-                    "min-w-5 h-5 flex items-center justify-center text-xs font-bold rounded-sm px-1",
-                    isToday ? "bg-[#ef4444] text-white" : "text-stone-500"
+                    "min-w-6 h-6 flex items-center justify-center text-xs font-bold rounded-full px-1.5 transition-colors",
+                    isToday ? "bg-blue-600 text-white shadow-md shadow-blue-900/20" : "text-stone-400 hover:text-stone-200"
                   )}>
                     {format(day, 'd')}
                   </span>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-
-        {/* Row 2: All-day events */}
-        <div className="flex min-h-[32px]">
-          <div className="w-16 border-r border-white/5 shrink-0 flex items-center justify-center">
-            <span className="text-[9px] text-stone-500 font-medium">All-day</span>
-          </div>
-          <div className="flex-1 flex">
-            {weekDays.map((day, i) => {
-              const allDayEvents = getAllDayItems(day)
-              
-              return (
-                <div key={i} className="flex-1 border-r border-white/5 last:border-r-0 relative p-1 flex flex-col gap-1">
-                  {allDayEvents.map(event => (
-                    <div 
-                      key={event.id}
-                      onClick={() => onItemClick({ ...event, type: 'event' })}
-                      className="rounded-md px-2 py-1 flex items-center min-h-[24px] shadow-sm transition-all hover:brightness-110 cursor-pointer"
-                      style={{
-                        backgroundColor: event.color ? event.color : '#4285F4',
-                      }}
-                    >
-                      <span className="text-[10px] font-bold leading-none truncate text-white uppercase tracking-tighter">
-                        {event.title}
-                      </span>
-                    </div>
-                  ))}
                 </div>
               )
             })}
@@ -169,7 +146,7 @@ export function WeekView({ currentDate, events, tasks, onItemClick }: WeekViewPr
         {weekDays.map((day, i) => {
           const isToday = isSameDay(day, new Date())
           return (
-            <div key={i} className="flex-1 relative border-r border-white/[0.03] last:border-r-0">
+            <div key={i} className="flex-1 relative border-r border-white/[0.08] last:border-r-0">
               
               {/* Grid content slots */}
               <div className="absolute inset-0 flex flex-col">
@@ -195,38 +172,56 @@ export function WeekView({ currentDate, events, tasks, onItemClick }: WeekViewPr
               {/* Current time indicator - red line only in the active day's column */}
               {mounted && isToday && (
                 <div 
-                  className="absolute left-0 right-0 h-px bg-[#ef4444] z-40 pointer-events-none"
+                  className="absolute left-0 right-0 h-px bg-[#ef4444] z-40 pointer-events-none flex items-center"
                   style={{ top: `${currentTimeTop}px` }}
-                />
+                >
+                  <div className="w-2 h-2 rounded-full bg-[#ef4444] -ml-1" />
+                </div>
               )}
 
-              {getGridItems(day).map((item) => {
+              {layoutEngine.calculateDayRects(getGridItems(day) as CalendarItem[], 100, dragSession).map((rect) => {
+                const item = getGridItems(day).find(i => i.id === rect.eventId) as CalendarItem;
+                if (!item) return null;
+                
                 const start = item.type === 'event'
                   ? new Date(item.start_date)
                   : new Date(item.start_at || item.due_date!)
-                const end = item.type === 'event'
-                  ? new Date(item.end_date)
-                  : new Date(item.end_at || new Date(start.getTime() + 30 * 60000))
                 
-                const startMinutes = start.getHours() * 60 + start.getMinutes()
-                const durationMinutes = Math.max(30, (end.getTime() - start.getTime()) / 60000)
-                
-                const top = (startMinutes / 60) * HOUR_HEIGHT
-                const height = (durationMinutes / 60) * HOUR_HEIGHT
+                // Hide if it's the currently dragged original event
+                if (dragSession.status === 'dragging' && dragSession.originalEvent?.id === item.id) {
+                  return null; // The OverlayRenderer renders the drag preview
+                }
 
                 return (
                   <div 
                     key={item.id}
-                    onClick={() => onItemClick(item)}
+                    onClick={() => onItemClick(item as any)}
+                    onPointerDown={(e) => {
+                      dragController.beginDrag(item, { x: e.clientX, y: e.clientY })
+                      
+                      const moveHandler = (moveEvt: PointerEvent) => {
+                        dragController.updateDrag({ x: moveEvt.clientX, y: moveEvt.clientY })
+                      }
+                      const upHandler = () => {
+                        dragController.commitDrag()
+                        window.removeEventListener('pointermove', moveHandler)
+                        window.removeEventListener('pointerup', upHandler)
+                      }
+                      
+                      window.addEventListener('pointermove', moveHandler)
+                      window.addEventListener('pointerup', upHandler)
+                    }}
                     className={cn(
-                      "absolute left-1 right-1 rounded-lg border-l-[3px] p-2.5 overflow-hidden z-10 transition-all hover:z-20 cursor-pointer group/event shadow-lg",
+                      "absolute rounded-lg border-l-[3px] p-2.5 overflow-hidden z-10 transition-all hover:z-20 cursor-pointer group/event shadow-lg",
                       item.type === 'event' 
                         ? "bg-[#4285F4]/10 border-[#4285F4] hover:bg-[#4285F4]/20" 
                         : "bg-[#039BE5]/10 border-[#039BE5] hover:bg-[#039BE5]/20"
                     )}
                     style={{ 
-                      top: `${top}px`, 
-                      height: `${height}px`,
+                      top: `${rect.y}px`, 
+                      height: `${rect.height}px`,
+                      left: `${rect.x}%`,
+                      width: `calc(${rect.width}% - 4px)`, // Leave a little gap
                     }}
                   >
                     <div className="flex flex-col gap-1.5 h-full">
@@ -239,7 +234,7 @@ export function WeekView({ currentDate, events, tasks, onItemClick }: WeekViewPr
                           {item.title}
                         </span>
                       </div>
-                      {durationMinutes >= 45 && (
+                      {rect.height >= 40 && (
                         <div className="flex items-center gap-1 opacity-60">
                           <span className="text-[9px] font-bold uppercase">
                             {format(start, 'h:mm a')}
@@ -257,4 +252,3 @@ export function WeekView({ currentDate, events, tasks, onItemClick }: WeekViewPr
     </div>
   )
 }
-  const getTaskStart = (task: Task) => task.start_at || task.due_date

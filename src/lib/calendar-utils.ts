@@ -35,10 +35,16 @@ export const getDayOfWeekHeader = (date: Date) => format(date, 'EEE')
 export const getWeekRangeString = (date: Date) => {
   const start = startOfWeek(date)
   const end = endOfWeek(date)
+  
   if (isSameMonth(start, end)) {
-    return `${format(start, 'MMM d')} – ${format(end, 'd, yyyy')}`
+    return format(start, 'MMM yyyy')
   }
-  return `${format(start, 'MMM d')} – ${format(end, 'MMM d, yyyy')}`
+  
+  if (start.getFullYear() === end.getFullYear()) {
+    return `${format(start, 'MMM')} - ${format(end, 'MMM yyyy')}`
+  }
+  
+  return `${format(start, 'MMM yyyy')} - ${format(end, 'MMM yyyy')}`
 }
 
 export const getDayFullString = (date: Date) => format(date, 'EEEE, MMMM d, yyyy')
