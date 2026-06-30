@@ -2,6 +2,8 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { LucideIcon } from 'lucide-react'
 
+export type CalendarViewType = 'month' | 'week' | 'day' | 'overdue' | 'schedule' | 'tasks' | 'events'
+
 export interface SearchResult {
   id: string
   type: 'task' | 'note' | 'doc' | 'event' | 'folder' | 'command'
@@ -37,6 +39,8 @@ interface UIState {
   recentSearches: SearchResult[]
   addRecentSearch: (item: SearchResult) => void
   clearRecentSearches: () => void
+  calendarView: CalendarViewType
+  setCalendarView: (view: CalendarViewType) => void
 }
 
 export const useUIStore = create<UIState>()(
@@ -64,12 +68,15 @@ export const useUIStore = create<UIState>()(
         return { recentSearches: [item, ...filtered].slice(0, 10) }
       }),
       clearRecentSearches: () => set({ recentSearches: [] }),
+      calendarView: 'month',
+      setCalendarView: (view) => set({ calendarView: view }),
     }),
     {
       name: 'ui-storage',
       partialize: (state) => ({
         isSidebarOpen: state.isSidebarOpen,
         recentSearches: state.recentSearches,
+        calendarView: state.calendarView,
       }),
       merge: (persistedState: any, currentState) => ({
         ...currentState,

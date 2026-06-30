@@ -13,8 +13,6 @@ import {
   eachDayOfInterval, 
   format,
   isSameDay,
-  startOfDay,
-  endOfDay,
 } from "date-fns"
 import { TimeGrid } from "./time-grid"
 import { useCalendarEngine, useDragSession } from "./hooks/useCalendarEngine"
@@ -73,18 +71,6 @@ export function WeekView({ currentDate, events, tasks, onItemClick, onSelectDate
     return `GMT${sign}${hours}${minutes > 0 ? `:${minutes.toString().padStart(2, '0')}` : ''}`
   }, [])
 
-  const getAllDayItems = (date: Date) => {
-    // An event is in this day's all-day slot if it's considered an all-day event
-    // and the current 'date' falls within its start/end interval.
-    const dayEvents = events.filter(event => {
-      if (event.deleted_at || !isAllDayEvent(event)) return false
-      const eventStart = startOfDay(new Date(event.start_date))
-      const eventEnd = endOfDay(new Date(event.end_date))
-      return date.getTime() >= eventStart.getTime() && date.getTime() <= eventEnd.getTime()
-    })
-    
-    return dayEvents
-  }
 
   const getGridItems = (date: Date) => {
     // Regular time-bound events that start on this specific day

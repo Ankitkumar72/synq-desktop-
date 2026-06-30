@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useEffect, useState, useRef } from "react"
+import { useMemo, useEffect, useRef } from "react"
 import { 
   startOfDay, 
   endOfDay, 
@@ -10,10 +10,9 @@ import {
 
 interface TimeGridProps {
   children: React.ReactNode
-  showCurrentTime?: boolean
 }
 
-export function TimeGrid({ children, showCurrentTime = true }: TimeGridProps) {
+export function TimeGrid({ children }: TimeGridProps) {
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   
   const hours = useMemo(() => {
@@ -22,14 +21,10 @@ export function TimeGrid({ children, showCurrentTime = true }: TimeGridProps) {
     return eachHourOfInterval({ start, end })
   }, [])
 
-  const [now, setNow] = useState(new Date())
-  const [mounted, setMounted] = useState(false)
   const HOUR_HEIGHT = 48
 
   useEffect(() => {
     const frame = setTimeout(() => {
-      setMounted(true)
-      
       // Auto-scroll to current time on mount
       if (scrollContainerRef.current) {
         const currentHour = new Date().getHours()
@@ -38,19 +33,8 @@ export function TimeGrid({ children, showCurrentTime = true }: TimeGridProps) {
       }
     }, 0)
 
-    if (!showCurrentTime) return () => clearTimeout(frame)
-    
-    const timer = setInterval(() => setNow(new Date()), 60000)
-    return () => {
-      clearTimeout(frame)
-      clearInterval(timer)
-    }
-  }, [showCurrentTime])
-
-  const currentTimeTop = useMemo(() => {
-    const minutesSinceMidnight = now.getHours() * 60 + now.getMinutes()
-    return (minutesSinceMidnight / 60) * HOUR_HEIGHT
-  }, [now])
+    return () => clearTimeout(frame)
+  }, [])
 
   return (
     <div 
