@@ -41,6 +41,7 @@ import { startOfWeek, eachDayOfInterval } from 'date-fns'
 import { MonthView } from "@/components/calendar/month-view"
 import { WeekView } from "@/components/calendar/week-view"
 import { DayView } from "@/components/calendar/day-view"
+import { YearView } from "@/components/calendar/year-view"
 import { ItemDetail } from "@/components/calendar/item-detail"
 import { Task, CalendarEvent } from "@/shared"
 import {
@@ -274,7 +275,18 @@ export default function CalendarPage() {
           </header>
 
           <div className="flex-1 flex flex-col overflow-hidden min-h-0">
-            {view === 'year' && <YearView />}
+            {view === 'year' && (
+              <YearView 
+                currentDate={currentDate} 
+                onSelectDate={(date) => {
+                  setSelectedDate(date)
+                  setCurrentDate(date)
+                  setView('day')
+                }} 
+                onPrevYear={handlePrev}
+                onNextYear={handleNext}
+              />
+            )}
             {view === 'month' && (
               <MonthView
                 currentMonth={currentDate}
@@ -421,17 +433,6 @@ function ScheduleView() {
       <div className="text-center">
         <h3 className="text-stone-300 font-bold mb-1">Upcoming Schedule</h3>
         <p className="text-sm">Your chronological agenda will appear here.</p>
-      </div>
-    </div>
-  )
-}
-
-function YearView() {
-  return (
-    <div className="flex-1 flex flex-col items-center justify-center text-stone-500 gap-4 animate-in fade-in slide-in-from-bottom-4 duration-700">
-      <div className="text-center">
-        <h3 className="text-stone-300 font-bold mb-1 font-display">Year View</h3>
-        <p className="text-sm">Overview of the entire year will appear here.</p>
       </div>
     </div>
   )
