@@ -55,13 +55,14 @@ export function TimeGrid({ children, showCurrentTime = true }: TimeGridProps) {
   return (
     <div 
       ref={scrollContainerRef}
-      className="flex-1 flex overflow-y-auto relative group/grid bg-[#0A0A0A] scrollbar-thin scrollbar-thumb-white/10"
+      className="flex-1 overflow-y-auto relative group/grid bg-[#0A0A0A] scrollbar-thin scrollbar-thumb-white/10"
     >
-      {/* Time column */}
-      <div className="w-16 flex flex-col border-r border-white/10 select-none relative z-20 bg-[#0A0A0A]/95 backdrop-blur-md">
+      <div className="flex min-w-full" style={{ height: `${24 * HOUR_HEIGHT}px` }}>
+        {/* Time column */}
+        <div className="w-16 flex flex-col border-r border-white/10 select-none relative z-20 bg-[#0A0A0A]/95 backdrop-blur-md">
         {hours.map((hour, i) => (
-          <div key={i} style={{ height: `${HOUR_HEIGHT}px` }} className="relative px-2 shrink-0">
-            <span className="absolute -top-[7px] right-2 text-right text-[11px] font-medium text-stone-400 tracking-tight uppercase">
+          <div key={i} style={{ height: `${HOUR_HEIGHT}px` }} className="relative px-2 shrink-0 border-b border-white/[0.08] last:border-b-0">
+            <span className="absolute -top-[7px] right-2 text-right text-[11px] font-medium text-stone-400 tracking-tight uppercase bg-[#0A0A0A] px-1">
               {i === 0 ? "" : format(hour, "h a")}
             </span>
           </div>
@@ -102,6 +103,7 @@ export function TimeGrid({ children, showCurrentTime = true }: TimeGridProps) {
         >
           {children}
         </div>
+      </div>
       </div>
     </div>
   )

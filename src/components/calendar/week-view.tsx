@@ -26,6 +26,7 @@ interface WeekViewProps {
   events: CalendarEvent[]
   tasks: Task[]
   onItemClick: (item: (Task & { type: 'task' }) | (CalendarEvent & { type: 'event' })) => void
+  onSelectDate?: (date: Date) => void
 }
 
 const isAllDayEvent = (event: CalendarEvent) => {
@@ -36,7 +37,7 @@ const isAllDayEvent = (event: CalendarEvent) => {
 
 const getTaskStart = (task: Task) => task.start_at || task.due_date
 
-export function WeekView({ currentDate, events, tasks, onItemClick }: WeekViewProps) {
+export function WeekView({ currentDate, events, tasks, onItemClick, onSelectDate }: WeekViewProps) {
   const weekDays = useMemo(() => {
     const start = startOfWeek(currentDate)
     return eachDayOfInterval({ start, end: addDays(start, 6) })
@@ -121,16 +122,20 @@ export function WeekView({ currentDate, events, tasks, onItemClick }: WeekViewPr
             {weekDays.map((day, i) => {
               const isToday = isSameDay(day, new Date())
               return (
-                <div key={i} className="flex-1 py-1.5 flex items-center justify-center gap-[6px] border-r border-white/10 last:border-r-0">
+                <div 
+                  key={i} 
+                  onClick={() => onSelectDate?.(day)}
+                  className="flex-1 py-1.5 flex items-center justify-center gap-[6px] border-r border-white/10 last:border-r-0 cursor-pointer hover:bg-white/[0.03] transition-colors group"
+                >
                   <span className={cn(
-                    "text-xs font-medium uppercase tracking-wider",
-                    isToday ? "text-white" : "text-stone-400"
+                    "text-xs font-medium uppercase tracking-wider transition-colors",
+                    isToday ? "text-white" : "text-stone-400 group-hover:text-stone-200"
                   )}>
                     {format(day, 'EEE')}
                   </span>
                   <span className={cn(
                     "min-w-6 h-6 flex items-center justify-center text-xs font-bold rounded-full px-1.5 transition-colors",
-                    isToday ? "bg-blue-600 text-white shadow-md shadow-blue-900/20" : "text-stone-400 hover:text-stone-200"
+                    isToday ? "bg-blue-600 text-white shadow-md shadow-blue-900/20" : "text-stone-400 group-hover:text-stone-200"
                   )}>
                     {format(day, 'd')}
                   </span>

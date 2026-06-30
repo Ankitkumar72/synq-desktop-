@@ -271,7 +271,19 @@ export default function CalendarPage() {
                 }}
               />
             )}
-            {view === 'week' && <WeekView currentDate={currentDate} events={events} tasks={tasks} onItemClick={handleItemClick} />}
+            {view === 'week' && (
+              <WeekView 
+                currentDate={currentDate} 
+                events={events} 
+                tasks={tasks} 
+                onItemClick={handleItemClick}
+                onSelectDate={(date) => {
+                  setSelectedDate(date)
+                  setCurrentDate(date)
+                  setView('day')
+                }}
+              />
+            )}
             {view === 'day' && <DayView currentDate={currentDate} events={events} tasks={tasks} onItemClick={handleItemClick} />}
             {view === 'schedule' && <ScheduleView />}
             {view === 'overdue' && <OverdueView />}
