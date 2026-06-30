@@ -50,11 +50,8 @@ export const useTaskStore = create<TaskState>()(
           set({ isLoading: true, error: null })
         }
         
-        let userId = useUserStore.getState().user?.id
-        if (!userId) {
-          const { data: { user } } = await supabase.auth.getUser()
-          userId = user?.id
-        }
+        const userId = useUserStore.getState().user?.id
+        
 
         if (!userId) {
           set({ error: 'No authenticated user', isLoading: false })
@@ -109,13 +106,7 @@ export const useTaskStore = create<TaskState>()(
       addTask: async (t) => {
         if (!supabase) return console.warn('Supabase not configured')
         
-        let userId = useUserStore.getState().user?.id
-        
-        // Robust fallback: fetch user directly if store is empty
-        if (!userId) {
-          const { data: { user } } = await supabase.auth.getUser()
-          userId = user?.id
-        }
+        const userId = useUserStore.getState().user?.id
 
         if (!userId) {
           set({ error: 'No authenticated user' })

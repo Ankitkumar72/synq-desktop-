@@ -43,11 +43,8 @@ export const useFolderStore = create<FolderState>()(
           set({ isLoading: true, error: null })
         }
 
-        let userId = useUserStore.getState().user?.id
-        if (!userId) {
-          const { data: { user } } = await supabase.auth.getUser()
-          userId = user?.id
-        }
+        const userId = useUserStore.getState().user?.id
+        
 
         if (!userId) {
           set({ error: 'No authenticated user', isLoading: false })
@@ -85,11 +82,8 @@ export const useFolderStore = create<FolderState>()(
       addFolder: async (folder) => {
         if (!supabase) return console.warn('Supabase not configured')
 
-        let userId = useUserStore.getState().user?.id
-        if (!userId) {
-          const { data: { user } } = await supabase.auth.getUser()
-          userId = user?.id
-        }
+        const userId = useUserStore.getState().user?.id
+        
 
         if (!userId) return console.warn('No authenticated user')
 

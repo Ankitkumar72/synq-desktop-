@@ -45,11 +45,8 @@ export const useProjectStore = create<ProjectState>()(
           set({ isLoading: true, error: null })
         }
 
-        let userId = useUserStore.getState().user?.id
-        if (!userId) {
-          const { data: { user } } = await supabase.auth.getUser()
-          userId = user?.id
-        }
+        const userId = useUserStore.getState().user?.id
+        
 
         if (!userId) {
           set({ error: 'No authenticated user', isLoading: false })
@@ -95,12 +92,9 @@ export const useProjectStore = create<ProjectState>()(
       addProject: async (pr) => {
         if (!supabase) return console.warn('Supabase not configured')
 
-        let userId = useUserStore.getState().user?.id
+        const userId = useUserStore.getState().user?.id
 
-        if (!userId) {
-          const { data: { user } } = await supabase.auth.getUser()
-          userId = user?.id
-        }
+        
 
         if (!userId) return console.warn('No authenticated user')
 

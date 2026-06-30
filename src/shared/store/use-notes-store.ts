@@ -124,11 +124,8 @@ export const useNotesStore = create<NotesState>()(
         }
 
         try {
-          let userId = useUserStore.getState().user?.id
-          if (!userId) {
-            const { data: { user } } = await supabase.auth.getUser()
-            userId = user?.id
-          }
+          const userId = useUserStore.getState().user?.id
+          
 
           if (!userId) {
             console.error('[NotesStore] No authenticated user found');

@@ -41,13 +41,7 @@ export const useEventStore = create<EventState>()(
       addEvent: async (e) => {
         if (!supabase) return console.warn('Supabase not configured')
         
-        let userId = useUserStore.getState().user?.id
-        
-        // Robust fallback: fetch user directly if store is empty
-        if (!userId) {
-          const { data: { user } } = await supabase.auth.getUser()
-          userId = user?.id
-        }
+        const userId = useUserStore.getState().user?.id
 
         if (!userId) {
           return console.warn('No authenticated user')
@@ -221,11 +215,8 @@ export const useEventStore = create<EventState>()(
           set({ isLoading: true, error: null })
         }
         
-        let userId = useUserStore.getState().user?.id
-        if (!userId) {
-          const { data: { user } } = await supabase.auth.getUser()
-          userId = user?.id
-        }
+        const userId = useUserStore.getState().user?.id
+        
 
         if (!userId) {
           console.warn('[EventStore] fetchEvents called without authenticated user')
