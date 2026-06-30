@@ -30,6 +30,7 @@ playwright/.cache/
 Thumbs.db
 .gemini/
 .geminid/
+.agents/
 
 # debug
 *.log
