@@ -61,24 +61,14 @@ export function TimeGrid({ children, showCurrentTime = true }: TimeGridProps) {
         {/* Time column */}
         <div className="w-16 flex flex-col border-r border-white/10 select-none relative z-20 bg-[#0A0A0A]/95 backdrop-blur-md">
         {hours.map((hour, i) => (
-          <div key={i} style={{ height: `${HOUR_HEIGHT}px` }} className="relative px-2 shrink-0 border-b border-white/[0.08] last:border-b-0">
-            <span className="absolute -top-[7px] right-2 text-right text-[11px] font-medium text-stone-400 tracking-tight uppercase bg-[#0A0A0A] px-1">
+          <div key={i} style={{ height: `${HOUR_HEIGHT}px` }} className="relative shrink-0">
+            <span className="absolute -top-[7px] right-2 text-right text-[11px] font-medium text-white tracking-tight uppercase">
               {i === 0 ? "" : format(hour, "h a")}
             </span>
           </div>
         ))}
 
-        {/* Current time pill */}
-        {mounted && showCurrentTime && (
-          <div 
-            className="absolute left-0 right-0 z-50 flex items-center justify-center pointer-events-none transition-all"
-            style={{ top: `${currentTimeTop}px`, marginTop: '-8px' }}
-          >
-            <div className="bg-[#ef4444] text-white text-[9px] font-bold px-1.5 py-0.5 rounded-[3px] shadow-lg shadow-black/20 tracking-tighter uppercase">
-              {format(now, "h:mm a")}
-            </div>
-          </div>
-        )}
+
       </div>
 
       {/* Grid content */}
