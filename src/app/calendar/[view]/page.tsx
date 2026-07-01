@@ -6,9 +6,6 @@ import {
   Plus,
   ChevronLeft,
   ChevronRight,
-  Search,
-  Settings,
-  HelpCircle,
   ChevronDown,
   CalendarRange,
   CheckSquare,
@@ -263,14 +260,7 @@ export default function CalendarPage() {
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
-              <div className="h-6 w-px bg-white/10 mx-2" />
-              <div className="flex items-center gap-2">
-                {[Search, Settings, HelpCircle].map((Icon, idx) => (
-                  <Button key={idx} variant="ghost" size="icon" className="h-10 w-10 text-stone-500 hover:text-white hover:bg-white/5 rounded-xl transition-all">
-                    <Icon className="w-5 h-5" />
-                  </Button>
-                ))}
-              </div>
+
             </div>
           </header>
 
