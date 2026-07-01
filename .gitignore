@@ -35,6 +35,8 @@ Thumbs.db
 .gemini/
 .geminid/
 .agents/
+design.md
+
 
 # debug
 *.log
