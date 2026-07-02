@@ -1,5 +1,8 @@
 import StarterKit from '@tiptap/starter-kit'
+import { Extension } from '@tiptap/core'
+import { Plugin, PluginKey } from '@tiptap/pm/state'
 import Collaboration from '@tiptap/extension-collaboration'
+import CollaborationCursor from '@tiptap/extension-collaboration-cursor'
 import { Markdown } from 'tiptap-markdown'
 import Link from '@tiptap/extension-link'
 import Underline from '@tiptap/extension-underline'
@@ -24,16 +27,57 @@ import TextAlign from '@tiptap/extension-text-align'
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight'
 import { common, createLowlight } from 'lowlight'
 import GlobalDragHandle from 'tiptap-extension-global-drag-handle'
-
+import { ToggleExtension } from './extensions/toggle-extension'
+import { BookmarkExtension } from './extensions/bookmark-extension'
+import { ColumnGroup } from './extensions/column-group'
+import { Column } from './extensions/column'
 const lowlight = createLowlight(common)
 
-export function getEditorExtensions(ydoc?: Y.Doc) {
+const ClipboardExtension = Extension.create({
+  name: 'clipboardHandler',
+  addProseMirrorPlugins() {
+    return [
+      new Plugin({
+        key: new PluginKey('clipboardHandler'),
+        props: {
+          handlePaste: (view, event) => {
+            if (!event.clipboardData) return false
+            const text = event.clipboardData.getData('text/plain')
+            
+            // Regex to check if pasted text is a valid URL
+            const urlRegex = /^(https?:\/\/[^\s]+)$/i
+            if (urlRegex.test(text.trim())) {
+              const url = text.trim()
+              const { state, dispatch } = view
+              const { selection } = state
+              const { $from } = selection
+
+              // Only convert to bookmark if pasting on an empty paragraph
+              if ($from.parent.type.name === 'paragraph' && $from.parent.textContent === '') {
+                const node = view.state.schema.nodes.bookmark.create({ url })
+                const tr = state.tr.replaceSelectionWith(node)
+                dispatch(tr)
+                return true // Handled
+              }
+            }
+            return false // Let Tiptap handle normally
+          },
+        },
+      }),
+    ]
+  },
+})
+
+export function getEditorExtensions(ydoc?: Y.Doc, provider?: any) {
   const extensions = [
     StarterKit.configure({
       undoRedo: false,
       codeBlock: false, 
       gapcursor: false,
       dropcursor: false,
+      link: false,
+      underline: false,
+      trailingNode: false,
     }),
     CodeBlockLowlight.configure({
       lowlight,
@@ -96,6 +140,9 @@ export function getEditorExtensions(ydoc?: Y.Doc) {
         if (node.type.name === 'codeBlock') {
           return '// Write code...'
         }
+        if (node.type.name === 'toggle') {
+          return 'Toggle'
+        }
         return ""
       },
       showOnlyWhenEditable: true,
@@ -106,6 +153,11 @@ export function getEditorExtensions(ydoc?: Y.Doc) {
     SlashCommand.configure({
       suggestion: suggestionConfig,
     }),
+    ToggleExtension,
+    BookmarkExtension,
+    ColumnGroup,
+    Column,
+    ClipboardExtension,
     GlobalDragHandle.configure({
       dragHandleWidth: 20,
       scrollTreshold: 100,
@@ -127,6 +179,18 @@ export function getEditorExtensions(ydoc?: Y.Doc) {
       Collaboration.configure({
         document: ydoc,
         field: 'content',
+      }) as any
+    )
+  }
+
+  if (provider) {
+    extensions.push(
+      CollaborationCursor.configure({
+        provider: provider,
+        user: {
+          name: 'Anonymous',
+          color: '#f783ac',
+        },
       }) as any
     )
   }

@@ -134,7 +134,7 @@ export function WeekView({ currentDate, events, tasks, onItemClick, onSelectDate
                   </span>
                   <span className={cn(
                     "min-w-6 h-6 flex items-center justify-center text-xs font-bold rounded-full px-1.5 transition-colors",
-                    isToday ? "bg-blue-600 text-white shadow-md shadow-blue-900/20" : "text-stone-400 group-hover:text-stone-200"
+                    isToday ? "bg-white text-black shadow-md" : "text-stone-400 group-hover:text-stone-200"
                   )}>
                     {format(day, 'd')}
                   </span>

@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo } from "react"
+import { useMemo, useState, useEffect } from "react"
 import { 
   CheckSquare,
   Clock,
@@ -24,8 +24,25 @@ interface DayViewProps {
 }
 
 export function DayView({ currentDate, events, tasks, onItemClick }: DayViewProps) {
-  const HOUR_HEIGHT = 80
+  const HOUR_HEIGHT = 48
   const getTaskStart = (task: Task) => task.start_at || task.due_date
+
+  const [now, setNow] = useState(new Date())
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    const frame = setTimeout(() => setMounted(true), 0)
+    const timer = setInterval(() => setNow(new Date()), 60000)
+    return () => {
+      clearTimeout(frame)
+      clearInterval(timer)
+    }
+  }, [])
+
+  const currentTimeTop = useMemo(() => {
+    const minutesSinceMidnight = now.getHours() * 60 + now.getMinutes()
+    return (minutesSinceMidnight / 60) * HOUR_HEIGHT
+  }, [now])
 
   const items = useMemo(() => {
     const dayEvents = events.filter(event => isSameDay(new Date(event.start_date), currentDate) && !event.deleted_at)
@@ -42,28 +59,9 @@ export function DayView({ currentDate, events, tasks, onItemClick }: DayViewProp
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
-      {/* Header */}
-      <div className="flex border-b border-white/5 bg-[#0e0e0e]/50 backdrop-blur-md">
-        <div className="w-16 border-r border-white/5 shrink-0" />
-        <div className="flex-1 px-8 py-6 flex flex-col gap-1">
-          <span className="text-[10px] font-black uppercase tracking-[0.2em] text-stone-500">
-            {format(currentDate, 'EEEE')}
-          </span>
-          <div className="flex items-center gap-4">
-            <h2 className="text-3xl font-bold text-white tracking-tight">
-              {format(currentDate, 'MMMM d, yyyy')}
-            </h2>
-            {isSameDay(currentDate, new Date()) && (
-              <span className="bg-blue-600/20 text-blue-400 text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full border border-blue-500/20 shadow-[0_0_15px_rgba(59,130,246,0.2)]">
-                Today
-              </span>
-            )}
-          </div>
-        </div>
-      </div>
 
       {/* Grid */}
-      <TimeGrid>
+      <TimeGrid hourHeight={HOUR_HEIGHT}>
         <div className="flex-1 relative bg-transparent">
           {/* Grid interactive slots */}
           <div className="absolute inset-x-0 top-0 bottom-0 flex flex-col pointer-events-none">
@@ -79,13 +77,23 @@ export function DayView({ currentDate, events, tasks, onItemClick }: DayViewProp
                     <button 
                       type="button"
                       className="w-full hover:bg-white/[0.02] transition-colors cursor-pointer pointer-events-auto border-none bg-transparent block p-0"
-                      style={{ height: `80px` }} // HOUR_HEIGHT is 80
+                      style={{ height: `${HOUR_HEIGHT}px` }}
                     />
                   }
                 />
               )
             })}
           </div>
+
+          {/* Current time indicator */}
+          {mounted && isSameDay(currentDate, new Date()) && (
+            <div 
+              className="absolute left-0 right-0 h-px bg-[#ef4444] z-40 pointer-events-none flex items-center"
+              style={{ top: `${currentTimeTop}px` }}
+            >
+              <div className="w-2 h-2 rounded-full bg-[#ef4444] -ml-1" />
+            </div>
+          )}
 
           {items.map((item) => {
             const start = item.type === 'event'
@@ -130,7 +138,7 @@ export function DayView({ currentDate, events, tasks, onItemClick }: DayViewProp
                         <div className="flex items-center gap-2.5 text-stone-500 font-bold text-[12px] uppercase tracking-wider">
                           <Clock className="w-4 h-4" />
                           <span>
-                            {format(start, 'h:mm a')} – {format(end, 'h:mm a')}
+                            {format(start, 'h:mm a')} â€“ {format(end, 'h:mm a')}
                           </span>
                         </div>
                       </div>

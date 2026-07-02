@@ -10,9 +10,10 @@ import {
 
 interface TimeGridProps {
   children: React.ReactNode
+  hourHeight?: number
 }
 
-export function TimeGrid({ children }: TimeGridProps) {
+export function TimeGrid({ children, hourHeight = 48 }: TimeGridProps) {
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   
   const hours = useMemo(() => {
@@ -21,7 +22,7 @@ export function TimeGrid({ children }: TimeGridProps) {
     return eachHourOfInterval({ start, end })
   }, [])
 
-  const HOUR_HEIGHT = 48
+  const HOUR_HEIGHT = hourHeight
 
   useEffect(() => {
     const frame = setTimeout(() => {

@@ -100,7 +100,7 @@ function MonthBlock({ monthDate, onSelectDate }: { monthDate: Date, onSelectDate
                   "h-7 w-7 text-[13px] flex items-center justify-center rounded-full cursor-pointer transition-all",
                   !isCurrentMonth ? "text-stone-700 hover:text-white hover:bg-white/10" :
                   isToday
-                    ? "bg-[#60A5FA] text-black font-bold shadow-sm"
+                    ? "bg-white text-black font-bold shadow-sm"
                     : "text-stone-300 hover:text-white hover:bg-white/10"
                 )}
               >

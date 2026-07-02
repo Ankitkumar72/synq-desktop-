@@ -129,7 +129,7 @@ export default function CalendarPage() {
   const getHeaderTitle = () => {
     if (view === 'month') return getMonthYearString(currentDate)
     if (view === 'week') return getWeekRangeString(currentDate)
-    if (view === 'day') return getDayFullString(currentDate)
+    if (view === 'day') return getMonthYearString(currentDate)
     if (view === 'overdue') return "Overdue Tasks"
     if (view === 'schedule') return "Upcoming Schedule"
     if (view === 'tasks') return "All Tasks"
@@ -223,7 +223,7 @@ export default function CalendarPage() {
         </aside>
 
         <main className="flex-1 flex flex-col h-full bg-transparent relative min-h-0">
-          <header className="h-16 border-b border-white/5 flex items-center px-10 justify-between bg-background/50 backdrop-blur-xl z-20 shrink-0">
+          <header className="h-16 border-b border-white/5 flex items-center px-10 justify-between bg-background/50 backdrop-blur-xl z-20 shrink-0 relative">
             <div className="flex items-center gap-10">
               <div className="flex items-center gap-4">
                 <Button
@@ -247,6 +247,19 @@ export default function CalendarPage() {
               </div>
             </div>
 
+            {view === 'day' && (
+              <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center gap-[6px] cursor-pointer hover:bg-white/[0.03] px-3 py-1.5 rounded-xl transition-colors select-none">
+                <span className="text-sm font-medium uppercase tracking-wider text-stone-400">
+                  {format(currentDate, 'EEE')}
+                </span>
+                <span className={cn(
+                  "min-w-8 h-8 flex items-center justify-center text-sm font-bold rounded-full px-2",
+                  isSameDay(currentDate, new Date()) ? "bg-white text-black shadow-md" : "text-stone-300"
+                )}>
+                  {format(currentDate, 'd')}
+                </span>
+              </div>
+            )}
 
             <div className="flex items-center gap-6">
               <DropdownMenu>
