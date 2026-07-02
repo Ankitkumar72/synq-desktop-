@@ -29,7 +29,6 @@ import {
   addDays,
   subDays,
   getWeekRangeString,
-  getDayFullString,
 } from "@/lib/calendar-utils"
 import { startOfWeek, eachDayOfInterval } from 'date-fns'
 import { MonthView } from "@/components/calendar/month-view"

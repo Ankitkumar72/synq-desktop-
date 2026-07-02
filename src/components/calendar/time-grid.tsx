@@ -35,7 +35,7 @@ export function TimeGrid({ children, hourHeight = 48 }: TimeGridProps) {
     }, 0)
 
     return () => clearTimeout(frame)
-  }, [])
+  }, [HOUR_HEIGHT])
 
   return (
     <div 
