@@ -261,44 +261,65 @@ export default function CalendarPage() {
             )}
 
             <div className="flex items-center gap-6">
-              <DropdownMenu>
-                <DropdownMenuTrigger
-                  render={
-                    <button className="flex items-center gap-3 bg-white/[0.03] border border-white/5 rounded-xl px-5 py-2 cursor-pointer hover:bg-white/5 transition-all outline-none group">
-                      <span className="text-[17px] font-medium text-stone-400 tracking-tight group-hover:text-white transition-colors">
-                        {view === 'overdue' ? 'Overdue Tasks' : view.charAt(0).toUpperCase() + view.slice(1)}
-                      </span>
-                      <ChevronDown className="w-4 h-4 text-stone-600 group-hover:text-stone-400" />
+              
+              {/* Option 1: Notion Calendar Subdued Switcher */}
+              <div className="flex flex-col items-center gap-1">
+                <span className="text-[10px] text-stone-600 uppercase font-bold tracking-widest">Option 1</span>
+                <DropdownMenu>
+                  <DropdownMenuTrigger
+                    render={
+                      <button className="flex items-center gap-1.5 px-3 py-1.5 cursor-pointer hover:bg-white/5 rounded-lg transition-all outline-none group">
+                        <span className="text-[15px] font-medium text-stone-400 group-hover:text-white transition-colors">
+                          {view === 'overdue' ? 'Overdue' : view.charAt(0).toUpperCase() + view.slice(1)}
+                        </span>
+                        <ChevronDown className="w-3.5 h-3.5 text-stone-600 group-hover:text-stone-400 transition-colors" />
+                      </button>
+                    }
+                  />
+                  <DropdownMenuContent align="end" sideOffset={8} className="bg-[#121212] border-white/5 text-stone-400 min-w-[180px] rounded-xl overflow-hidden shadow-2xl p-1.5 animate-in fade-in zoom-in-95 duration-200">
+                    <DropdownMenuItem onClick={() => setView('day')} className="flex items-center justify-between px-4 py-2 hover:bg-white/5 hover:text-white cursor-pointer transition-all rounded-lg mb-0.5 group">
+                      <span className="text-[14px] font-medium tracking-tight">Day</span>
+                      <span className="text-[11px] font-bold text-stone-600 group-hover:text-stone-400">D</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setView('week')} className="flex items-center justify-between px-4 py-2 hover:bg-white/5 hover:text-white cursor-pointer transition-all rounded-lg mb-0.5 group">
+                      <span className="text-[14px] font-medium tracking-tight">Week</span>
+                      <span className="text-[11px] font-bold text-stone-600 group-hover:text-stone-400">W</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setView('month')} className="flex items-center justify-between px-4 py-2 hover:bg-white/5 hover:text-white cursor-pointer transition-all rounded-lg mb-0.5 group">
+                      <span className="text-[14px] font-medium tracking-tight">Month</span>
+                      <span className="text-[11px] font-bold text-stone-600 group-hover:text-stone-400">M</span>
+                    </DropdownMenuItem>
+                    
+                    <div className="h-px bg-white/5 mx-2 my-2" />
+                    
+                    <DropdownMenuItem onClick={() => setView('schedule')} className="flex items-center justify-between px-4 py-2 hover:bg-white/5 hover:text-white cursor-pointer transition-all rounded-lg mb-0.5 group">
+                      <span className="text-[14px] font-medium tracking-tight">Schedule</span>
+                      <span className="text-[11px] font-bold text-stone-600 group-hover:text-stone-400">S</span>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+
+              <div className="w-px h-8 bg-white/10" />
+
+              {/* Option 2: macOS Segmented Control */}
+              <div className="flex flex-col items-center gap-2">
+                <span className="text-[10px] text-stone-600 uppercase font-bold tracking-widest">Option 2</span>
+                <div className="flex items-center bg-white/[0.03] border border-white/5 p-1 rounded-xl">
+                  {['Day', 'Week', 'Month'].map(v => (
+                    <button 
+                      key={v}
+                      onClick={() => setView(v.toLowerCase() as any)}
+                      className={cn(
+                        "px-4 py-1.5 rounded-lg text-[13px] font-medium transition-all outline-none",
+                        view === v.toLowerCase() ? "bg-[#2eaadc] text-white shadow-sm" : "text-stone-400 hover:text-white hover:bg-white/5"
+                      )}
+                    >
+                      {v}
                     </button>
-                  }
-                />
-                <DropdownMenuContent align="end" sideOffset={8} className="bg-[#0e0e0e] border-white/5 text-stone-400 min-w-[160px] rounded-xl overflow-hidden shadow-2xl p-1.5 animate-in fade-in zoom-in-95 duration-200">
-                  <DropdownMenuItem onClick={() => setView('year')} className="px-4 py-2 hover:bg-white/5 hover:text-white cursor-pointer transition-all rounded-lg mb-0.5 group">
-                    <span className="text-[15px] font-medium tracking-tight">Year</span>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setView('month')} className="px-4 py-2 hover:bg-white/5 hover:text-white cursor-pointer transition-all rounded-lg mb-0.5 group">
-                    <span className="text-[15px] font-medium tracking-tight">Month</span>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setView('week')} className="px-4 py-2 hover:bg-white/5 hover:text-white cursor-pointer transition-all rounded-lg mb-0.5 group">
-                    <span className="text-[15px] font-medium tracking-tight">Week</span>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setView('day')} className="px-4 py-2 hover:bg-white/5 hover:text-white cursor-pointer transition-all rounded-lg mb-2 group">
-                    <span className="text-[15px] font-medium tracking-tight">Day</span>
-                  </DropdownMenuItem>
-
-                  <div className="h-px bg-white/5 mx-2 my-1" />
-                  <div className="px-4 py-2 mb-0.5">
-                    <span className="text-[13px] font-black text-stone-600 tracking-[0.2em]">Insights</span>
-                  </div>
-
-                  <DropdownMenuItem onClick={() => setView('schedule')} className="px-4 py-2 hover:bg-white/5 hover:text-white cursor-pointer transition-all rounded-lg mb-0.5 group">
-                    <span className="text-[15px] font-medium tracking-tight">Schedule</span>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setView('overdue')} className="px-4 py-2 hover:bg-white/5 hover:text-white cursor-pointer transition-all rounded-lg group">
-                    <span className="text-[15px] font-medium tracking-tight">Overdue Tasks</span>
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+                  ))}
+                </div>
+              </div>
 
             </div>
           </header>

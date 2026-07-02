@@ -1,6 +1,5 @@
 import StarterKit from '@tiptap/starter-kit'
-import Collaboration from '@tiptap/extension-collaboration'
-import CollaborationCursor from '@tiptap/extension-collaboration-cursor'
+
 import { Markdown } from 'tiptap-markdown'
 import Link from '@tiptap/extension-link'
 import Underline from '@tiptap/extension-underline'
@@ -16,7 +15,7 @@ import GapCursor from '@tiptap/extension-gapcursor'
 import Dropcursor from '@tiptap/extension-dropcursor'
 import Focus from '@tiptap/extension-focus'
 import { TrailingNode } from './trailing-node'
-import * as Y from 'yjs'
+
 import Placeholder from '@tiptap/extension-placeholder'
 import { SlashCommand, suggestionConfig } from './slash-command'
 import { CalloutNode } from './callout-node'
@@ -28,7 +27,7 @@ import GlobalDragHandle from 'tiptap-extension-global-drag-handle'
 
 const lowlight = createLowlight(common)
 
-export function getEditorExtensions(ydoc?: Y.Doc, provider?: any) {
+export function getEditorExtensions() {
   const extensions = [
     StarterKit.configure({
       undoRedo: false,
@@ -129,26 +128,7 @@ export function getEditorExtensions(ydoc?: Y.Doc, provider?: any) {
     TrailingNode,
   ]
 
-  if (ydoc) {
-    extensions.push(
-      Collaboration.configure({
-        document: ydoc,
-        field: 'content',
-      }) as any
-    )
-  }
 
-  if (provider) {
-    extensions.push(
-      CollaborationCursor.configure({
-        provider: provider,
-        user: {
-          name: 'Anonymous',
-          color: '#f783ac',
-        },
-      }) as any
-    )
-  }
 
   return extensions
 }
