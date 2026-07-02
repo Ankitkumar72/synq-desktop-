@@ -232,11 +232,11 @@ export default function CalendarPage() {
                 >
                   Today
                 </Button>
-                <div className="flex items-center gap-1.5 bg-white/[0.03] rounded-xl p-1 border border-white/5">
-                  <Button variant="ghost" size="icon" onClick={handlePrev} className="h-8 w-8 text-stone-500 hover:text-white hover:bg-white/5 rounded-lg transition-all">
+                <div className="flex items-center gap-1.5">
+                  <Button variant="ghost" size="icon" onClick={handlePrev} className="h-8 w-8 text-stone-300 hover:text-white hover:bg-white/5 rounded-lg transition-all">
                     <ChevronLeft className="w-5 h-5" />
                   </Button>
-                  <Button variant="ghost" size="icon" onClick={handleNext} className="h-8 w-8 text-stone-500 hover:text-white hover:bg-white/5 rounded-lg transition-all">
+                  <Button variant="ghost" size="icon" onClick={handleNext} className="h-8 w-8 text-stone-300 hover:text-white hover:bg-white/5 rounded-lg transition-all">
                     <ChevronRight className="w-5 h-5" />
                   </Button>
                 </div>
