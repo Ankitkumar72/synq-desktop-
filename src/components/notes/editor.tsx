@@ -756,7 +756,7 @@ export function NoteEditor({
     }
   }, [id, ydoc, persistNow])
 
-  const extensions = useMemo(() => getEditorExtensions(ydoc), [ydoc])
+  const extensions = useMemo(() => getEditorExtensions(), [])
 
   const editorProps = useMemo(() => ({
     attributes: {

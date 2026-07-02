@@ -8,6 +8,11 @@ import {
   ChevronRight,
   ChevronDown,
   Check,
+  LayoutGrid,
+  Columns3,
+  Square,
+  List,
+  Calendar,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { QuickCreateModal } from "@/components/layout/quick-create"
@@ -102,6 +107,45 @@ export default function CalendarPage() {
     }
   }, [events.length, tasks.length, fetchEvents, fetchTasks])
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't trigger if user is typing in an input
+      if (
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement ||
+        (e.target as HTMLElement).isContentEditable
+      ) {
+        return
+      }
+
+      // Don't trigger if modifier keys are pressed
+      if (e.ctrlKey || e.metaKey || e.altKey) {
+        return
+      }
+
+      switch (e.key.toLowerCase()) {
+        case 'd':
+          router.push('/calendar/day')
+          break
+        case 'w':
+          router.push('/calendar/week')
+          break
+        case 'm':
+          router.push('/calendar/month')
+          break
+        case 'y':
+          router.push('/calendar/year')
+          break
+        case 's':
+          router.push('/calendar/schedule')
+          break
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [router])
+
   if (!hasMounted) return null
 
   const handlePrev = () => {
@@ -126,15 +170,8 @@ export default function CalendarPage() {
   }
 
   const getHeaderTitle = () => {
-    if (view === 'month') return getMonthYearString(currentDate)
-    if (view === 'week') return getWeekRangeString(currentDate)
-    if (view === 'day') return getMonthYearString(currentDate)
-    if (view === 'overdue') return "Overdue Tasks"
-    if (view === 'schedule') return "Upcoming Schedule"
-    if (view === 'tasks') return "All Tasks"
-    if (view === 'events') return "All Events"
     if (view === 'year') return format(currentDate, 'yyyy')
-    return ""
+    return getMonthYearString(currentDate)
   }
 
 
@@ -264,42 +301,40 @@ export default function CalendarPage() {
               <DropdownMenu>
                 <DropdownMenuTrigger
                   render={
-                    <button className="flex items-center gap-3 bg-white/[0.03] border border-white/5 rounded-xl px-5 py-2 cursor-pointer hover:bg-white/5 transition-all outline-none group">
-                      <span className="text-[17px] font-medium text-stone-400 tracking-tight group-hover:text-white transition-colors">
-                        {view === 'overdue' ? 'Overdue Tasks' : view.charAt(0).toUpperCase() + view.slice(1)}
+                    <button className="flex items-center gap-1.5 px-3 py-1.5 cursor-pointer hover:bg-white/5 rounded-lg transition-all outline-none group">
+                      <span className="text-[15px] font-medium text-stone-400 group-hover:text-white transition-colors">
+                        {view === 'overdue' ? 'Overdue' : view.charAt(0).toUpperCase() + view.slice(1)}
                       </span>
-                      <ChevronDown className="w-4 h-4 text-stone-600 group-hover:text-stone-400" />
+                      <ChevronDown className="w-3.5 h-3.5 text-stone-600 group-hover:text-stone-400 transition-colors" />
                     </button>
                   }
                 />
-                <DropdownMenuContent align="end" sideOffset={8} className="bg-[#0e0e0e] border-white/5 text-stone-400 min-w-[160px] rounded-xl overflow-hidden shadow-2xl p-1.5 animate-in fade-in zoom-in-95 duration-200">
-                  <DropdownMenuItem onClick={() => setView('year')} className="px-4 py-2 hover:bg-white/5 hover:text-white cursor-pointer transition-all rounded-lg mb-0.5 group">
-                    <span className="text-[15px] font-medium tracking-tight">Year</span>
+                <DropdownMenuContent align="end" sideOffset={8} className="bg-[#121212] border-white/5 text-stone-400 min-w-[180px] rounded-xl overflow-hidden shadow-2xl p-1.5 animate-in fade-in zoom-in-95 duration-200">
+                  <DropdownMenuItem onClick={() => setView('day')} className="flex items-center justify-between px-4 py-2 hover:bg-white/5 hover:text-white cursor-pointer transition-all rounded-lg mb-0.5 group">
+                    <span className="text-[14px] font-medium tracking-tight">Day</span>
+                    <span className="text-[11px] font-bold text-stone-600 group-hover:text-stone-400">D</span>
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setView('month')} className="px-4 py-2 hover:bg-white/5 hover:text-white cursor-pointer transition-all rounded-lg mb-0.5 group">
-                    <span className="text-[15px] font-medium tracking-tight">Month</span>
+                  <DropdownMenuItem onClick={() => setView('week')} className="flex items-center justify-between px-4 py-2 hover:bg-white/5 hover:text-white cursor-pointer transition-all rounded-lg mb-0.5 group">
+                    <span className="text-[14px] font-medium tracking-tight">Week</span>
+                    <span className="text-[11px] font-bold text-stone-600 group-hover:text-stone-400">W</span>
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setView('week')} className="px-4 py-2 hover:bg-white/5 hover:text-white cursor-pointer transition-all rounded-lg mb-0.5 group">
-                    <span className="text-[15px] font-medium tracking-tight">Week</span>
+                  <DropdownMenuItem onClick={() => setView('month')} className="flex items-center justify-between px-4 py-2 hover:bg-white/5 hover:text-white cursor-pointer transition-all rounded-lg mb-0.5 group">
+                    <span className="text-[14px] font-medium tracking-tight">Month</span>
+                    <span className="text-[11px] font-bold text-stone-600 group-hover:text-stone-400">M</span>
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setView('day')} className="px-4 py-2 hover:bg-white/5 hover:text-white cursor-pointer transition-all rounded-lg mb-2 group">
-                    <span className="text-[15px] font-medium tracking-tight">Day</span>
+                  <DropdownMenuItem onClick={() => setView('year')} className="flex items-center justify-between px-4 py-2 hover:bg-white/5 hover:text-white cursor-pointer transition-all rounded-lg mb-0.5 group">
+                    <span className="text-[14px] font-medium tracking-tight">Year</span>
+                    <span className="text-[11px] font-bold text-stone-600 group-hover:text-stone-400">Y</span>
                   </DropdownMenuItem>
-
-                  <div className="h-px bg-white/5 mx-2 my-1" />
-                  <div className="px-4 py-2 mb-0.5">
-                    <span className="text-[13px] font-black text-stone-600 tracking-[0.2em]">Insights</span>
-                  </div>
-
-                  <DropdownMenuItem onClick={() => setView('schedule')} className="px-4 py-2 hover:bg-white/5 hover:text-white cursor-pointer transition-all rounded-lg mb-0.5 group">
-                    <span className="text-[15px] font-medium tracking-tight">Schedule</span>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setView('overdue')} className="px-4 py-2 hover:bg-white/5 hover:text-white cursor-pointer transition-all rounded-lg group">
-                    <span className="text-[15px] font-medium tracking-tight">Overdue Tasks</span>
+                  
+                  <div className="h-px bg-white/5 mx-2 my-2" />
+                  
+                  <DropdownMenuItem onClick={() => setView('schedule')} className="flex items-center justify-between px-4 py-2 hover:bg-white/5 hover:text-white cursor-pointer transition-all rounded-lg mb-0.5 group">
+                    <span className="text-[14px] font-medium tracking-tight">Schedule</span>
+                    <span className="text-[11px] font-bold text-stone-600 group-hover:text-stone-400">S</span>
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
-
             </div>
           </header>
 
