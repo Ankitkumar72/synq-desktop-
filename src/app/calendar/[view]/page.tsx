@@ -11,6 +11,7 @@ import {
   CheckSquare,
   CalendarDays,
   Clock,
+  Check,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { QuickCreateModal } from "@/components/layout/quick-create"
@@ -59,6 +60,19 @@ export default function CalendarPage() {
   const [currentDate, setCurrentDate] = useState(new Date())
   const [selectedDate, setSelectedDate] = useState(new Date())
   const [miniCalendarMonth, setMiniCalendarMonth] = useState(new Date())
+
+  const [syncedCalendars, setSyncedCalendars] = useState<Record<string, boolean>>({
+    google: true,
+    microsoft: false,
+  })
+  const [isSyncedOpen, setIsSyncedOpen] = useState(true)
+
+  const toggleSyncedCalendar = (id: string) => {
+    setSyncedCalendars(prev => ({
+      ...prev,
+      [id]: !prev[id]
+    }))
+  }
 
   const events = useEventStore(s => s.events); const fetchEvents = useEventStore(s => s.fetchEvents)
   const tasks = useTaskStore(s => s.tasks); const fetchTasks = useTaskStore(s => s.fetchTasks)
@@ -160,35 +174,51 @@ export default function CalendarPage() {
             />
           </div>
 
-          <div className="px-2 mb-6 space-y-1">
-            {[
-              { id: 'schedule', label: 'Schedule', icon: CalendarRange },
-              { id: 'tasks', label: 'Tasks', icon: CheckSquare },
-              { id: 'events', label: 'Events', icon: CalendarDays },
-              { id: 'overdue', label: 'Overdue Tasks', icon: Clock },
-            ].map((item) => {
-              const Icon = item.icon
-              const isActive = view === item.id
-              return (
-                <Button
-                  key={item.id}
-                  variant="ghost"
-                  onClick={() => setView(item.id)}
-                  className={cn(
-                    "w-full justify-start gap-3 h-11 px-4 rounded-xl transition-all group",
-                    isActive 
-                      ? "bg-white/[0.08] text-white font-bold border border-white/10 shadow-lg shadow-black/20" 
-                      : "text-stone-400 hover:text-white hover:bg-white/[0.05]"
-                  )}
+
+
+          <div className="px-2 mb-6">
+            <div 
+              className="flex items-center justify-between px-2 mb-3 group cursor-pointer" 
+              onClick={() => setIsSyncedOpen(!isSyncedOpen)}
+            >
+              <span className="text-[14px] font-bold text-stone-300 group-hover:text-white transition-colors">
+                My Calendars
+              </span>
+              <ChevronDown className={cn("w-4 h-4 text-stone-500 transition-transform duration-200", isSyncedOpen ? "" : "-rotate-90")} />
+            </div>
+            
+            {isSyncedOpen && (
+              <div className="space-y-0.5">
+                <button
+                  onClick={() => toggleSyncedCalendar('google')}
+                  className="w-full flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-white/5 transition-colors group"
                 >
-                  <Icon className={cn("w-4.5 h-4.5 transition-colors", isActive ? "text-blue-400" : "text-stone-500 group-hover:text-stone-300")} />
-                  <span className="text-[14px] tracking-tight">{item.label}</span>
-                  {isActive && (
-                    <div className="ml-auto w-1.5 h-1.5 rounded-full bg-blue-400 shadow-[0_0_8px_rgba(96,165,250,0.6)]" />
-                  )}
-                </Button>
-              )
-            })}
+                  <div className={cn(
+                    "w-4 h-4 rounded flex items-center justify-center border transition-all",
+                    syncedCalendars.google 
+                      ? "bg-blue-500 border-blue-500 text-white" 
+                      : "border-stone-600 group-hover:border-stone-400 bg-transparent"
+                  )}>
+                    {syncedCalendars.google && <Check className="w-3 h-3" strokeWidth={3} />}
+                  </div>
+                  <span className="text-[15px] text-stone-400 group-hover:text-white transition-colors">Google Calendar</span>
+                </button>
+                <button
+                  onClick={() => toggleSyncedCalendar('microsoft')}
+                  className="w-full flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-white/5 transition-colors group"
+                >
+                  <div className={cn(
+                    "w-4 h-4 rounded flex items-center justify-center border transition-all",
+                    syncedCalendars.microsoft 
+                      ? "bg-blue-500 border-blue-500 text-white" 
+                      : "border-stone-600 group-hover:border-stone-400 bg-transparent"
+                  )}>
+                    {syncedCalendars.microsoft && <Check className="w-3 h-3" strokeWidth={3} />}
+                  </div>
+                  <span className="text-[15px] text-stone-400 group-hover:text-white transition-colors">Microsoft Calendar</span>
+                </button>
+              </div>
+            )}
           </div>
 
           <div className="flex-1 overflow-y-auto px-2 space-y-8 scrollbar-none pb-4">
@@ -220,6 +250,7 @@ export default function CalendarPage() {
                 </h2>
               </div>
             </div>
+
 
             <div className="flex items-center gap-6">
               <DropdownMenu>

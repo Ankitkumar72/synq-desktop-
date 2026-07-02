@@ -31,8 +31,6 @@ export function getEditorExtensions(ydoc?: Y.Doc) {
   const extensions = [
     StarterKit.configure({
       undoRedo: false,
-      link: false,
-      underline: false,
       codeBlock: false, 
       gapcursor: false,
       dropcursor: false,

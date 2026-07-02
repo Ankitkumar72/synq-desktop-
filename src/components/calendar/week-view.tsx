@@ -63,6 +63,19 @@ export function WeekView({ currentDate, events, tasks, onItemClick, onSelectDate
   }, [now])
 
   const timezoneOffset = useMemo(() => {
+    try {
+      const parts = new Intl.DateTimeFormat('en-US', { timeZoneName: 'short' }).formatToParts(new Date())
+      const tzPart = parts.find(part => part.type === 'timeZoneName')
+      if (tzPart && tzPart.value) {
+        // Some browsers might return things like "GMT+5:30" instead of "IST" for some locales, 
+        // but this is the standard way to get the abbreviation.
+        return tzPart.value
+      }
+    } catch (e) {
+      console.warn("Failed to get timezone abbreviation", e)
+    }
+
+    // Fallback if abbreviation isn't found
     const offset = new Date().getTimezoneOffset()
     const sign = offset > 0 ? '-' : '+'
     const absOffset = Math.abs(offset)
