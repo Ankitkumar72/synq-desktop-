@@ -8,11 +8,6 @@ import {
   ChevronRight,
   ChevronDown,
   Check,
-  LayoutGrid,
-  Columns3,
-  Square,
-  List,
-  Calendar,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { QuickCreateModal } from "@/components/layout/quick-create"
@@ -33,7 +28,6 @@ import {
   subWeeks,
   addDays,
   subDays,
-  getWeekRangeString,
 } from "@/lib/calendar-utils"
 import { startOfWeek, eachDayOfInterval } from 'date-fns'
 import { MonthView } from "@/components/calendar/month-view"
