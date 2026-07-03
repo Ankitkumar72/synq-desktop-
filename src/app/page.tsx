@@ -38,17 +38,6 @@ const itemVariants = {
   visible: { opacity: 1, y: 0, transition: { duration: 0.5, ease: [0.25, 0.1, 0.25, 1] as const } }
 }
 
-const QUOTES = [
-  "The best way to predict the future is to create it.",
-  "Simplicity is the ultimate sophistication.",
-  "Details matter, it’s worth waiting to get them right.",
-  "Focus on being productive instead of busy.",
-  "Your mind is for having ideas, not holding them.",
-  "The only way to do great work is to love what you do.",
-  "Done is better than perfect.",
-  "Strive for progress, not perfection."
-]
-
 function NoteCard({ note, initials }: { note: Note, initials: string }) {
   const time = note.updated_at 
     ? formatDistanceToNowStrict(new Date(note.updated_at), { addSuffix: true })
@@ -130,12 +119,6 @@ export default function DashboardPage() {
   const userName = getUserDisplayName(user)
   const initials = getUserInitials(user)
   const greeting = useGreeting(userName)
-
-  const [randomQuote] = useState(() => {
-    // Stable random quote for the session
-    const index = Math.floor(Math.random() * QUOTES.length)
-    return QUOTES[index]
-  })
 
   const handleScratchChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setScratchContent(e.target.value)
@@ -244,7 +227,6 @@ export default function DashboardPage() {
             <h1 className="text-[28px] font-semibold tracking-tight text-white">{greeting}</h1>
             <div className="flex flex-col gap-1 mt-2">
               <p className="text-[#999999] text-[15px] font-medium">{format(new Date(), 'EEEE, MMMM d')}</p>
-              <p className="text-[#666666] text-[14px] italic font-medium max-w-md">&ldquo;{randomQuote}&rdquo;</p>
             </div>
           </div>
 
