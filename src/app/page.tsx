@@ -285,11 +285,6 @@ export default function DashboardPage() {
               <CalendarIcon className="w-5 h-5 text-[#808080]" />
               <h3 className="text-[18px] font-semibold text-white">Today&apos;s Schedule</h3>
             </div>
-            <div className="flex gap-4 text-[13px] text-[#808080] font-medium">
-              <span className="text-white cursor-pointer px-2 py-1 bg-[#242424] rounded-md">Today</span>
-              <span className="cursor-pointer hover:text-white transition-colors px-2 py-1">Week</span>
-              <span className="cursor-pointer hover:text-white transition-colors px-2 py-1">Month</span>
-            </div>
           </div>
 
           {/* Timeline Implementation */}
