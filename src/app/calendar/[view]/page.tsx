@@ -194,7 +194,7 @@ export default function CalendarPage() {
               onViewDateChange={setMiniCalendarMonth}
               onSelectDate={(date) => {
                 setSelectedDate(date)
-                setCurrentDate(startOfMonth(date))
+                setCurrentDate(date)
                 setMiniCalendarMonth(startOfMonth(date))
               }}
             />
