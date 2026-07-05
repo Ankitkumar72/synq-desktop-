@@ -218,11 +218,11 @@ export default function DashboardPage() {
         variants={containerVariants}
         initial="hidden"
         animate="visible"
-        className="flex-1 flex flex-col p-8 overflow-y-auto no-scrollbar bg-transparent"
+        className="flex-1 flex flex-col p-8 overflow-hidden bg-transparent min-h-0"
       >
 
         {/* Header Area */}
-        <motion.header variants={itemVariants} className="flex justify-between items-start mb-10">
+        <motion.header variants={itemVariants} className="flex justify-between items-start mb-6">
           <div>
             <h1 className="text-[28px] font-semibold tracking-tight text-white">{greeting}</h1>
             <div className="flex flex-col gap-1 mt-2">
@@ -241,9 +241,9 @@ export default function DashboardPage() {
           </div>
         </motion.header>
 
-        {/* Top Grid (Notes) */}
-        <motion.div variants={itemVariants} className="grid grid-cols-1 gap-6 mb-6">
-          <DashboardCard title="Notes" href="/notes">
+        {/* Notes Section */}
+        <motion.div variants={itemVariants} className="h-[204px] mb-6">
+          <DashboardCard title="Notes" href="/notes" className="h-full">
             {notesOnly.length > 0 ? (
               <div className="flex gap-3 overflow-x-auto no-scrollbar pb-1 -mx-1 px-1">
                 {notesOnly.map((note) => (
@@ -325,50 +325,42 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Empty State Message */}
-          {todaysEvents.length === 0 && (
-            <div className="mt-4 flex justify-center w-full">
-              <span className="text-[#515151] italic text-[13px] bg-white/[0.02] px-4 py-1.5 rounded-full border border-white/5">
-                No events scheduled for today
-              </span>
-            </div>
-          )}
+
         </motion.div>
 
         {/* Bottom Grid (Tasks & Scratch Pad) */}
-        <motion.div variants={itemVariants} className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <DashboardCard title="Today's Tasks">
-            <div className="flex flex-col gap-3">
-              {scheduledTasks.length > 0 ? (
-                scheduledTasks.map((task) => (
-                  <div
-                    key={task.id}
-                    className="flex items-center justify-between group py-1.5"
-                  >
-                    <div className="flex items-center gap-3 text-[#B4B4B4] hover:text-white transition-colors cursor-pointer" onClick={() => handleToggle(task.id)}>
-                      <Circle className="w-5 h-5 text-[#4D4D4D] group-hover:text-[#2eaadc] transition-colors" />
-                      <span className="text-[14px] font-medium">{task.title}</span>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="text-[#515151] italic text-[14px]">All caught up for today!</div>
-              )}
+        <motion.div variants={itemVariants} className="grid grid-cols-1 md:grid-cols-2 gap-6 flex-1 min-h-[240px] pb-4">
+        <DashboardCard 
+          title="Today's Tasks"
+          className="h-full min-h-0"
+          headerAction={
+            <QuickCreateModal defaultType="task" trigger={
+              <button className="text-[#515151] hover:text-[#808080] transition-colors p-1 rounded-md hover:bg-white/5" title="Add Task">
+                <Plus className="w-4 h-4" />
+              </button>
+            } />
+          }
+        >
+          <div className="flex flex-col gap-3 h-full overflow-y-auto no-scrollbar">
+            {scheduledTasks.map((task) => (
+              <div
+                key={task.id}
+                className="flex items-center justify-between group py-1.5 shrink-0"
+              >
+                <div className="flex items-center gap-3 text-[#B4B4B4] hover:text-white transition-colors cursor-pointer" onClick={() => handleToggle(task.id)}>
+                  <Circle className="w-5 h-5 text-[#4D4D4D] group-hover:text-[#2eaadc] transition-colors" />
+                  <span className="text-[14px] font-medium">{task.title}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </DashboardCard>
 
-              <QuickCreateModal defaultType="task" trigger={
-                <button className="text-[#515151] mt-4 flex items-center gap-2 cursor-pointer hover:text-[#808080] transition-colors group w-fit border-none bg-transparent p-0 outline-none">
-                  <Plus className="w-4 h-4 group-hover:scale-110 transition-transform" />
-                  <span className="text-[13px] font-medium">Add task</span>
-                </button>
-              } />
-            </div>
-          </DashboardCard>
-
-          <DashboardCard title="Scratch Pad">
+          <DashboardCard title="Scratch Pad" className="h-full min-h-0">
             <textarea
               value={scratchContent}
               onChange={handleScratchChange}
-              className="w-full h-[150px] bg-transparent resize-none outline-none text-[#B4B4B4] text-[14px] placeholder-[#4D4D4D] focus:text-white transition-colors leading-relaxed"
+              className="w-full h-full bg-transparent resize-none outline-none text-[#B4B4B4] text-[14px] placeholder-[#4D4D4D] focus:text-white transition-colors leading-relaxed"
               placeholder="Jot down quick thoughts..."
             />
           </DashboardCard>
