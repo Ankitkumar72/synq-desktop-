@@ -34,8 +34,6 @@ export function getEditorExtensions() {
       codeBlock: false, 
       gapcursor: false,
       dropcursor: false,
-      link: false,
-      underline: false,
       trailingNode: false,
     }),
     CodeBlockLowlight.configure({

@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useMemo, useEffect, useRef } from "react";
-import { Plus, Clock, FileText, ChevronRight, Folder, Files } from "lucide-react"
+import { Plus, Clock, FileText, ChevronRight, Folder, Files, ChevronDown, Library, MoreHorizontal } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -54,21 +54,21 @@ function NoteSidebarItem({
       <button
         onClick={onClick}
         className={cn(
-          "group w-full px-3 py-1.5 flex items-center gap-2 transition-all duration-200 rounded-md select-none text-left",
+          "group w-full p-1 min-h-[27px] flex items-center gap-3 transition-all duration-200 rounded-lg select-none text-left",
           isSelected
-            ? "bg-neutral-800/80 text-white"
-            : "text-neutral-400 hover:bg-neutral-800/40 hover:text-neutral-200"
+            ? "bg-white/10 text-white"
+            : "text-[#A3A3A3] hover:bg-white/5 hover:text-white"
         )}
       >
-        <div className="flex items-center justify-center shrink-0 w-7">
+        <div className="flex items-center justify-center shrink-0">
           <FileText className={cn(
-            "w-4 h-4 transition-colors",
-            isSelected ? "text-neutral-200" : "text-neutral-500 group-hover:text-neutral-400"
-          )} />
+            "w-[18px] h-[18px] transition-colors",
+            isSelected ? "text-white" : "text-[#A3A3A3] group-hover:text-white"
+          )} strokeWidth={2} />
         </div>
         <span className={cn(
-          "text-[13px] truncate flex-1 tracking-tight font-medium",
-          isSelected ? "text-white" : "text-neutral-300 group-hover:text-neutral-200"
+          "text-[14px] truncate flex-1 tracking-tight font-semibold",
+          isSelected ? "text-white" : "text-[#A3A3A3] group-hover:text-white"
         )}>
           {note.title || "Untitled Note"}
         </span>
@@ -159,6 +159,14 @@ function NotesPageContent() {
   }, [notes])
 
   const pinnedNotes = useMemo(() => filteredNotes.filter(n => n.pinned), [filteredNotes])
+  const globalNotes = useMemo(() => {
+    const folderIds = new Set(projects.map(p => p.id))
+    return filteredNotes.filter(n => {
+      if (n.folder_id && folderIds.has(n.folder_id)) return false
+      if (n.category && folderIds.has(n.category)) return false
+      return true
+    })
+  }, [filteredNotes, projects])
 
   const selectedNote = useMemo(() => {
     return notes.find(n => n.id === selectedNoteId)
@@ -255,34 +263,22 @@ function NotesPageContent() {
       <div className="flex h-full bg-transparent text-neutral-300 font-sans selection:bg-neutral-700">
         {/* Sidebar */}
         <div className={cn(
-          "flex flex-col bg-white/[0.025] border-r border-[#2E2E2E] transition-all duration-200 ease-out overflow-hidden shrink-0",
+          "flex flex-col bg-white/[0.025] border-r border-[#2E2E2E] transition-all duration-200 ease-out overflow-hidden shrink-0 font-notion",
           isSidebarOpen ? "w-64" : "w-0 border-r-0"
         )}>
-          {/* Sidebar Header */}
-          <div className="px-4 pt-4 pb-2">
-            <div className="flex items-center justify-between mb-4">
-              <h1 className="text-[11px] font-bold uppercase tracking-[0.1em] text-neutral-500">
-                Notes
-              </h1>
-            </div>
-
-
-          </div>
-
           <ScrollArea className="flex-1">
-            <div className="flex flex-col px-2 pb-6 gap-2">
+            <div className="flex flex-col px-2 pt-4 pb-6">
               {/* Pinned Section */}
               {pinnedNotes.length > 0 && (
                 <div className="flex flex-col">
                   <button
                     onClick={() => setExpandedSections(s => ({ ...s, pinned: !s.pinned }))}
-                    className="flex items-center gap-2 px-3 py-2 text-[12px] font-semibold text-neutral-500 hover:text-neutral-300 transition-colors w-full text-left group mt-4 mb-1"
+                    className="w-full flex items-center justify-between px-3.5 py-0.5 min-h-[27px] bg-transparent hover:bg-white/5 transition-colors rounded-lg group"
                   >
-                    <ChevronRight className={cn(
-                      "w-3 h-3 transition-transform duration-200 shrink-0",
-                      expandedSections.pinned && "rotate-90"
-                    )} />
-                    Pinned
+                    <div className="flex items-center gap-1.5 text-[#9B9B9B] font-medium text-[12px] leading-none">
+                      Pinned
+                      <ChevronDown className={cn("w-[14px] h-[14px] text-[#A3A3A3] transition-all duration-200 opacity-0 group-hover:opacity-100", !expandedSections.pinned && "-rotate-90")} strokeWidth={2} />
+                    </div>
                   </button>
                   <AnimatePresence initial={false}>
                     {expandedSections.pinned && (
@@ -293,7 +289,7 @@ function NotesPageContent() {
                         transition={{ duration: 0.2, ease: "easeInOut" }}
                         className="overflow-hidden"
                       >
-                        <div className="flex flex-col gap-0.5 mt-0.5">
+                        <div className="flex flex-col pt-[9px] gap-[2px]">
                           {pinnedNotes.map((note) => (
                             <NoteSidebarItem
                               key={`pinned-${note.id}`}
@@ -311,21 +307,19 @@ function NotesPageContent() {
               )}
 
               {/* All Notes Section */}
-              <div className="flex flex-col mt-1">
+              <div className="flex flex-col mt-[9px]">
                 <button
                   onClick={() => setExpandedSections(s => ({ ...s, all: !s.all }))}
-                  className="group/all flex items-center gap-1.5 px-3 py-1 text-[13px] font-medium text-stone-400 hover:text-stone-200 transition-colors w-full text-left"
+                  className="w-full flex items-center justify-between px-3.5 py-0.5 min-h-[27px] bg-transparent hover:bg-white/5 transition-colors rounded-lg group"
                 >
-                  <ChevronRight className={cn(
-                    "w-3 h-3 text-stone-500 transition-transform duration-200 shrink-0",
-                    expandedSections.all && "rotate-90"
-                  )} />
-                  <span className="flex-1 truncate">All Notes</span>
-                  <div 
-                    onClick={handleAddGlobalNote}
-                    className="opacity-0 group-hover/all:opacity-100 hover:bg-white/10 p-0.5 rounded transition-all shrink-0 text-stone-400 hover:text-stone-200"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
+                  <div className="flex items-center gap-1.5 text-[#9B9B9B] font-medium text-[12px] leading-none">
+                    All Notes
+                    <ChevronDown className={cn("w-[14px] h-[14px] text-[#A3A3A3] transition-all duration-200 opacity-0 group-hover:opacity-100", !expandedSections.all && "-rotate-90")} strokeWidth={2} />
+                  </div>
+                  <div className="flex items-center gap-1 text-[#A3A3A3] opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div onClick={(e) => { e.stopPropagation(); handleAddGlobalNote(e); }} className="hover:text-white transition-colors">
+                      <Plus className="w-[18px] h-[18px]" strokeWidth={2} />
+                    </div>
                   </div>
                 </button>
                 <AnimatePresence initial={false}>
@@ -337,14 +331,14 @@ function NotesPageContent() {
                       transition={{ duration: 0.2, ease: "easeInOut" }}
                       className="overflow-hidden"
                     >
-                      <div className="flex flex-col">
-                        {filteredNotes.length === 0 ? (
+                      <div className="flex flex-col pt-[9px] gap-[2px]">
+                        {globalNotes.length === 0 ? (
                           <div className="flex items-center gap-1.5 px-3 py-1">
                             <div className="w-3 h-3 shrink-0" />
                             <p className="text-[13px] text-stone-600 italic">No notes</p>
                           </div>
                         ) : (
-                          filteredNotes.map((note) => (
+                          globalNotes.map((note) => (
                             <NoteSidebarItem
                               key={`all-${note.id}`}
                               note={note}
@@ -360,67 +354,60 @@ function NotesPageContent() {
                 </AnimatePresence>
               </div>
 
-              {/* Folders Section */}
-              <div className="flex flex-col mt-1">
-                {projects.length > 0 && (
-                  <div className="flex flex-col">
-                    {projects.map(folder => {
-                      const folderNotes = filteredNotes.filter(n => n.folder_id === folder.id || n.category === folder.id)
-                    const isExpanded = expandedSections[`folder-${folder.id}`] !== false; // default true
-                    return (
-                      <div key={folder.id} className="flex flex-col">
-                        <button
-                          onClick={() => setExpandedSections(s => ({ ...s, [`folder-${folder.id}`]: !isExpanded }))}
-                          className="group/folder flex items-center gap-1.5 px-3 py-1 text-[13px] font-medium text-stone-400 hover:text-stone-200 transition-colors w-full text-left"
-                        >
-                          <ChevronRight className={cn(
-                            "w-3 h-3 text-stone-500 transition-transform duration-200 shrink-0",
-                            isExpanded && "rotate-90"
-                          )} />
-                          <span className="flex-1 truncate">{folder.name}</span>
-                          <div 
-                            onClick={(e) => handleAddFolderNote(e, folder.id)}
-                            className="opacity-0 group-hover/folder:opacity-100 hover:bg-white/10 p-0.5 rounded transition-all shrink-0 text-stone-400 hover:text-stone-200"
-                          >
-                            <Plus className="w-3.5 h-3.5" />
-                          </div>
-                        </button>
-                        <AnimatePresence initial={false}>
-                          {isExpanded && (
-                            <motion.div
-                              initial={{ height: 0, opacity: 0 }}
-                              animate={{ height: "auto", opacity: 1 }}
-                              exit={{ height: 0, opacity: 0, transition: { opacity: { duration: 0.1 } } }}
-                              transition={{ duration: 0.2, ease: "easeInOut" }}
-                              className="overflow-hidden"
-                            >
-                              <div className="flex flex-col">
-                                {folderNotes.length === 0 ? (
-                                  <div className="flex items-center gap-1.5 px-3 py-1">
-                                    <div className="w-3 h-3 shrink-0" />
-                                    <div className="text-[13px] text-stone-600 italic">Empty</div>
-                                  </div>
-                                ) : (
-                                  folderNotes.map((note) => (
-                                    <NoteSidebarItem
-                                      key={`folder-${folder.id}-${note.id}`}
-                                      note={note}
-                                      isSelected={selectedNoteId === note.id}
-                                      onClick={() => setSelectedNoteId(note.id)}
-                                      onAction={handleNoteAction}
-                                    />
-                                  ))
-                                )}
-                              </div>
-                            </motion.div>
-                          )}
-                        </AnimatePresence>
+              {/* Individual Folders (As Sections) */}
+              {projects.length > 0 && projects.map(folder => {
+                const folderNotes = filteredNotes.filter(n => n.folder_id === folder.id || n.category === folder.id)
+                const isExpanded = expandedSections[`folder-${folder.id}`] !== false; // default true
+                
+                return (
+                  <div key={folder.id} className="flex flex-col mt-[9px]">
+                    <button
+                      onClick={() => setExpandedSections(s => ({ ...s, [`folder-${folder.id}`]: !isExpanded }))}
+                      className="w-full flex items-center justify-between px-3.5 py-0.5 min-h-[27px] bg-transparent hover:bg-white/5 transition-colors rounded-lg group"
+                    >
+                      <div className="flex items-center gap-1.5 text-[#9B9B9B] font-medium text-[12px] leading-none truncate">
+                        <span className="truncate">{folder.name}</span>
+                        <ChevronDown className={cn("w-[14px] h-[14px] text-[#A3A3A3] transition-all duration-200 opacity-0 group-hover:opacity-100 shrink-0", !isExpanded && "-rotate-90")} strokeWidth={2} />
                       </div>
-                    )
-                  })}
-                </div>
-              )}
-              </div>
+                      <div className="flex items-center gap-1 text-[#A3A3A3] opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                        <div onClick={(e) => { e.stopPropagation(); handleAddFolderNote(e, folder.id); }} className="hover:text-white transition-colors">
+                          <Plus className="w-[18px] h-[18px]" strokeWidth={2} />
+                        </div>
+                      </div>
+                    </button>
+                    <AnimatePresence initial={false}>
+                      {isExpanded && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: "auto", opacity: 1 }}
+                          exit={{ height: 0, opacity: 0, transition: { opacity: { duration: 0.1 } } }}
+                          transition={{ duration: 0.2, ease: "easeInOut" }}
+                          className="overflow-hidden"
+                        >
+                          <div className="flex flex-col pt-[9px] gap-[2px]">
+                            {folderNotes.length === 0 ? (
+                              <div className="flex items-center gap-1.5 px-3.5 py-1">
+                                <div className="w-3 h-3 shrink-0" />
+                                <div className="text-[13px] text-stone-600 italic">Empty</div>
+                              </div>
+                            ) : (
+                              folderNotes.map((note) => (
+                                <NoteSidebarItem
+                                  key={`folder-${folder.id}-${note.id}`}
+                                  note={note}
+                                  isSelected={selectedNoteId === note.id}
+                                  onClick={() => setSelectedNoteId(note.id)}
+                                  onAction={handleNoteAction}
+                                />
+                              ))
+                            )}
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                )
+              })}
             </div>
           </ScrollArea>
         </div>

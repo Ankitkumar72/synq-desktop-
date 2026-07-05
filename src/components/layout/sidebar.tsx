@@ -2,7 +2,7 @@
 
 import {
   Settings,
-  LayoutDashboard,
+  Home,
   Calendar,
   FileText,
   Search,
@@ -20,7 +20,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { getUserDisplayName, getUserInitials } from "@/lib/user-utils"
 
 const NAV_ITEMS = [
-  { name: "Dashboard", href: "/", icon: LayoutDashboard },
+  { name: "Dashboard", href: "/", icon: Home },
   { name: "Calendar", href: "/calendar", icon: Calendar },
   { name: "Notes", href: "/notes", icon: FileText },
   { name: "Folders", href: "/folders", icon: Folder },
@@ -35,50 +35,43 @@ export function LinearSidebar() {
   const initials = getUserInitials(user)
 
   return (
-    <aside className="w-[240px] bg-[#090909] flex flex-col p-3 shrink-0 relative z-40">
-
-
+    <aside className="w-[72px] bg-[#090909] border-r border-[#1F1F1F] flex flex-col items-center py-6 shrink-0 relative z-40">
 
       {/* User Profile */}
-      <div className="flex items-center gap-3 mb-4 p-2">
-        <div className="relative">
-          <Avatar className="w-[30px] h-[30px] rounded-lg border-none bg-[#262626]" size="sm">
-            <AvatarImage src={user?.user_metadata?.avatar_url} alt={name} loading="eager" />
-            <AvatarFallback className="rounded-lg font-bold text-white bg-[#262626]">
-              {initials}
-            </AvatarFallback>
-          </Avatar>
-          {/* Online Indicator */}
-          <span className="absolute w-2 h-2 bg-[#04C40A] rounded-full -bottom-0.5 -right-0.5 border-2 border-[#090909] z-10"></span>
-        </div>
-        <span className="font-bold text-[16px] text-white truncate">{name}</span>
+      <div className="mb-8 relative">
+        <Avatar className="w-8 h-8 rounded-full border-none bg-[#7B46CE]" size="sm">
+          <AvatarImage src={user?.user_metadata?.avatar_url} alt={name} loading="eager" />
+          <AvatarFallback className="rounded-full font-medium text-[13px] text-white bg-[#7B46CE]">
+            {initials}
+          </AvatarFallback>
+        </Avatar>
       </div>
 
       {/* Search */}
-      <div 
+      <button 
         onClick={openSearch}
-        className="flex items-center justify-between bg-[#1F1F1F] border border-[#2E2E2E] rounded-lg px-3 py-1.5 mb-4 text-[#999999] cursor-pointer hover:bg-white/[0.02] transition-colors"
+        className="text-[#888888] hover:text-white transition-colors mb-6"
       >
-        <div className="flex items-center gap-2 text-[13px]">
-          <Search className="w-4 h-4" /> Quick Search
-        </div>
-      </div>
+        <Search className="w-[22px] h-[22px]" strokeWidth={1.5} />
+      </button>
+
+      {/* Divider */}
+      <div className="w-8 h-[1px] bg-[#1F1F1F] mb-6"></div>
 
       {/* Navigation */}
-      <nav className="flex flex-col gap-1 flex-1">
+      <nav className="flex flex-col gap-8 flex-1 items-center w-full">
         {NAV_ITEMS.map((item) => {
           const isActive = pathname === item.href
           const Icon = item.icon
           return (
             <Link key={item.name} href={item.href}>
               <div className={cn(
-                "flex items-center gap-3 px-4 py-2 rounded-lg cursor-pointer transition-colors",
+                "flex items-center justify-center transition-colors relative",
                 isActive
-                  ? "bg-[#1F1F1F] text-white"
-                  : "text-[#999999] hover:bg-[#1F1F1F] hover:text-white"
+                  ? "text-white"
+                  : "text-[#888888] hover:text-white"
               )}>
-                <Icon className="w-4 h-4" />
-                <span className="text-[13px] font-medium">{item.name}</span>
+                <Icon className="w-[22px] h-[22px]" strokeWidth={1.5} />
               </div>
             </Link>
           )
@@ -86,23 +79,21 @@ export function LinearSidebar() {
       </nav>
 
       {/* Bottom Actions */}
-      <div className="pt-2 space-y-1">
+      <div className="flex flex-col gap-6 items-center mt-auto pb-2">
         <Link href="/trash">
           <div className={cn(
-            "flex items-center gap-3 px-4 py-2 rounded-lg cursor-pointer transition-colors mb-1",
-            pathname === "/trash" ? "bg-[#1F1F1F] text-white" : "text-[#999999] hover:bg-[#1F1F1F] hover:text-white"
+            "w-[46px] h-[46px] rounded-[18px] flex items-center justify-center transition-colors",
+            pathname === "/trash" ? "bg-[#1F1F1F] text-white" : "bg-[#1F1F1F]/60 text-[#888888] hover:bg-[#1F1F1F] hover:text-white"
           )}>
-            <Trash2 className="w-4 h-4" />
-            <span className="text-[13px] font-medium">Trash</span>
+            <Trash2 className="w-[22px] h-[22px]" strokeWidth={1.5} />
           </div>
         </Link>
 
         <button
           onClick={openSettings}
-          className="w-full flex items-center gap-3 px-4 py-2 text-[#999999] hover:bg-[#1F1F1F] hover:text-white rounded-lg transition-colors text-[13px] font-medium"
+          className="text-[#888888] hover:text-white transition-colors mt-2"
         >
-          <Settings className="w-4 h-4" />
-          <span>Settings</span>
+          <Settings className="w-[22px] h-[22px]" strokeWidth={1.5} />
         </button>
       </div>
     </aside>
