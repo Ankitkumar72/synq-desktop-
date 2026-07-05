@@ -462,6 +462,16 @@ function NotesPageContent() {
                       updateNoteLocal(selectedNote.id, { title: e.target.value })
                       debouncedUpdate(selectedNote.id, { title: e.target.value })
                     }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault()
+                        // Focus the TipTap editor body
+                        const editorEl = document.querySelector(".ProseMirror") as HTMLElement
+                        if (editorEl) {
+                          editorEl.focus()
+                        }
+                      }
+                    }}
                     className="w-full text-[32px] font-bold tracking-tight border-none bg-transparent focus-visible:outline-none mb-6 placeholder:text-neutral-800 text-neutral-100 selection:bg-neutral-700 leading-tight"
                     placeholder="Untitled Note"
                   />
