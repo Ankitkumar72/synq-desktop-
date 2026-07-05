@@ -36,14 +36,6 @@ import {
 } from "@/components/ui/dialog"
 import { FolderContextMenu } from "@/components/folders/folder-context-menu"
 
-const COLOR_OPTIONS = [
-  { id: 'blue', value: 'bg-gradient-to-br from-blue-500 to-indigo-600 text-white border-transparent', preview: 'bg-blue-500' },
-  { id: 'emerald', value: 'bg-gradient-to-br from-emerald-500 to-teal-600 text-white border-transparent', preview: 'bg-emerald-500' },
-  { id: 'violet', value: 'bg-gradient-to-br from-violet-500 to-fuchsia-600 text-white border-transparent', preview: 'bg-violet-500' },
-  { id: 'rose', value: 'bg-gradient-to-br from-rose-500 to-pink-600 text-white border-transparent', preview: 'bg-rose-500' },
-  { id: 'amber', value: 'bg-gradient-to-br from-amber-500 to-orange-500 text-white border-transparent', preview: 'bg-amber-500' },
-  { id: 'slate', value: 'bg-zinc-800 text-stone-300 border-zinc-700', preview: 'bg-zinc-800' },
-]
 
 function getIconColorClass(colorValue?: string) {
   if (!colorValue) return 'text-stone-500'
@@ -148,10 +140,6 @@ export default function ProjectsPage() {
   // Modal States
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [name, setName] = useState("")
-  const [description, setDescription] = useState("")
-  const [status, setStatus] = useState<'on-track' | 'at-risk' | 'overdue'>('on-track')
-  const [color, setColor] = useState('bg-gradient-to-br from-blue-500 to-indigo-600 text-white border-transparent')
-  const [isFavorite, setIsFavorite] = useState(false)
 
 
   const handleCreateFolder = async (e: React.FormEvent) => {
@@ -160,18 +148,14 @@ export default function ProjectsPage() {
 
     await addProject({
       name: name.trim(),
-      description: description.trim(),
-      status,
-      color,
-      is_favorite: isFavorite,
+      description: "",
+      status: "on-track",
+      color: "bg-gradient-to-br from-blue-500 to-indigo-600 text-white border-transparent",
+      is_favorite: false,
     })
 
     // Reset state
     setName("")
-    setDescription("")
-    setStatus("on-track")
-    setColor("bg-gradient-to-br from-blue-500 to-indigo-600 text-white border-transparent")
-    setIsFavorite(false)
     setIsCreateOpen(false)
   }
 
@@ -233,114 +217,50 @@ export default function ProjectsPage() {
                   New Folder
                 </Button>
               } />
-              <DialogContent className="sm:max-w-[480px] p-6 border border-white/5 bg-[#101011] shadow-[0_24px_50px_rgba(0,0,0,0.5)] rounded-[28px] outline-none">
-                <form onSubmit={handleCreateFolder} className="space-y-6">
-                  <div className="flex items-center justify-between">
-                    <h2 className="text-xl font-bold text-white tracking-tight">Create Folder</h2>
-                    <button
-                      type="button"
-                      onClick={() => setIsFavorite(!isFavorite)}
-                      className={cn(
-                        "flex items-center gap-1.5 px-3 py-1.5 rounded-xl border transition-all duration-300 font-bold text-[10px] uppercase tracking-wider",
-                        isFavorite
-                          ? "bg-white/10 border-white/20 text-white"
-                          : "bg-white/5 border-white/5 text-stone-400 hover:bg-white/10 hover:text-white"
-                      )}
-                    >
-                      <Pin className={cn("w-3.5 h-3.5", isFavorite ? "fill-white text-white" : "text-stone-400")} />
-                      {isFavorite ? "Pinned" : "Pin"}
-                    </button>
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black uppercase tracking-[0.2em] text-stone-400">Folder Name</label>
-                    <input
-                      type="text"
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      placeholder="e.g. Design System, Marketing Campaign"
-                      className="w-full bg-[#1A1A1C] border border-white/5 focus:border-white/10 rounded-2xl py-3 px-4 text-white text-sm placeholder:text-stone-600 focus:outline-none transition-all font-medium"
-                      required
-                      autoFocus
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black uppercase tracking-[0.2em] text-stone-400">Description</label>
-                    <textarea
-                      value={description}
-                      onChange={(e) => setDescription(e.target.value)}
-                      placeholder="Brief details about what is in this folder..."
-                      className="w-full bg-[#1A1A1C] border border-white/5 focus:border-white/10 rounded-2xl py-3 px-4 text-white text-sm placeholder:text-stone-600 focus:outline-none transition-all h-20 resize-none leading-relaxed font-medium"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black uppercase tracking-[0.2em] text-stone-400">Status</label>
-                    <div className="flex gap-2">
-                      {(['on-track', 'at-risk', 'overdue'] as const).map((s) => (
-                        <button
-                          key={s}
-                          type="button"
-                          onClick={() => setStatus(s)}
-                          className={cn(
-                            "flex-1 py-2 px-3 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-all duration-300",
-                            status === s
-                              ? s === 'on-track'
-                                ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
-                                : s === 'at-risk'
-                                  ? "bg-amber-500/10 border-amber-500/20 text-amber-400"
-                                  : "bg-rose-500/10 border-rose-500/20 text-rose-400"
-                              : "bg-white/5 border-white/5 text-stone-500 hover:bg-white/10 hover:text-stone-300"
-                          )}
-                        >
-                          {s.replace('-', ' ')}
-                        </button>
-                      ))}
+              <DialogContent className="sm:max-w-[640px] p-0 border border-white/5 bg-[#121212] shadow-2xl rounded-[24px] outline-none [&>button]:hidden overflow-hidden">
+                <form onSubmit={handleCreateFolder} className="flex h-[320px] relative w-full">
+                  
+                  {/* Left Pane */}
+                  <div className="w-[240px] h-full bg-gradient-to-br from-[#8b2ff5] via-[#d9368d] to-[#f5822a] flex flex-col items-center justify-center relative p-8">
+                    <div className="w-16 h-16 rounded-[16px] bg-white/20 backdrop-blur-md border border-white/30 flex items-center justify-center shadow-2xl relative z-10">
+                      <Folder className="w-8 h-8 text-white" strokeWidth={1.5} />
                     </div>
                   </div>
 
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black uppercase tracking-[0.2em] text-stone-400">Theme Color</label>
-                    <div className="flex gap-2.5 items-center">
-                      {COLOR_OPTIONS.map((opt) => (
-                        <button
-                          key={opt.id}
-                          type="button"
-                          onClick={() => setColor(opt.value)}
-                          className={cn(
-                            "w-7 h-7 rounded-full transition-all duration-300 relative",
-                            opt.preview,
-                            color === opt.value
-                              ? "ring-2 ring-white ring-offset-2 ring-offset-[#101011] scale-110"
-                              : "hover:scale-105 opacity-80 hover:opacity-100"
-                          )}
-                        />
-                      ))}
+                  {/* Right Pane */}
+                  <div className="flex-1 flex flex-col p-8 relative">
+                    <button type="button" onClick={() => setIsCreateOpen(false)} className="absolute top-6 right-6 text-stone-500 hover:text-white transition-colors">
+                      <svg width="15" height="15" viewBox="0 0 15 15" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M11.7816 4.03157C12.0062 3.80702 12.0062 3.44295 11.7816 3.2184C11.5571 2.99385 11.193 2.99385 10.9685 3.2184L7.50005 6.68682L4.03164 3.2184C3.80708 2.99385 3.44301 2.99385 3.21846 3.2184C2.99391 3.44295 2.99391 3.80702 3.21846 4.03157L6.68688 7.49999L3.21846 10.9684C2.99391 11.193 2.99391 11.5571 3.21846 11.7816C3.44301 12.0061 3.80708 12.0061 4.03164 11.7816L7.50005 8.31316L10.9685 11.7816C11.193 12.0061 11.5571 12.0061 11.7816 11.7816C12.0062 11.5571 12.0062 11.193 11.7816 10.9684L8.31322 7.49999L11.7816 4.03157Z" fill="currentColor" fillRule="evenodd" clipRule="evenodd"></path></svg>
+                    </button>
+                    
+                    <div className="mt-2">
+                      <h2 className="text-[20px] font-semibold text-white tracking-tight mb-1">Create Folder</h2>
+                      <p className="text-[14px] text-stone-400">Give your new folder a name.</p>
+                    </div>
+
+                    <div className="mt-10">
+                      <label className="text-[10px] font-bold tracking-widest text-stone-500 uppercase block mb-3">Folder Name</label>
+                      <input
+                        type="text"
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        placeholder="e.g. Q3 Roadmap"
+                        className="w-full bg-transparent border-b-2 border-stone-800 focus:border-[#d9368d] py-2 text-white text-[15px] placeholder:text-stone-700 focus:outline-none transition-colors caret-[#d9368d]"
+                        required
+                        autoFocus
+                      />
+                    </div>
+
+                    <div className="mt-auto flex items-center justify-end gap-5">
+                      <button type="button" onClick={() => setIsCreateOpen(false)} className="text-[13px] font-semibold text-stone-300 hover:text-white transition-colors">
+                        Cancel
+                      </button>
+                      <button type="submit" disabled={!name.trim()} className="bg-white/10 hover:bg-white/20 border border-white/5 text-white rounded-full px-6 py-2.5 text-[13px] font-semibold transition-colors disabled:opacity-30">
+                        Create Folder
+                      </button>
                     </div>
                   </div>
 
-                  <div className="flex gap-3 justify-end pt-4 border-t border-white/5">
-                    <button
-                      type="button"
-                      onClick={() => setIsCreateOpen(false)}
-                      className="h-10 px-5 rounded-full text-stone-400 hover:text-white hover:bg-white/5 font-bold text-xs uppercase tracking-widest transition-all"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={!name.trim()}
-                      className={cn(
-                        "h-10 px-6 rounded-full font-bold text-xs uppercase tracking-widest transition-all",
-                        name.trim()
-                          ? "bg-white text-black hover:bg-stone-200 active:scale-95"
-                          : "bg-white/5 text-stone-600 cursor-not-allowed"
-                      )}
-                    >
-                      Create Folder
-                    </button>
-                  </div>
                 </form>
               </DialogContent>
             </Dialog>
