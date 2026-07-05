@@ -17,6 +17,7 @@ import Link from "next/link"
 import { Plus, Circle, Calendar as CalendarIcon, FilePlus, ListPlus, CalendarPlus, FileText, Code2 } from "lucide-react"
 import { QuickCreateModal } from "@/components/layout/quick-create"
 import { DashboardCard, QuickActionButton } from "@/components/dashboard/premium-dashboard"
+import { toNoteSlug } from "@/lib/utils/note-slug"
 
 import { formatDistanceToNowStrict } from "date-fns"
 import { cn } from "@/lib/utils"
@@ -51,7 +52,7 @@ function NoteCard({ note, initials }: { note: Note, initials: string }) {
 
   return (
     <Link 
-      href={`/notes?id=${note.id}`}
+      href={`/notes/${toNoteSlug(note.title || '', note.id)}`}
       className="bg-[#1E1E1E] rounded-[16px] flex flex-col flex-1 min-w-[240px] shrink-0 cursor-pointer hover:bg-[#252525] transition-all duration-200 border border-white/[0.06] group relative overflow-hidden"
     >
       {/* card-header: icon area */}
@@ -106,7 +107,7 @@ export default function DashboardPage() {
       pinned: false
     })
     if (newId) {
-      router.push(`/notes?id=${newId}`)
+      router.push(`/notes/${toNoteSlug('', newId)}`)
     }
   }
 

@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 import { Note } from "@/shared"
+import { toNoteSlug } from "@/lib/utils/note-slug"
 
 export default function FolderPage() {
   const params = useParams()
@@ -53,7 +54,7 @@ export default function FolderPage() {
     })
     
     if (newId) {
-      router.push(`/notes?id=${newId}`)
+      router.push(`/notes/${toNoteSlug(title, newId)}`)
     }
   }
 
@@ -128,7 +129,7 @@ export default function FolderPage() {
                 <div 
                   key={note.id} 
                   className="grid grid-cols-[1fr_140px_40px] gap-4 px-8 py-4.5 items-center group hover:bg-white/[0.03] transition-all cursor-pointer"
-                  onClick={() => router.push(`/notes?id=${note.id}`)}
+                  onClick={() => router.push(`/notes/${toNoteSlug(note.title || '', note.id)}`)}
                 >
                   <div className="flex items-center gap-4">
                     <div className="shrink-0">

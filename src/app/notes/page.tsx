@@ -30,12 +30,13 @@ import { useNotesStore } from "@/shared"
 import { useUIStore } from "@/shared"
 import { useProjectStore } from "@/shared"
 import { Note } from "@/shared"
-import { useSearchParams } from "next/navigation"
+import { usePathname } from "next/navigation"
 import { Suspense } from "react"
 import { formatRelativeDate } from "@/lib/utils/date-utils"
 import { useDebounce } from "@/hooks/use-debounce"
 import { NoteContextMenu } from "@/components/notes/note-context-menu"
 import { cloneNoteContent, createEmptyNoteContent } from "@/shared"
+import { toNoteSlug, fromNoteSlug } from "@/lib/utils/note-slug"
 
 
 function NoteSidebarItem({
@@ -83,8 +84,10 @@ function NotesPageContent() {
   const notes = useNotesStore(s => s.notes); const selectedNoteId = useNotesStore(s => s.selectedNoteId); const setSelectedNoteId = useNotesStore(s => s.setSelectedNoteId); const addNote = useNotesStore(s => s.addNote); const updateNote = useNotesStore(s => s.updateNote); const deleteNote = useNotesStore(s => s.deleteNote); const pinNote = useNotesStore(s => s.pinNote); const updateNoteLocal = useNotesStore(s => s.updateNoteLocal)
   const projects = useProjectStore(s => s.projects); const fetchProjects = useProjectStore(s => s.fetchProjects)
   const isSidebarOpen = useUIStore(s => s.isSidebarOpen)
-  const searchParams = useSearchParams()
-  const urlNoteId = searchParams.get("id")
+  const pathname = usePathname()
+  // Extract slug from path: /notes/My-Note-uuid → My-Note-uuid
+  const pathSlug = pathname.startsWith('/notes/') ? decodeURIComponent(pathname.slice('/notes/'.length)) : null
+  const urlNoteId = pathSlug ? fromNoteSlug(pathSlug) : null
 
 
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
@@ -98,7 +101,7 @@ function NotesPageContent() {
 
   // Sync state from URL on mount or when URL changes (e.g. external navigation or back button)
   useEffect(() => {
-    const currentUrlId = searchParams.get("id")
+    const currentUrlId = urlNoteId
     if (currentUrlId && currentUrlId !== selectedNoteId) {
       if (!hasSyncedFromUrl.current || currentUrlId !== lastUrlId.current) {
         const noteExists = notes.some(n => n.id === currentUrlId && !n.is_deleted && !n.deleted_at && !n.is_task)
@@ -108,9 +111,7 @@ function NotesPageContent() {
           hasSyncedFromUrl.current = true
         } else {
           // If the URL note doesn't exist or is deleted, clear it from URL
-          const url = new URL(window.location.href)
-          url.searchParams.delete('id')
-          window.history.replaceState(null, '', url.toString())
+          window.history.replaceState(null, '', '/notes')
           lastUrlId.current = null
           hasSyncedFromUrl.current = true
         }
@@ -118,7 +119,7 @@ function NotesPageContent() {
     } else if (!currentUrlId && !hasSyncedFromUrl.current && notes.length > 0) {
       hasSyncedFromUrl.current = true
     }
-  }, [searchParams, notes, selectedNoteId, setSelectedNoteId])
+  }, [urlNoteId, notes, selectedNoteId, setSelectedNoteId])
 
   useEffect(() => {
     if (projects.length === 0) {
@@ -133,22 +134,23 @@ function NotesPageContent() {
       return
     }
 
-    const currentUrlId = new URL(window.location.href).searchParams.get('id')
-
     if (selectedNoteId) {
-      if (selectedNoteId !== currentUrlId) {
-        const url = new URL(window.location.href)
-        url.searchParams.set('id', selectedNoteId)
-        window.history.replaceState(null, '', url.toString())
+      const note = notes.find(n => n.id === selectedNoteId)
+      const expectedSlug = toNoteSlug(note?.title || "", selectedNoteId)
+      const currentPath = window.location.pathname
+      const expectedPath = `/notes/${expectedSlug}`
+
+      if (currentPath !== expectedPath) {
+        window.history.replaceState(null, '', expectedPath)
         lastUrlId.current = selectedNoteId
       }
-    } else if (currentUrlId) {
-      const url = new URL(window.location.href)
-      url.searchParams.delete('id')
-      window.history.replaceState(null, '', url.toString())
-      lastUrlId.current = null
+    } else {
+      if (window.location.pathname !== '/notes') {
+        window.history.replaceState(null, '', '/notes')
+        lastUrlId.current = null
+      }
     }
-  }, [selectedNoteId])
+  }, [selectedNoteId, notes])
 
   const debouncedUpdate = useDebounce(updateNote, 800)
 
@@ -235,12 +237,16 @@ function NotesPageContent() {
         })
         if (newId) setSelectedNoteId(newId)
         break
-      case "copy":
-        navigator.clipboard.writeText(`${window.location.origin}/notes?id=${noteId}`)
+      case "copy": {
+        const copySlug = toNoteSlug(note.title || "", noteId)
+        navigator.clipboard.writeText(`${window.location.origin}/notes/${copySlug}`)
         break
-      case "open-new":
-        window.open(`/notes?id=${noteId}`, '_blank')
+      }
+      case "open-new": {
+        const openSlug = toNoteSlug(note.title || "", noteId)
+        window.open(`/notes/${openSlug}`, '_blank')
         break
+      }
       case "rename":
         setSelectedNoteId(noteId)
         break
