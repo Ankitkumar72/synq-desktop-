@@ -20,7 +20,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { getUserDisplayName, getUserInitials } from "@/lib/user-utils"
 
 const NAV_ITEMS = [
-  { name: "Dashboard", href: "/", icon: Home },
+  { name: "Home", href: "/", icon: Home },
   { name: "Calendar", href: "/calendar", icon: Calendar },
   { name: "Notes", href: "/notes", icon: FileText },
   { name: "Folders", href: "/folders", icon: Folder },
@@ -35,28 +35,26 @@ export function LinearSidebar() {
   const initials = getUserInitials(user)
 
   return (
-    <aside className="w-[72px] bg-[#090909] border-r border-[#1F1F1F] flex flex-col items-center py-6 shrink-0 relative z-40">
+    <aside className="w-[72px] bg-[#090909] flex flex-col items-center py-6 shrink-0 relative z-40">
 
       {/* User Profile */}
-      <div className="mb-8 relative">
+      <Link href="/account" className="mb-8 relative transition-transform hover:scale-105 active:scale-95 block">
         <Avatar className="w-8 h-8 rounded-full border-none bg-[#7B46CE]" size="sm">
           <AvatarImage src={user?.user_metadata?.avatar_url} alt={name} loading="eager" />
           <AvatarFallback className="rounded-full font-medium text-[13px] text-white bg-[#7B46CE]">
             {initials}
           </AvatarFallback>
         </Avatar>
-      </div>
+      </Link>
 
       {/* Search */}
       <button 
         onClick={openSearch}
-        className="text-[#888888] hover:text-white transition-colors mb-6"
+        className="flex flex-col items-center justify-center gap-1.5 text-[#888888] hover:text-white transition-colors mb-8 w-full"
       >
-        <Search className="w-[22px] h-[22px]" strokeWidth={1.5} />
+        <Search className="w-[18px] h-[18px]" strokeWidth={1.5} />
+        <span className="text-[12px] font-medium">Search</span>
       </button>
-
-      {/* Divider */}
-      <div className="w-8 h-[1px] bg-[#1F1F1F] mb-6"></div>
 
       {/* Navigation */}
       <nav className="flex flex-col gap-8 flex-1 items-center w-full">
@@ -64,14 +62,15 @@ export function LinearSidebar() {
           const isActive = pathname === item.href
           const Icon = item.icon
           return (
-            <Link key={item.name} href={item.href}>
+            <Link key={item.name} href={item.href} className="w-full">
               <div className={cn(
-                "flex items-center justify-center transition-colors relative",
+                "flex flex-col items-center justify-center gap-1.5 transition-colors relative",
                 isActive
                   ? "text-white"
                   : "text-[#888888] hover:text-white"
               )}>
-                <Icon className="w-[22px] h-[22px]" strokeWidth={1.5} />
+                <Icon className="w-[18px] h-[18px]" strokeWidth={1.5} />
+                <span className="text-[12px] font-medium">{item.name}</span>
               </div>
             </Link>
           )
@@ -79,21 +78,23 @@ export function LinearSidebar() {
       </nav>
 
       {/* Bottom Actions */}
-      <div className="flex flex-col gap-6 items-center mt-auto pb-2">
-        <Link href="/trash">
+      <div className="flex flex-col gap-8 items-center mt-auto pb-6 w-full">
+        <Link href="/trash" className="w-full">
           <div className={cn(
-            "w-[46px] h-[46px] rounded-[18px] flex items-center justify-center transition-colors",
-            pathname === "/trash" ? "bg-[#1F1F1F] text-white" : "bg-[#1F1F1F]/60 text-[#888888] hover:bg-[#1F1F1F] hover:text-white"
+            "flex flex-col items-center justify-center gap-1.5 transition-colors relative",
+            pathname === "/trash" ? "text-white" : "text-[#888888] hover:text-white"
           )}>
-            <Trash2 className="w-[22px] h-[22px]" strokeWidth={1.5} />
+            <Trash2 className="w-[18px] h-[18px]" strokeWidth={1.5} />
+            <span className="text-[12px] font-medium">Trash</span>
           </div>
         </Link>
 
         <button
           onClick={openSettings}
-          className="text-[#888888] hover:text-white transition-colors mt-2"
+          className="flex flex-col items-center justify-center gap-1.5 text-[#888888] hover:text-white transition-colors w-full"
         >
-          <Settings className="w-[22px] h-[22px]" strokeWidth={1.5} />
+          <Settings className="w-[18px] h-[18px]" strokeWidth={1.5} />
+          <span className="text-[12px] font-medium">Settings</span>
         </button>
       </div>
     </aside>

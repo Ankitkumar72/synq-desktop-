@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useMemo, useEffect, useRef } from "react";
-import { Plus, Clock, FileText, ChevronRight, Folder, Files, ChevronDown, Library, MoreHorizontal } from "lucide-react"
+import { Plus, Clock, FileText, ChevronDown } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
