@@ -279,7 +279,7 @@ export default function CalendarPage() {
 
             {view === 'day' && (
               <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center gap-[6px] cursor-pointer hover:bg-white/[0.03] px-3 py-1.5 rounded-xl transition-colors select-none">
-                <span className="text-sm font-medium uppercase tracking-wider text-stone-400">
+                <span className="text-sm font-medium uppercase tracking-wider text-stone-400 leading-none mt-[2px]">
                   {format(currentDate, 'EEE')}
                 </span>
                 <span className={cn(

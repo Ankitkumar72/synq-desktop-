@@ -1,29 +1,41 @@
 "use client"
 
 import { useState, useMemo } from "react"
-import Image from "next/image"
 import { 
   Plus,
   Clock,
   AlignLeft,
-  Target,
-  MoreVertical,
   Calendar as CalendarIcon,
   Bell,
   Repeat,
   ChevronDown,
-  Square,
-  List,
-  X
+  List
 } from "lucide-react"
 import { 
   Dialog, 
   DialogContent, 
   DialogTrigger 
 } from "@/components/ui/dialog"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { useTaskStore } from "@/shared"
+
+const timeOptions = Array.from({ length: 24 * 4 }).map((_, i) => {
+  const hours = Math.floor(i / 4);
+  const minutes = (i % 4) * 15;
+  const period = hours >= 12 ? 'pm' : 'am';
+  const displayHours = hours % 12 === 0 ? 12 : hours % 12;
+  const displayMinutes = minutes.toString().padStart(2, '0');
+  const value = `${hours.toString().padStart(2, '0')}:${displayMinutes}`;
+  const label = `${displayHours}:${displayMinutes}${period}`;
+  return { value, label };
+});
 import { useProjectStore } from "@/shared"
 import { useNotesStore } from "@/shared"
 import { useEventStore } from "@/shared"
@@ -138,9 +150,6 @@ export function QuickCreateModal({
     setPrevOpen(false)
   }
 
-  const name = getUserDisplayName(user)
-  const initials = getUserInitials(user)
-
   const createDateWithTime = (date: Date, timeStr: string) => {
     const [hours, minutes] = timeStr.split(':').map(Number);
     const d = new Date(date);
@@ -149,7 +158,7 @@ export function QuickCreateModal({
   }
 
   const handleSave = () => {
-    if (!title) return
+    const finalTitle = title.trim() || "(No title)"
 
     if (editItem) {
       if (editItem.type === 'task') {
@@ -166,7 +175,7 @@ export function QuickCreateModal({
         }
 
         updateTask(editItem.id, {
-          title,
+          title: finalTitle,
           description,
           priority: priority.toLowerCase() as "low" | "medium" | "high",
           project_id: selectedProjectId,
@@ -177,7 +186,7 @@ export function QuickCreateModal({
         })
       } else if (editItem.type === 'event') {
         updateEvent(editItem.id, {
-          title,
+          title: finalTitle,
           description,
           start_date: dueDate.toISOString(),
           end_date: new Date(dueDate.getTime() + 3600000).toISOString(),
@@ -198,7 +207,7 @@ export function QuickCreateModal({
         }
 
         addTask({
-          title,
+          title: finalTitle,
           description,
           status: 'todo',
           priority: priority.toLowerCase() as "low" | "medium" | "high",
@@ -211,7 +220,7 @@ export function QuickCreateModal({
         })
       } else if (type === 'project') {
         addProject({
-          name: title,
+          name: finalTitle,
           description,
           status: 'on-track',
           color: 'bg-stone-900',
@@ -220,7 +229,7 @@ export function QuickCreateModal({
       } else if (type === 'note') {
         const plainText = description || ""
         addNote({
-          title,
+          title: finalTitle,
           content: createNoteContentFromText(plainText),
           excerpt: buildExcerpt(plainText),
           body: plainText || null,
@@ -231,7 +240,7 @@ export function QuickCreateModal({
         })
       } else if (type === 'event') {
         addEvent({
-          title,
+          title: finalTitle,
           description,
           start_date: dueDate.toISOString(),
           end_date: new Date(dueDate.getTime() + 3600000).toISOString(),
@@ -282,34 +291,31 @@ export function QuickCreateModal({
         {open && (
           <DialogContent 
             showCloseButton={false}
-            className="sm:max-w-[500px] p-0 border-none bg-[#1f1f1f] shadow-[0_24px_38px_3px_rgba(0,0,0,0.14),0_9px_46px_8px_rgba(0,0,0,0.12),0_11px_15px_-7px_rgba(0,0,0,0.2)] rounded-[24px] outline-none overflow-hidden"
+            className="sm:max-w-[420px] p-0 border-none bg-[#1f1f1f] shadow-[0_24px_38px_3px_rgba(0,0,0,0.14),0_9px_46px_8px_rgba(0,0,0,0.12),0_11px_15px_-7px_rgba(0,0,0,0.2)] rounded-[24px] outline-none overflow-hidden"
           >
-            <div className="flex flex-col h-full bg-[#1f1f1f] text-[#e3e3e3] font-sans">
-              {/* Type Switcher & Close */}
-              <div className="px-6 pt-5 pb-1 flex items-center justify-between">
-                <div className="flex gap-1">
+            <div className="flex flex-col h-full min-h-[480px] bg-[#1f1f1f] text-[#e3e3e3] font-sans">
+              {/* Type Switcher */}
+              <div className="px-6 pt-5 pb-2 flex items-center justify-end border-b border-white/10">
+                <div className="flex gap-4">
                   {types.map((t) => (
                   <button
                     key={t.id}
                     onClick={() => setType(t.id as 'task' | 'project' | 'note' | 'event')}
                     className={cn(
-                      "px-4 py-1.5 rounded-md text-sm font-medium transition-all flex items-center gap-2",
+                      "text-sm font-medium transition-colors pb-1",
                       type === t.id 
-                        ? "bg-[#323639] text-[#e3e3e3]" 
-                        : "hover:bg-white/5 text-[#8e918f]"
+                        ? "text-[#e3e3e3]" 
+                        : "text-[#8e918f] hover:text-[#c4c7c5]"
                     )}
                   >
                     {t.label}
                   </button>
                 ))}
                 </div>
-                <button type="button" onClick={() => setOpen(false)} className="text-[#8e918f] hover:text-[#e3e3e3] p-1.5 rounded-md hover:bg-white/5 transition-colors">
-                  <X className="w-5 h-5" />
-                </button>
               </div>
 
               {/* Header / Title Row */}
-              <div className="flex items-center p-2 pl-6 pt-3 pr-6 gap-3">
+              <div className="flex items-center px-6 pt-4 pb-2 gap-3">
                 <div className="flex-1">
                   <input
                     autoFocus
@@ -321,7 +327,7 @@ export function QuickCreateModal({
                 </div>
               </div>
 
-              <div className="flex flex-col px-6 pb-2 gap-5 mt-2">
+              <div className="flex flex-col px-6 pb-2 gap-3 mt-1">
                 {/* Details/Notes Row */}
                 <div className="flex items-start gap-4">
                   <div className="mt-1">
@@ -355,29 +361,74 @@ export function QuickCreateModal({
                   </div>
                 </div>
 
-                {/* Time Row */}
+                {/* Date / Time Row */}
                 {!allDay && (
                   <div className="flex items-center gap-4">
                     <div>
                       <Clock className="w-5 h-5 text-[#8e918f]" />
                     </div>
-                    <div className="flex-1 flex items-center gap-3">
-                      <div className="flex-1 border border-white/20 rounded hover:border-white/40 focus-within:border-blue-500 transition-colors bg-transparent px-3 py-1.5">
+                    <div className="flex-1 flex items-center gap-2">
+                      <div className="flex-[1.5]">
                         <input 
-                          type="time"
-                          value={startTime}
-                          onChange={(e) => setStartTime(e.target.value)}
-                          className="w-full bg-transparent border-none focus:outline-none cursor-pointer text-sm font-medium text-[#e3e3e3]"
+                          type="date"
+                          value={!isNaN(dueDate.getTime()) ? dueDate.toISOString().split('T')[0] : new Date().toISOString().split('T')[0]}
+                          onChange={(e) => {
+                            if (e.target.value) {
+                              const newDate = new Date(e.target.value + 'T00:00:00');
+                              if (!isNaN(newDate.getTime())) {
+                                setDueDate(newDate);
+                              }
+                            } else {
+                              setDueDate(new Date());
+                            }
+                          }}
+                          className="w-full bg-[#323639] hover:bg-[#3c4043] border-none rounded focus:outline-none cursor-pointer px-3 py-1.5 text-[13px] font-medium text-[#e3e3e3] [color-scheme:dark] transition-colors text-center"
                         />
                       </div>
+                      <div className="flex-1">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger className="w-full bg-[#323639] hover:bg-[#3c4043] border-none rounded focus:outline-none focus:ring-1 focus:ring-[#1A73E8] cursor-pointer px-3 py-1.5 text-[13px] font-medium text-[#e3e3e3] transition-colors text-center outline-none">
+                            {timeOptions.find(opt => opt.value === startTime)?.label}
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent 
+                            align="center" 
+                            side="bottom" 
+                            className="bg-[#2d2e30] border border-[#3c4043] text-[#e3e3e3] max-h-[220px] overflow-y-auto min-w-[100px] p-0 custom-scrollbar"
+                          >
+                            {timeOptions.map((opt) => (
+                              <DropdownMenuItem 
+                                key={`start-${opt.value}`} 
+                                onClick={() => setStartTime(opt.value)}
+                                className={cn("text-[13px] font-medium justify-center focus:bg-[#3c4043] focus:text-[#e3e3e3] cursor-pointer py-2 rounded-none", startTime === opt.value && "bg-[#1A73E8]/20 text-[#1A73E8] focus:bg-[#1A73E8]/30 focus:text-[#1A73E8]")}
+                              >
+                                {opt.label}
+                              </DropdownMenuItem>
+                            ))}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
                       <span className="text-[#5f6368] font-medium">-</span>
-                      <div className="flex-1 border border-white/20 rounded hover:border-white/40 focus-within:border-blue-500 transition-colors bg-transparent px-3 py-1.5">
-                        <input 
-                          type="time"
-                          value={endTime}
-                          onChange={(e) => setEndTime(e.target.value)}
-                          className="w-full bg-transparent border-none focus:outline-none cursor-pointer text-sm font-medium text-[#e3e3e3]"
-                        />
+                      <div className="flex-1">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger className="w-full bg-[#323639] hover:bg-[#3c4043] border-none rounded focus:outline-none focus:ring-1 focus:ring-[#1A73E8] cursor-pointer px-3 py-1.5 text-[13px] font-medium text-[#e3e3e3] transition-colors text-center outline-none">
+                            {timeOptions.find(opt => opt.value === endTime)?.label}
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent 
+                            align="center" 
+                            side="bottom" 
+                            className="bg-[#2d2e30] border border-[#3c4043] text-[#e3e3e3] max-h-[220px] overflow-y-auto min-w-[100px] p-0 custom-scrollbar"
+                          >
+                            {timeOptions.map((opt) => (
+                              <DropdownMenuItem 
+                                key={`end-${opt.value}`} 
+                                onClick={() => setEndTime(opt.value)}
+                                className={cn("text-[13px] font-medium justify-center focus:bg-[#3c4043] focus:text-[#e3e3e3] cursor-pointer py-2 rounded-none", endTime === opt.value && "bg-[#1A73E8]/20 text-[#1A73E8] focus:bg-[#1A73E8]/30 focus:text-[#1A73E8]")}
+                              >
+                                {opt.label}
+                              </DropdownMenuItem>
+                            ))}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </div>
                     </div>
                   </div>
@@ -444,24 +495,18 @@ export function QuickCreateModal({
               </div>
 
               {/* Footer */}
-              <div className="p-4 px-6 border-t border-white/5 flex items-center justify-end gap-3 mt-4 mb-2">
+              <div className="py-3 px-6 border-t border-white/5 flex items-center justify-end gap-3 mt-auto mb-0">
                 <button
                   type="button"
                   onClick={() => setOpen(false)}
-                  className="px-4 py-2 font-medium text-sm text-[#8e918f] hover:text-[#e3e3e3] transition-colors"
+                  className="px-3 py-1.5 font-medium text-sm text-[#8e918f] hover:text-[#e3e3e3] transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   type="button"
                   onClick={handleSave}
-                  disabled={!title}
-                  className={cn(
-                    "px-6 py-2 rounded font-semibold text-sm shadow-sm transition-all",
-                    title 
-                      ? "bg-blue-600 text-white hover:bg-blue-700" 
-                      : "bg-[#3c4043] text-[#70757a] cursor-not-allowed"
-                  )}
+                  className="px-5 py-1.5 rounded font-medium text-sm shadow-sm transition-all bg-[#1A73E8] text-white hover:opacity-90 disabled:cursor-not-allowed"
                 >
                   Save
                 </button>
