@@ -11,12 +11,12 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { motion, AnimatePresence } from "framer-motion"
-import { Project } from "@/shared"
+import { Folder } from "@/shared"
 
 interface FolderContextMenuProps {
-  project: Project
+  folder: Folder
   children: React.ReactNode
-  onAction: (action: string, projectId: string) => void
+  onAction: (action: string, folderId: string) => void
 }
 
 interface MenuItemProps {
@@ -54,7 +54,7 @@ const MenuItem = ({
   </button>
 )
 
-export function FolderContextMenu({ project, children, onAction }: FolderContextMenuProps) {
+export function FolderContextMenu({ folder, children, onAction }: FolderContextMenuProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [position, setPosition] = useState({ x: 0, y: 0 })
   const menuRef = useRef<HTMLDivElement>(null)
@@ -94,7 +94,7 @@ export function FolderContextMenu({ project, children, onAction }: FolderContext
   }, [isOpen])
 
   const performAction = (action: string) => {
-    onAction(action, project.id)
+    onAction(action, folder.id)
     setIsOpen(false)
   }
 
@@ -124,8 +124,8 @@ export function FolderContextMenu({ project, children, onAction }: FolderContext
               onClick={() => performAction("open")} 
             />
             <MenuItem 
-              icon={project.is_favorite ? PinOff : Pin} 
-              label={project.is_favorite ? "Unpin Folder" : "Pin Folder"} 
+              icon={folder.is_favorite ? PinOff : Pin} 
+              label={folder.is_favorite ? "Unpin Folder" : "Pin Folder"} 
               onClick={() => performAction("pin")} 
             />
             <MenuItem 

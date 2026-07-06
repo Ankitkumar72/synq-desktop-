@@ -20,7 +20,7 @@ import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useRouter } from "next/navigation"
-import { useProjectStore, useNotesStore } from "@/shared"
+import { useFolderStore, useNotesStore } from "@/shared"
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -50,7 +50,7 @@ function getIconColorClass(colorValue?: string) {
 
 export default function ProjectsPage() {
   const router = useRouter()
-  const projects = useProjectStore(s => s.projects); const deleteProject = useProjectStore(s => s.deleteProject); const addProject = useProjectStore(s => s.addProject); const toggleFavorite = useProjectStore(s => s.toggleFavorite); const updateProject = useProjectStore(s => s.updateProject)
+  const folders = useFolderStore(s => s.folders); const deleteFolder = useFolderStore(s => s.deleteFolder); const addFolder = useFolderStore(s => s.addFolder); const updateFolder = useFolderStore(s => s.updateFolder);
   const notes = useNotesStore(s => s.notes)
   const [searchQuery, setSearchQuery] = useState("")
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set())
@@ -82,18 +82,18 @@ export default function ProjectsPage() {
   const handleFolderAction = (action: string, folderId: string) => {
     switch (action) {
       case 'pin': {
-        const project = projects.find(p => p.id === folderId)
-        if (project) toggleFavorite(project.id, !project.is_favorite)
+        const folder = folders.find(p => p.id === folderId)
+        if (folder) updateFolder(folder.id, { is_favorite: !folder.is_favorite })
         break;
       }
       case 'delete':
-        deleteProject(folderId)
+        deleteFolder(folderId)
         break;
       case 'open':
         toggleFolder(folderId)
         break;
       case 'rename':
-        const p = projects.find(p => p.id === folderId)
+        const p = folders.find(p => p.id === folderId)
         if (p) {
           setRenameFolderId(folderId)
           setRenameValue(p.name)
@@ -101,10 +101,10 @@ export default function ProjectsPage() {
         }
         break;
       case 'edit-description':
-        const descProject = projects.find(p => p.id === folderId)
-        if (descProject) {
+        const descFolder = folders.find(p => p.id === folderId)
+        if (descFolder) {
           setEditDescFolderId(folderId)
-          setEditDescValue(descProject.description || "")
+          setEditDescValue(descFolder.description || "")
           setIsEditDescOpen(true)
         }
         break;
@@ -118,7 +118,7 @@ export default function ProjectsPage() {
   const handleRenameSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (renameFolderId && renameValue.trim()) {
-      await updateProject(renameFolderId, { name: renameValue.trim() })
+      await updateFolder(renameFolderId, { name: renameValue.trim() })
       setIsRenameOpen(false)
       setRenameFolderId(null)
     }
@@ -131,7 +131,7 @@ export default function ProjectsPage() {
   const handleEditDescSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (editDescFolderId) {
-      await updateProject(editDescFolderId, { description: editDescValue.trim() })
+      await updateFolder(editDescFolderId, { description: editDescValue.trim() })
       setIsEditDescOpen(false)
       setEditDescFolderId(null)
     }
@@ -146,10 +146,9 @@ export default function ProjectsPage() {
     e.preventDefault()
     if (!name.trim()) return
 
-    await addProject({
+    await addFolder({
       name: name.trim(),
       description: "",
-      status: "on-track",
       color: "bg-gradient-to-br from-blue-500 to-indigo-600 text-white border-transparent",
       is_favorite: false,
     })
@@ -159,12 +158,12 @@ export default function ProjectsPage() {
     setIsCreateOpen(false)
   }
 
-  const filteredProjects = projects.filter((project) => {
-    return project.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      project.description?.toLowerCase().includes(searchQuery.toLowerCase())
+  const filteredFolders = folders.filter((folder) => {
+    return folder.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      folder.description?.toLowerCase().includes(searchQuery.toLowerCase())
   })
 
-  const sortedProjects = [...filteredProjects].sort((a, b) => {
+  const sortedFolders = [...filteredFolders].sort((a, b) => {
     // Pin favorites to the top and prevent them from being sorted
     if (a.is_favorite && !b.is_favorite) return -1
     if (!a.is_favorite && b.is_favorite) return 1
@@ -176,7 +175,9 @@ export default function ProjectsPage() {
     } else if (sortColumn === 'rating') {
       comparison = (a.is_favorite === b.is_favorite) ? 0 : a.is_favorite ? 1 : -1
     } else if (sortColumn === 'size') {
-      comparison = (a.task_count || 0) - (b.task_count || 0)
+      const aSize = notes.filter(n => n.folder_id === a.id && !n.is_deleted).length
+      const bSize = notes.filter(n => n.folder_id === b.id && !n.is_deleted).length
+      comparison = aSize - bSize
     } else if (['date', 'date_created', 'date_taken'].includes(sortColumn)) {
       const timeA = new Date(a.created_at || 0).getTime()
       const timeB = new Date(b.created_at || 0).getTime()
@@ -189,7 +190,7 @@ export default function ProjectsPage() {
     return sortDirection === 'asc' ? comparison : -comparison
   })
 
-  const hasHydrated = useProjectStore(s => s._hasHydrated)
+  const hasHydrated = useFolderStore(s => s._hasHydrated)
 
   if (!hasHydrated) {
     return (
@@ -410,40 +411,40 @@ export default function ProjectsPage() {
           </div>
 
           <div className="flex flex-col">
-            {sortedProjects.length === 0 ? (
+            {sortedFolders.length === 0 ? (
               <div className="py-12 text-center text-stone-500 text-sm font-medium">No folders found</div>
             ) : (
-              sortedProjects.map((project) => (
+              sortedFolders.map((folder) => (
                 <FolderContextMenu 
-                  key={project.id} 
-                  project={project} 
+                  key={folder.id} 
+                  folder={folder} 
                   onAction={handleFolderAction}
                 >
                   <div className="flex flex-col border-b border-white/[0.02]">
                     <div
-                      onClick={() => toggleFolder(project.id)}
+                      onClick={() => toggleFolder(folder.id)}
                       className="grid grid-cols-12 gap-4 px-2 py-3.5 items-center hover:bg-white/[0.02] transition-colors cursor-pointer group"
                     >
                       <div className="col-span-5 flex items-center gap-4">
                         <div className="flex items-center justify-center w-7 h-7 flex-shrink-0 transition-transform group-hover:scale-105">
-                          <Folder className={cn("w-5 h-5", getIconColorClass(project.color))} strokeWidth={2} />
+                          <Folder className={cn("w-5 h-5", getIconColorClass(folder.color))} strokeWidth={2} />
                         </div>
                         <div className="flex-1 min-w-0 flex items-center gap-2.5">
                           <span className="font-semibold text-stone-200 text-[15px] tracking-tight truncate">
-                            {project.name}
+                            {folder.name}
                           </span>
-                          {project.is_favorite && <Pin className="w-3.5 h-3.5 fill-white text-white flex-shrink-0" />}
+                          {folder.is_favorite && <Pin className="w-3.5 h-3.5 fill-white text-white flex-shrink-0" />}
                         </div>
                       </div>
                       <div className="col-span-4 flex items-center pr-4 min-w-0">
                         <span className="text-[15px] text-stone-300 truncate w-full">
-                          {project.description || <span className="text-stone-500/80 italic">No description</span>}
+                          {folder.description || <span className="text-stone-500/80 italic">No description</span>}
                         </span>
                       </div>
                       <div className="col-span-3 flex items-center justify-between text-[15px] font-medium text-stone-500">
                         <span className="tracking-tight tabular-nums">
                           {(() => {
-                            const date = new Date(project.created_at || Date.now());
+                            const date = new Date(folder.created_at || Date.now());
                             const timeString = date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
                             const dateString = date.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' });
                             return `${timeString} ${dateString}`;
@@ -455,16 +456,16 @@ export default function ProjectsPage() {
                             size="icon"
                             onClick={(e) => {
                               e.stopPropagation()
-                              toggleFavorite(project.id, !project.is_favorite)
+                              updateFolder(folder.id, { is_favorite: !folder.is_favorite })
                             }}
                             className={cn(
                               "h-7 w-7 rounded-md transition-all",
-                              project.is_favorite
+                              folder.is_favorite
                                 ? "text-white hover:text-white hover:bg-white/10"
                                 : "text-stone-500 hover:text-stone-300 hover:bg-white/5"
                             )}
                           >
-                            <Pin className={cn("w-3.5 h-3.5", project.is_favorite ? "fill-white" : "")} />
+                            <Pin className={cn("w-3.5 h-3.5", folder.is_favorite ? "fill-white" : "")} />
                           </Button>
                         <DropdownMenu>
                           <DropdownMenuTrigger render={
@@ -478,24 +479,24 @@ export default function ProjectsPage() {
                             </Button>
                           } />
                           <DropdownMenuContent align="end" className="w-[200px] bg-[#1e1e1e] border border-white/10 shadow-2xl rounded-md p-1 text-stone-200">
-                            <DropdownMenuItem onClick={() => handleFolderAction('open', project.id)} className="text-[13px] gap-2 rounded-sm py-1.5 px-2 focus:bg-white/10 focus:text-white transition-colors cursor-default outline-none text-stone-300">
+                            <DropdownMenuItem onClick={() => handleFolderAction('open', folder.id)} className="text-[13px] gap-2 rounded-sm py-1.5 px-2 focus:bg-white/10 focus:text-white transition-colors cursor-default outline-none text-stone-300">
                               <Folder className="w-4 h-4 text-stone-400" />
                               Expand / Collapse
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleFolderAction('pin', project.id)} className="text-[13px] gap-2 rounded-sm py-1.5 px-2 focus:bg-white/10 focus:text-white transition-colors cursor-default outline-none text-stone-300">
-                              {project.is_favorite ? <PinOff className="w-4 h-4 text-stone-400" /> : <Pin className="w-4 h-4 text-stone-400" />}
-                              {project.is_favorite ? "Unpin Folder" : "Pin Folder"}
+                            <DropdownMenuItem onClick={() => handleFolderAction('pin', folder.id)} className="text-[13px] gap-2 rounded-sm py-1.5 px-2 focus:bg-white/10 focus:text-white transition-colors cursor-default outline-none text-stone-300">
+                              {folder.is_favorite ? <PinOff className="w-4 h-4 text-stone-400" /> : <Pin className="w-4 h-4 text-stone-400" />}
+                              {folder.is_favorite ? "Unpin Folder" : "Pin Folder"}
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleFolderAction('rename', project.id)} className="text-[13px] gap-2 rounded-sm py-1.5 px-2 focus:bg-white/10 focus:text-white transition-colors cursor-default outline-none text-stone-300">
+                            <DropdownMenuItem onClick={() => handleFolderAction('rename', folder.id)} className="text-[13px] gap-2 rounded-sm py-1.5 px-2 focus:bg-white/10 focus:text-white transition-colors cursor-default outline-none text-stone-300">
                               <Edit3 className="w-4 h-4 text-stone-400" />
                               Rename
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleFolderAction('edit-description', project.id)} className="text-[13px] gap-2 rounded-sm py-1.5 px-2 focus:bg-white/10 focus:text-white transition-colors cursor-default outline-none text-stone-300">
+                            <DropdownMenuItem onClick={() => handleFolderAction('edit-description', folder.id)} className="text-[13px] gap-2 rounded-sm py-1.5 px-2 focus:bg-white/10 focus:text-white transition-colors cursor-default outline-none text-stone-300">
                               <AlignLeft className="w-4 h-4 text-stone-400" />
                               Edit Description
                             </DropdownMenuItem>
                             <DropdownMenuSeparator className="bg-white/10 my-1 mx-0" />
-                            <DropdownMenuItem onClick={() => handleFolderAction('delete', project.id)} className="text-[13px] gap-2 rounded-sm py-1.5 px-2 text-rose-400 focus:text-rose-400 focus:bg-rose-500/10 transition-colors cursor-default outline-none">
+                            <DropdownMenuItem onClick={() => handleFolderAction('delete', folder.id)} className="text-[13px] gap-2 rounded-sm py-1.5 px-2 text-rose-400 focus:text-rose-400 focus:bg-rose-500/10 transition-colors cursor-default outline-none">
                               <Trash2 className="w-4 h-4" />
                               Move to Trash
                             </DropdownMenuItem>
@@ -505,8 +506,8 @@ export default function ProjectsPage() {
                       </div>
                     </div>
 
-                    {expandedFolders.has(project.id) && (() => {
-                      const projectNotes = notes.filter(n => n.folder_id === project.id && !n.is_deleted)
+                    {expandedFolders.has(folder.id) && (() => {
+                      const projectNotes = notes.filter(n => n.folder_id === folder.id && !n.is_deleted)
                       return (
                         <div className="ml-9 border-l-2 border-white/5 pl-4 mb-2">
                           {projectNotes.length === 0 ? (
@@ -521,7 +522,7 @@ export default function ProjectsPage() {
                                 <div className="col-span-9 flex items-center gap-3">
                                   <div className={cn(
                                     "w-6 h-6 rounded-[6px] flex items-center justify-center shadow-sm relative overflow-hidden",
-                                    project.color ? project.color : "bg-stone-800 text-stone-400"
+                                    folder.color ? folder.color : "bg-stone-800 text-stone-400"
                                   )}>
                                     <div className="absolute inset-0 bg-white/10 mix-blend-overlay"></div>
                                   </div>

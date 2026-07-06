@@ -97,7 +97,9 @@ export interface Folder {
   id: string
   user_id?: string
   name: string
-  color?: number
+  description?: string
+  color?: string
+  is_favorite?: boolean
   parent_id?: string
   order?: number
   is_deleted?: boolean

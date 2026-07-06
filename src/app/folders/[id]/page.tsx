@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
-import { useProjectStore } from "@/shared"
+import { useFolderStore } from "@/shared"
 import { useNotesStore } from "@/shared"
 import { AnimatePage } from "@/components/layout/animate-page"
 import { ArrowLeft, FolderKanban, FileText, Clock, Plus, Search, MoreHorizontal } from "lucide-react"
@@ -18,11 +18,11 @@ export default function FolderPage() {
   const router = useRouter()
   const folderId = params.id as string
 
-  const projects = useProjectStore(s => s.projects)
+  const folders = useFolderStore(s => s.folders)
   const notes = useNotesStore(s => s.notes); const fetchNotes = useNotesStore(s => s.fetchNotes); const deleteNote = useNotesStore(s => s.deleteNote); const addNote = useNotesStore(s => s.addNote)
   const [searchQuery, setSearchQuery] = useState("")
 
-  const folder = projects.find(p => p.id === folderId)
+  const folder = folders.find(p => p.id === folderId)
 
   useEffect(() => {
     fetchNotes()
