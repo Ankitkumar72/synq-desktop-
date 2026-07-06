@@ -6,7 +6,6 @@ import * as Y from 'yjs'
 import { z } from 'zod'
 import { Loader2 } from "lucide-react"
 
-import { NoteBubbleMenu } from './bubble-menu'
 import { TableBubbleMenu } from './table-bubble-menu'
 import { Skeleton } from "@/components/ui/skeleton"
 import { useEffect, useRef, useCallback, useMemo, useState, Component, type ReactNode } from 'react'
@@ -760,7 +759,7 @@ export function NoteEditor({
 
   const editorProps = useMemo(() => ({
     attributes: {
-      class: `${styles.editorContent} max-w-none focus:outline-none min-h-[calc(100vh-300px)] pt-2 pb-32`,
+      class: `${styles.editorContent} max-w-none focus:outline-none min-h-[calc(100vh-300px)] pb-[384px]`,
     },
     // Process image: insert instant base64 preview, then upload and replace URL
     handlePaste(view: any, event: ClipboardEvent) {
@@ -1142,6 +1141,11 @@ export function NoteEditor({
         clearTimeout(saveTimeoutRef.current)
         saveTimeoutRef.current = null
       }
+
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current)
+        saveTimeoutRef.current = null
+      }
       clearActiveNoteActivity(id)
       setFocusedNoteId(null)
       setActiveEdit(id, false)
@@ -1151,7 +1155,7 @@ export function NoteEditor({
 
   if (isLoading) {
     return (
-      <div className="flex flex-col h-full max-w-4xl mx-auto w-full pt-12 gap-8">
+      <div className="flex flex-col h-full w-full pt-4 gap-8">
         <Skeleton className="h-12 w-3/4 bg-white/[0.03]" />
         <div className="space-y-4">
           <Skeleton className="h-4 w-full bg-white/[0.03]" />
@@ -1166,9 +1170,8 @@ export function NoteEditor({
   }
 
   return (
-    <div className="flex flex-col h-full bg-transparent max-w-4xl mx-auto w-full group">
+    <div className="flex flex-col h-full bg-transparent w-full group">
       <div className="flex-1 relative min-h-[calc(100vh-300px)]">
-        <NoteBubbleMenu editor={editor} />
         <TableBubbleMenu editor={editor} />
         <EditorErrorBoundary>
           <EditorContent editor={editor} />

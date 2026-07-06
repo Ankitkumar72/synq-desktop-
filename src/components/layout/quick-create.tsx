@@ -102,7 +102,6 @@ export function QuickCreateModal({
   )
   const [recurrenceModalOpen, setRecurrenceModalOpen] = useState(false)
   const [selectedProjectId, setSelectedProjectId] = useState<string | undefined>(undefined)
-  const user = useUserStore(s => s.user)
   const addTask = useTaskStore(s => s.addTask); const updateTask = useTaskStore(s => s.updateTask)
   const addProject = useProjectStore(s => s.addProject); const projects = useProjectStore(s => s.projects)
   const addNote = useNotesStore(s => s.addNote)

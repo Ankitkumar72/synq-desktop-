@@ -38,12 +38,7 @@ export function SyncStatusIndicator() {
           <RefreshCw className="w-2.5 h-2.5 text-blue-500 animate-spin" />
           <span className="text-[10px] font-bold uppercase tracking-wider text-blue-500/80">Syncing</span>
         </div>
-      ) : (
-        <div className="flex items-center gap-2 px-2 py-1 rounded-full bg-emerald-500/5 border border-emerald-500/10 opacity-40 hover:opacity-100 transition-all duration-300 group">
-          <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.3)]" />
-          <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-500/80">Cloud Sync</span>
-        </div>
-      )}
+      ) : null}
     </div>
   )
 }

@@ -442,10 +442,24 @@ function NotesPageContent() {
             <div className="flex-1 flex flex-col overflow-hidden min-h-0">
               {/* Clean Header */}
               <header className="h-12 border-b border-neutral-800/50 flex items-center justify-between px-6 shrink-0">
-                <div className="flex items-center gap-3">
-                  <span className="text-[13px] text-neutral-500 font-medium truncate max-w-[300px]">
-                    {selectedNote.title || "Untitled Note"}
-                  </span>
+                <div className="flex items-center gap-3 text-[13px] font-medium">
+                  {(() => {
+                    const parentFolder = projects.find(p => p.id === selectedNote.folder_id || p.id === selectedNote.category);
+                    if (parentFolder) {
+                      return (
+                        <div className="flex items-center truncate max-w-[400px]">
+                          <span className="text-white truncate">{parentFolder.name}</span>
+                          <span className="text-neutral-600 mx-2">›</span>
+                          <span className="text-white truncate">{selectedNote.title || "Untitled Note"}</span>
+                        </div>
+                      );
+                    }
+                    return (
+                      <span className="text-white truncate max-w-[300px]">
+                        {selectedNote.title || "Untitled Note"}
+                      </span>
+                    );
+                  })()}
                 </div>
 
                 <div className="flex items-center gap-4">
@@ -459,42 +473,44 @@ function NotesPageContent() {
               </header>
 
               {/* Editor Content */}
-              <div className="flex-1 overflow-y-auto overflow-x-hidden min-h-0">
-                <div className="max-w-3xl mx-auto w-full px-8 md:px-12 pt-10 pb-32">
-                  <input
-                    type="text"
-                    value={selectedNote.title}
-                    onChange={(e) => {
-                      updateNoteLocal(selectedNote.id, { title: e.target.value })
-                      debouncedUpdate(selectedNote.id, { title: e.target.value })
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault()
-                        // Focus the TipTap editor body
-                        const editorEl = document.querySelector(".ProseMirror") as HTMLElement
-                        if (editorEl) {
-                          editorEl.focus()
+              <div className="flex-1 overflow-y-auto overflow-x-hidden min-h-0 flex justify-center">
+                <div className="max-w-[900px] w-full px-[40px] pt-[56px] pb-32">
+                  <div className="max-w-[740px] mx-auto w-full">
+                    <input
+                      type="text"
+                      value={selectedNote.title}
+                      onChange={(e) => {
+                        updateNoteLocal(selectedNote.id, { title: e.target.value })
+                        debouncedUpdate(selectedNote.id, { title: e.target.value })
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault()
+                          // Focus the TipTap editor body
+                          const editorEl = document.querySelector(".ProseMirror") as HTMLElement
+                          if (editorEl) {
+                            editorEl.focus()
+                          }
                         }
-                      }
-                    }}
-                    className="w-full text-[32px] font-bold tracking-tight border-none bg-transparent focus-visible:outline-none mb-6 placeholder:text-neutral-800 text-neutral-100 selection:bg-neutral-700 leading-tight"
-                    placeholder="Untitled Note"
-                  />
+                      }}
+                      className="w-full text-[36px] sm:text-[40px] font-bold tracking-tight border-none bg-transparent focus-visible:outline-none mb-6 placeholder:text-neutral-800 text-neutral-100 selection:bg-neutral-700 leading-[1.1]"
+                      placeholder="Untitled Note"
+                    />
 
-                  <NoteEditor
-                    key={selectedNote.id}
-                    id={selectedNote.id}
-                    content={selectedNote.content}
-                    onChange={(snapshot) => {
-                      // Only update local state. Persistence is handled by the editor's saveYDocToSupabase.
-                      updateNoteLocal(selectedNote.id, {
-                        content: snapshot.content,
-                        body: snapshot.body,
-                        excerpt: snapshot.excerpt,
-                      })
-                    }}
-                  />
+                    <NoteEditor
+                      key={selectedNote.id}
+                      id={selectedNote.id}
+                      content={selectedNote.content}
+                      onChange={(snapshot) => {
+                        // Only update local state. Persistence is handled by the editor's saveYDocToSupabase.
+                        updateNoteLocal(selectedNote.id, {
+                          content: snapshot.content,
+                          body: snapshot.body,
+                          excerpt: snapshot.excerpt,
+                        })
+                      }}
+                    />
+                  </div>
                 </div>
               </div>
             </div>

@@ -82,37 +82,39 @@ export function RecurrenceModal({ open, onOpenChange, onSave, initialConfig, bas
               onChange={(e) => setConfig(prev => ({ ...prev, unit: e.target.value as 'day' | 'week' | 'month' | 'year' }))}
               className="bg-[#2d2e30] rounded-lg px-3 py-2 text-sm focus:outline-none border border-transparent hover:border-[#444746] cursor-pointer"
             >
-              <option value="day">day</option>
-              <option value="week">week</option>
-              <option value="month">month</option>
-              <option value="year">year</option>
+              <option value="day">day{config.frequency > 1 ? 's' : ''}</option>
+              <option value="week">week{config.frequency > 1 ? 's' : ''}</option>
+              <option value="month">month{config.frequency > 1 ? 's' : ''}</option>
+              <option value="year">year{config.frequency > 1 ? 's' : ''}</option>
             </select>
           </div>
 
           {/* Repeat on */}
-          <div className="space-y-3">
-            <span className="text-sm text-[#c4c7c5]">Repeat on</span>
-            <div className="flex justify-between">
-              {days.map((day, i) => {
-                const dayId = `${day}-${i}`
-                const isActive = config.days.includes(dayId)
-                return (
-                  <button
-                    key={dayId}
-                    onClick={() => toggleDay(day, i)}
-                    className={cn(
-                      "w-8 h-8 rounded-full text-xs font-medium transition-all",
-                      isActive 
-                        ? "bg-[#a8c7fa] text-[#041e49]" 
-                        : "bg-[#2d2e30] text-[#c4c7c5] hover:bg-[#444746]"
-                    )}
-                  >
-                    {day}
-                  </button>
-                )
-              })}
+          {config.unit === 'week' && (
+            <div className="space-y-3">
+              <span className="text-sm text-[#c4c7c5]">Repeat on</span>
+              <div className="flex justify-between">
+                {days.map((day, i) => {
+                  const dayId = `${day}-${i}`
+                  const isActive = config.days.includes(dayId)
+                  return (
+                    <button
+                      key={dayId}
+                      onClick={() => toggleDay(day, i)}
+                      className={cn(
+                        "w-8 h-8 rounded-full text-xs font-medium transition-all",
+                        isActive 
+                          ? "bg-[#a8c7fa] text-[#041e49]" 
+                          : "bg-[#2d2e30] text-[#c4c7c5] hover:bg-[#444746]"
+                      )}
+                    >
+                      {day}
+                    </button>
+                  )
+                })}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Ends */}
           <div className="space-y-4">

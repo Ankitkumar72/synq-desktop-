@@ -13,7 +13,6 @@ import { TableHeader } from '@tiptap/extension-table-header'
 import { TableCell } from '@tiptap/extension-table-cell'
 import GapCursor from '@tiptap/extension-gapcursor'
 import Dropcursor from '@tiptap/extension-dropcursor'
-import Focus from '@tiptap/extension-focus'
 import { TrailingNode } from './trailing-node'
 
 import Placeholder from '@tiptap/extension-placeholder'
@@ -118,10 +117,6 @@ export function getEditorExtensions() {
     Dropcursor.configure({
       color: '#2eaadc',
       width: 2,
-    }),
-    Focus.configure({
-      className: 'is-block-focused',
-      mode: 'deepest',
     }),
     TrailingNode,
   ]
