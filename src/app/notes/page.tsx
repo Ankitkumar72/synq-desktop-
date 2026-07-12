@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useMemo, useEffect, useRef } from "react";
-import { Plus, Clock, FileText, ChevronDown, Search } from "lucide-react"
+import { Plus, Clock, FileText, ChevronDown } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -83,7 +83,7 @@ import { DeleteConfirmationModal } from "@/components/ui/delete-confirmation-mod
 
 function NotesPageContent() {
   const hasHydrated = useNotesStore(s => s._hasHydrated);
-  const notes = useNotesStore(s => s.notes); const selectedNoteId = useNotesStore(s => s.selectedNoteId); const setSelectedNoteId = useNotesStore(s => s.setSelectedNoteId); const addNote = useNotesStore(s => s.addNote); const updateNote = useNotesStore(s => s.updateNote); const deleteNote = useNotesStore(s => s.deleteNote); const pinNote = useNotesStore(s => s.pinNote); const updateNoteLocal = useNotesStore(s => s.updateNoteLocal); const fetchNoteById = useNotesStore(s => s.fetchNoteById)
+  const notes = useNotesStore(s => s.notes); const selectedNoteId = useNotesStore(s => s.selectedNoteId); const setSelectedNoteId = useNotesStore(s => s.setSelectedNoteId); const addNote = useNotesStore(s => s.addNote); const updateNote = useNotesStore(s => s.updateNote); const deleteNote = useNotesStore(s => s.deleteNote); const pinNote = useNotesStore(s => s.pinNote); const updateNoteLocal = useNotesStore(s => s.updateNoteLocal);
   const folders = useFolderStore(s => s.folders); const fetchFolders = useFolderStore(s => s.fetchFolders)
   const isSidebarOpen = useUIStore(s => s.isSidebarOpen)
   const pathname = usePathname()
@@ -164,7 +164,7 @@ function NotesPageContent() {
         lastUrlId.current = null
       }
     }
-  }, [selectedNoteId, notes])
+  }, [selectedNoteId, notes, hasHydrated])
 
   const debouncedUpdate = useDebounce(updateNote, 800)
 

@@ -102,15 +102,15 @@ export default function TrashPage() {
       const expiredNotes = notes.filter(n => n.deleted_at && isExpired(n.deleted_at))
       const expiredTasks = tasks.filter(t => t.deleted_at && isExpired(t.deleted_at))
       const expiredEvents = events.filter(e => e.deleted_at && isExpired(e.deleted_at))
-      const expiredFolders = folders.filter(p => p.deleted_at && isExpired(p.deleted_at))
+      // const expiredFolders = folders.filter(p => p.deleted_at && isExpired(p.deleted_at))
 
       for (const note of expiredNotes) await permanentlyDeleteNote(note.id)
       for (const task of expiredTasks) await permanentlyDeleteTask(task.id)
       for (const event of expiredEvents) await permanentlyDeleteEvent(event.id)
-      for (const _folder of expiredFolders) {
-        // Soft delete again? Trash should permanently delete. Wait, Folders don't have permanentlyDelete in store.
-        // I will just ignore auto-purging folders for now since the store doesn't have it.
-      }
+      // for (const _folder of expiredFolders) {
+      //   // Soft delete again? Trash should permanently delete. Wait, Folders don't have permanentlyDelete in store.
+      //   // I will just ignore auto-purging folders for now since the store doesn't have it.
+      // }
     }
     purgeExpired()
   }, [notes, tasks, events, folders, permanentlyDeleteNote, permanentlyDeleteTask, permanentlyDeleteEvent])
