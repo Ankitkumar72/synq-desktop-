@@ -166,7 +166,12 @@ function NotesPageContent() {
   const filteredNotes = useMemo(() => {
     return notes
       .filter(note => !note.deleted_at && !note.is_task)
-      .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+      .sort((a, b) => {
+        if (typeof a.order === 'number' && typeof b.order === 'number') {
+          return a.order - b.order
+        }
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      })
   }, [notes])
 
   const pinnedNotes = useMemo(() => filteredNotes.filter(n => n.pinned), [filteredNotes])
