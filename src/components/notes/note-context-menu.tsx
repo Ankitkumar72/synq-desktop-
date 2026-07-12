@@ -31,14 +31,14 @@ const MenuItem = ({
       onClick()
     }}
     className={cn(
-      "w-full flex items-center justify-between px-3 py-1.5 text-[13px] font-medium transition-all rounded-md group text-left",
+      "relative flex w-full cursor-default select-none items-center justify-between rounded-md px-3 py-1.5 text-[13px] outline-none transition-colors",
       variant === "danger" 
-        ? "text-rose-400 hover:bg-rose-500/10" 
-        : "text-[#E1E2E4] hover:bg-white/5"
+        ? "text-destructive hover:bg-destructive/10 focus:bg-destructive/10" 
+        : "text-popover-foreground hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
     )}
   >
     <span>{label}</span>
-    {shortcut && <span className="text-[10px] text-[#A1A3A7] font-medium uppercase tracking-widest">{shortcut}</span>}
+    {shortcut && <span className="text-xs tracking-widest text-muted-foreground">{shortcut}</span>}
   </button>
 )
 
@@ -102,9 +102,9 @@ export function NoteContextMenu({ note, children, onAction }: NoteContextMenuPro
               top: position.y, 
               left: position.x,
               zIndex: 9999,
-              fontFamily: 'Roboto, "Google Sans", sans-serif'
+              fontFamily: '"Google Sans", Roboto, sans-serif'
             }}
-            className="w-[240px] bg-[#18181B] border border-white/5 rounded-md shadow-2xl p-2"
+            className="w-56 bg-popover border border-border rounded-lg shadow-md p-1 flex flex-col z-50 text-popover-foreground"
           >
             <div className="flex flex-col">
               <MenuItem 
@@ -137,7 +137,7 @@ export function NoteContextMenu({ note, children, onAction }: NoteContextMenuPro
               />
             </div>
             
-            <div className="my-1 border-t border-white/5 mx-2" />
+            <div className="-mx-1 my-1 h-px bg-border" />
             
             <div className="flex flex-col">
               <MenuItem 
@@ -151,9 +151,9 @@ export function NoteContextMenu({ note, children, onAction }: NoteContextMenuPro
               />
             </div>
             
-            <div className="mt-2 pt-3 border-t border-white/5 px-4 pb-2">
-              <p className="text-[11px] text-[#A1A3A7] font-medium whitespace-nowrap overflow-hidden text-ellipsis">Ankit Kumar</p>
-              <p className="text-[10px] text-[#A1A3A7]/50 mt-0.5">{formatRelativeDate(note.updated_at)}</p>
+            <div className="-mx-1 mt-1 border-t border-border pt-2 px-2 pb-1">
+              <p className="text-xs text-muted-foreground font-medium whitespace-nowrap overflow-hidden text-ellipsis">Ankit Kumar</p>
+              <p className="text-[10px] text-muted-foreground/50 mt-0.5">{formatRelativeDate(note.updated_at)}</p>
             </div>
           </motion.div>
         )}

@@ -1,14 +1,6 @@
 "use client"
 
 import React, { useState, useEffect, useRef } from "react"
-import { 
-  Pin,
-  PinOff,
-  FolderOpen, 
-  Edit3, 
-  AlignLeft,
-  Trash2
-} from "lucide-react"
 import { cn } from "@/lib/utils"
 import { motion, AnimatePresence } from "framer-motion"
 import { Folder } from "@/shared"
@@ -20,7 +12,6 @@ interface FolderContextMenuProps {
 }
 
 interface MenuItemProps {
-  icon: React.ElementType
   label: string
   shortcut?: string
   onClick: () => void
@@ -28,7 +19,6 @@ interface MenuItemProps {
 }
 
 const MenuItem = ({ 
-  icon: Icon, 
   label, 
   shortcut, 
   onClick, 
@@ -40,17 +30,14 @@ const MenuItem = ({
       onClick()
     }}
     className={cn(
-      "w-full flex items-center justify-between px-2 py-1.5 text-[13px] transition-colors rounded-sm text-left select-none outline-none",
+      "relative flex w-full cursor-default select-none items-center justify-between rounded-md px-3 py-1.5 text-[13px] outline-none transition-colors",
       variant === "danger" 
-        ? "text-rose-400 hover:bg-rose-500/10 hover:text-rose-400" 
-        : "text-stone-300 hover:bg-white/10 hover:text-white"
+        ? "text-destructive hover:bg-destructive/10 focus:bg-destructive/10" 
+        : "text-popover-foreground hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
     )}
   >
-    <div className="flex items-center gap-2">
-      <Icon className={cn("w-4 h-4", variant === "danger" ? "text-rose-400" : "text-stone-400")} />
-      {label}
-    </div>
-    {shortcut && <span className="text-[10px] text-stone-500 tracking-widest">{shortcut}</span>}
+    <span>{label}</span>
+    {shortcut && <span className="text-[10px] tracking-widest text-muted-foreground uppercase font-medium">{shortcut}</span>}
   </button>
 )
 
@@ -114,35 +101,31 @@ export function FolderContextMenu({ folder, children, onAction }: FolderContextM
               position: "fixed", 
               top: position.y, 
               left: position.x,
-              zIndex: 9999 
+              zIndex: 9999,
+              fontFamily: '"Google Sans", Roboto, sans-serif'
             }}
-            className="w-[200px] bg-[#1e1e1e] border border-white/10 rounded-md shadow-2xl p-1"
+            className="w-48 bg-popover border border-border rounded-lg shadow-md p-1 flex flex-col z-50 text-popover-foreground"
           >
             <MenuItem 
-              icon={FolderOpen} 
               label="Expand / Collapse" 
               onClick={() => performAction("open")} 
             />
             <MenuItem 
-              icon={folder.is_favorite ? PinOff : Pin} 
               label={folder.is_favorite ? "Unpin Folder" : "Pin Folder"} 
               onClick={() => performAction("pin")} 
             />
             <MenuItem 
-              icon={Edit3} 
               label="Rename" 
               onClick={() => performAction("rename")} 
             />
             <MenuItem 
-              icon={AlignLeft} 
               label="Edit Description" 
               onClick={() => performAction("edit-description")} 
             />
             
-            <div className="h-px bg-white/10 my-1 mx-0" />
+            <div className="-mx-1 my-1 h-px bg-border" />
             
             <MenuItem 
-              icon={Trash2} 
               label="Move to Trash" 
               variant="danger"
               onClick={() => performAction("delete")} 

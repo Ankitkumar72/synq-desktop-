@@ -92,7 +92,7 @@ export const useFolderStore = create<FolderState>()(
         const folderId = crypto.randomUUID()
 
         const newFieldVersions: Record<string, string> = {}
-        const defaultFields = ['name', 'color', 'parent_id', 'order', 'updated_at', 'created_at']
+        const defaultFields = ['name', 'description', 'color', 'is_favorite', 'parent_id', 'order', 'updated_at', 'created_at']
         for (const key of defaultFields) {
           newFieldVersions[key] = timestamp
         }

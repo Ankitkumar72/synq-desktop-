@@ -279,45 +279,49 @@ export default function ProjectsPage() {
             </Dialog>
 
             <Dialog open={isRenameOpen} onOpenChange={setIsRenameOpen}>
-              <DialogContent className="sm:max-w-[400px] p-6 border border-white/5 bg-[#101011] shadow-[0_24px_50px_rgba(0,0,0,0.5)] rounded-[28px] outline-none">
-                <form onSubmit={handleRenameSubmit} className="space-y-6">
-                  <h2 className="text-xl font-bold text-white tracking-tight">Rename Folder</h2>
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black uppercase tracking-[0.2em] text-stone-400">Folder Name</label>
+              <DialogContent className="sm:max-w-[400px] p-0 overflow-hidden bg-background border-border shadow-lg rounded-xl font-sans" style={{ fontFamily: '"Google Sans", Roboto, sans-serif' }}>
+                <form onSubmit={handleRenameSubmit} className="flex flex-col">
+                  <div className="p-4 border-b border-border/50">
+                    <h2 className="text-[15px] font-semibold text-foreground tracking-tight">Rename Folder</h2>
+                  </div>
+                  <div className="p-4 py-6">
                     <input
                       type="text"
                       value={renameValue}
                       onChange={(e) => setRenameValue(e.target.value)}
-                      className="w-full bg-[#1A1A1C] border border-white/5 focus:border-white/10 rounded-2xl py-3 px-4 text-white text-sm placeholder:text-stone-600 focus:outline-none transition-all font-medium"
+                      placeholder="Folder name"
+                      className="w-full bg-transparent border-0 border-b border-border focus:border-foreground py-2 text-foreground text-[14px] placeholder:text-muted-foreground focus:outline-none transition-colors focus:ring-0 px-0"
                       required
                       autoFocus
                     />
                   </div>
-                  <div className="flex justify-end gap-3 pt-2">
-                    <Button type="button" variant="ghost" onClick={() => setIsRenameOpen(false)} className="text-stone-400 hover:text-white hover:bg-white/5 rounded-xl h-11 px-6 font-bold transition-all">Cancel</Button>
-                    <Button type="submit" disabled={!renameValue.trim()} className="bg-white text-black hover:bg-stone-200 rounded-xl h-11 px-6 font-bold shadow-lg shadow-white/5 transition-all">Save Changes</Button>
+                  <div className="px-4 py-3 bg-muted/30 border-t border-border/50 flex justify-end gap-2">
+                    <Button type="button" variant="ghost" onClick={() => setIsRenameOpen(false)} className="text-muted-foreground hover:text-foreground hover:bg-accent rounded-md h-8 px-4 text-xs font-medium transition-colors">Cancel</Button>
+                    <Button type="submit" disabled={!renameValue.trim()} className="bg-foreground text-background hover:bg-foreground/90 rounded-md h-8 px-4 text-xs font-medium transition-colors disabled:opacity-50">Save</Button>
                   </div>
                 </form>
               </DialogContent>
             </Dialog>
 
             <Dialog open={isEditDescOpen} onOpenChange={setIsEditDescOpen}>
-              <DialogContent className="sm:max-w-[400px] p-6 border border-white/5 bg-[#101011] shadow-[0_24px_50px_rgba(0,0,0,0.5)] rounded-[28px] outline-none">
-                <form onSubmit={handleEditDescSubmit} className="space-y-6">
-                  <h2 className="text-xl font-bold text-white tracking-tight">Edit Description</h2>
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black uppercase tracking-[0.2em] text-stone-400">Description</label>
-                    <textarea
+              <DialogContent className="sm:max-w-[400px] p-0 overflow-hidden bg-background border-border shadow-lg rounded-xl font-sans" style={{ fontFamily: '"Google Sans", Roboto, sans-serif' }}>
+                <form onSubmit={handleEditDescSubmit} className="flex flex-col">
+                  <div className="p-4 border-b border-border/50">
+                    <h2 className="text-[15px] font-semibold text-foreground tracking-tight">Edit Description</h2>
+                  </div>
+                  <div className="p-4 py-5">
+                    <input
+                      type="text"
                       value={editDescValue}
                       onChange={(e) => setEditDescValue(e.target.value)}
                       placeholder="Add a brief description..."
-                      className="w-full bg-[#1A1A1C] border border-white/5 focus:border-white/10 rounded-2xl py-3 px-4 text-white text-sm placeholder:text-stone-600 focus:outline-none transition-all font-medium resize-none min-h-[100px]"
+                      className="w-full bg-transparent border-0 border-b border-border focus:border-foreground py-2 text-foreground text-[14px] placeholder:text-muted-foreground focus:outline-none transition-colors focus:ring-0 px-0"
                       autoFocus
                     />
                   </div>
-                  <div className="flex justify-end gap-3 pt-2">
-                    <Button type="button" variant="ghost" onClick={() => setIsEditDescOpen(false)} className="text-stone-400 hover:text-white hover:bg-white/5 rounded-xl h-11 px-6 font-bold transition-all">Cancel</Button>
-                    <Button type="submit" className="bg-white text-black hover:bg-stone-200 rounded-xl h-11 px-6 font-bold shadow-lg shadow-white/5 transition-all">Save Changes</Button>
+                  <div className="px-4 py-3 bg-muted/30 border-t border-border/50 flex justify-end gap-2">
+                    <Button type="button" variant="ghost" onClick={() => setIsEditDescOpen(false)} className="text-muted-foreground hover:text-foreground hover:bg-accent rounded-md h-8 px-4 text-xs font-medium transition-colors">Cancel</Button>
+                    <Button type="submit" className="bg-foreground text-background hover:bg-foreground/90 rounded-md h-8 px-4 text-xs font-medium transition-colors">Save</Button>
                   </div>
                 </form>
               </DialogContent>
@@ -490,26 +494,21 @@ export default function ProjectsPage() {
                               <MoreHorizontal className="w-4 h-4" />
                             </Button>
                           } />
-                          <DropdownMenuContent align="end" className="w-[200px] bg-[#1e1e1e] border border-white/10 shadow-2xl rounded-md p-1 text-stone-200">
-                            <DropdownMenuItem onClick={() => handleFolderAction('open', folder.id)} className="text-[13px] gap-2 rounded-sm py-1.5 px-2 focus:bg-white/10 focus:text-white transition-colors cursor-default outline-none text-stone-300">
-                              <Folder className="w-4 h-4 text-stone-400" />
+                          <DropdownMenuContent align="end" className="w-48 bg-popover border border-border shadow-md rounded-lg p-1 text-popover-foreground" style={{ fontFamily: '"Google Sans", Roboto, sans-serif' }}>
+                            <DropdownMenuItem onClick={() => handleFolderAction('open', folder.id)} className="text-[13px] rounded-md py-1.5 px-3 focus:bg-accent focus:text-accent-foreground hover:bg-accent hover:text-accent-foreground transition-colors cursor-default outline-none">
                               Expand / Collapse
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleFolderAction('pin', folder.id)} className="text-[13px] gap-2 rounded-sm py-1.5 px-2 focus:bg-white/10 focus:text-white transition-colors cursor-default outline-none text-stone-300">
-                              {folder.is_favorite ? <PinOff className="w-4 h-4 text-stone-400" /> : <Pin className="w-4 h-4 text-stone-400" />}
+                            <DropdownMenuItem onClick={() => handleFolderAction('pin', folder.id)} className="text-[13px] rounded-md py-1.5 px-3 focus:bg-accent focus:text-accent-foreground hover:bg-accent hover:text-accent-foreground transition-colors cursor-default outline-none">
                               {folder.is_favorite ? "Unpin Folder" : "Pin Folder"}
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleFolderAction('rename', folder.id)} className="text-[13px] gap-2 rounded-sm py-1.5 px-2 focus:bg-white/10 focus:text-white transition-colors cursor-default outline-none text-stone-300">
-                              <Edit3 className="w-4 h-4 text-stone-400" />
+                            <DropdownMenuItem onClick={() => handleFolderAction('rename', folder.id)} className="text-[13px] rounded-md py-1.5 px-3 focus:bg-accent focus:text-accent-foreground hover:bg-accent hover:text-accent-foreground transition-colors cursor-default outline-none">
                               Rename
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleFolderAction('edit-description', folder.id)} className="text-[13px] gap-2 rounded-sm py-1.5 px-2 focus:bg-white/10 focus:text-white transition-colors cursor-default outline-none text-stone-300">
-                              <AlignLeft className="w-4 h-4 text-stone-400" />
+                            <DropdownMenuItem onClick={() => handleFolderAction('edit-description', folder.id)} className="text-[13px] rounded-md py-1.5 px-3 focus:bg-accent focus:text-accent-foreground hover:bg-accent hover:text-accent-foreground transition-colors cursor-default outline-none">
                               Edit Description
                             </DropdownMenuItem>
-                            <DropdownMenuSeparator className="bg-white/10 my-1 mx-0" />
-                            <DropdownMenuItem onClick={() => handleFolderAction('delete', folder.id)} className="text-[13px] gap-2 rounded-sm py-1.5 px-2 text-rose-400 focus:text-rose-400 focus:bg-rose-500/10 transition-colors cursor-default outline-none">
-                              <Trash2 className="w-4 h-4" />
+                            <DropdownMenuSeparator className="bg-border -mx-1 my-1" />
+                            <DropdownMenuItem onClick={() => handleFolderAction('delete', folder.id)} className="text-[13px] rounded-md py-1.5 px-3 text-destructive focus:text-destructive focus:bg-destructive/10 hover:text-destructive hover:bg-destructive/10 transition-colors cursor-default outline-none">
                               Move to Trash
                             </DropdownMenuItem>
                           </DropdownMenuContent>
