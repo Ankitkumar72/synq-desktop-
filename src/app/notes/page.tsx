@@ -110,13 +110,19 @@ function NotesPageContent() {
 
   // Sync state from URL on mount or when URL changes (e.g. external navigation or back button)
   useEffect(() => {
-    const currentUrlId = urlNoteId
-    if (currentUrlId && currentUrlId !== selectedNoteId) {
-      if (!hasSyncedFromUrl.current || currentUrlId !== lastUrlId.current) {
-        const noteExists = notes.some(n => n.id === currentUrlId && !n.is_deleted && !n.deleted_at && !n.is_task)
+    if (!hasHydrated) return;
+
+    // Parse the actual window location because Next.js usePathname() stays stale after window.history.replaceState
+    const actualPath = window.location.pathname
+    const actualPathSlug = actualPath.startsWith('/notes/') ? decodeURIComponent(actualPath.slice('/notes/'.length)) : null
+    const actualUrlId = actualPathSlug ? fromNoteSlug(actualPathSlug) : null
+
+    if (actualUrlId && actualUrlId !== selectedNoteId) {
+      if (!hasSyncedFromUrl.current || actualUrlId !== lastUrlId.current) {
+        const noteExists = notes.some(n => n.id === actualUrlId && !n.is_deleted && !n.deleted_at && !n.is_task)
         if (noteExists) {
-          setSelectedNoteId(currentUrlId)
-          lastUrlId.current = currentUrlId
+          setSelectedNoteId(actualUrlId)
+          lastUrlId.current = actualUrlId
           hasSyncedFromUrl.current = true
         } else {
           // If the URL note doesn't exist or is deleted, clear it from URL
@@ -125,10 +131,12 @@ function NotesPageContent() {
           hasSyncedFromUrl.current = true
         }
       }
-    } else if (!currentUrlId && !hasSyncedFromUrl.current && notes.length > 0) {
-      hasSyncedFromUrl.current = true
+    } else {
+      if (!hasSyncedFromUrl.current) {
+        hasSyncedFromUrl.current = true
+      }
     }
-  }, [urlNoteId, notes, selectedNoteId, setSelectedNoteId])
+  }, [pathname, notes, selectedNoteId, setSelectedNoteId, hasHydrated])
 
   useEffect(() => {
     if (folders.length === 0) {
@@ -138,6 +146,8 @@ function NotesPageContent() {
 
   // Sync URL with selectedNoteId using silent history updates
   useEffect(() => {
+    if (!hasHydrated) return;
+
     if (isInitialMount.current) {
       isInitialMount.current = false
       return
