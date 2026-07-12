@@ -1,159 +1,264 @@
 .editorContent {
-  color: #F2F2F2;
+  color: #D2D2D2;
   font-size: 15px;
   line-height: 1.6;
-  font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+  font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
 .editorContent ::selection {
-  background-color: rgba(75, 123, 255, 0.3);
+  background-color: rgba(94, 106, 210, 0.4);
   color: white;
 }
 
+/* Base element spacing */
 .editorContent > * {
-  margin-top: 12px;
-  margin-bottom: 12px;
+  margin-top: 0.75em;
+  margin-bottom: 0.75em;
 }
 .editorContent > *:first-child {
   margin-top: 0;
 }
 
-.editorContent > h1 {
-  font-size: 24px;
+/* Headings - Linear style */
+.editorContent h1, 
+.editorContent h2, 
+.editorContent h3 {
+  color: #FFFFFF;
   font-weight: 600;
+  line-height: 1.3;
+}
+
+.editorContent h1 {
+  font-size: 26px;
+  letter-spacing: -0.02em;
+  margin-top: 1.5em;
+  margin-bottom: 0.5em;
+}
+
+.editorContent h2 {
+  font-size: 19px;
   letter-spacing: -0.015em;
-  color: white;
-  margin-top: 32px;
-  margin-bottom: 12px;
+  margin-top: 1.5em;
+  margin-bottom: 0.5em;
 }
 
-.editorContent > h2 {
-  font-size: 20px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  color: white;
-  margin-top: 24px;
-  margin-bottom: 8px;
-}
-
-.editorContent > h3 {
+.editorContent h3 {
   font-size: 16px;
-  font-weight: 600;
-  letter-spacing: 0em;
-  color: white;
-  margin-top: 20px;
-  margin-bottom: 8px;
+  letter-spacing: -0.01em;
+  margin-top: 1.2em;
+  margin-bottom: 0.4em;
 }
 
-.editorContent > p {
-  margin-top: 6px;
-  margin-bottom: 6px;
-  line-height: 1.65;
+/* Paragraphs */
+.editorContent p {
+  margin-top: 0.5em;
+  margin-bottom: 0.5em;
+  color: #D2D2D2;
 }
 
-.editorContent > blockquote {
-  border: 1px solid rgba(255, 170, 0, 0.2);
-  border-left: 4px solid rgba(255, 170, 0, 0.8);
-  background-color: rgba(255, 170, 0, 0.05);
-  padding: 12px 16px;
+/* Formatting */
+.editorContent strong { 
+  font-weight: 600; 
+  color: #FFFFFF; 
+}
+.editorContent em { 
+  font-style: italic; 
+}
+.editorContent u { 
+  text-decoration: underline; 
+  text-underline-offset: 3px; 
+  text-decoration-color: rgba(255, 255, 255, 0.4);
+}
+.editorContent s, .editorContent del { 
+  text-decoration: line-through; 
+  color: #888888;
+}
+.editorContent a { 
+  color: #5E6AD2; 
+  text-decoration: none; 
+  font-weight: 500;
+  transition: color 0.1s ease;
+}
+.editorContent a:hover {
+  color: #7B86E8;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* Blockquotes - Clean, subtle left border */
+.editorContent blockquote {
+  border-left: 3px solid #5E6AD2;
+  background-color: transparent;
+  padding: 4px 16px;
+  color: #A1A1AA;
+  margin-top: 1em;
+  margin-bottom: 1em;
+}
+.editorContent blockquote p {
+  color: inherit;
+  margin: 0;
+}
+
+/* Inline Code - GitHub Standard */
+.editorContent code {
+  background-color: rgba(110, 118, 129, 0.15);
+  color: #d1d5da;
+  padding: 3px 6px;
   border-radius: 6px;
-  color: #F2F2F2;
-  font-style: normal;
-  margin-top: 16px;
-  margin-bottom: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  font-family: 'JetBrains Mono', 'Fira Code', 'Roboto Mono', monospace;
+  font-size: 13px;
 }
 
-.editorContent > pre {
-  background-color: #1a1a1e;
-  border-width: 1px;
-  border-color: rgba(255, 255, 255, 0.05);
+/* Code Blocks */
+.editorContent pre {
+  background-color: #161618;
+  border: 1px solid rgba(255, 255, 255, 0.08);
   padding: 16px;
   border-radius: 8px;
-  margin-top: 16px;
-  margin-bottom: 16px;
+  margin-top: 1.2em;
+  margin-bottom: 1.2em;
+  overflow-x: auto;
+}
+.editorContent pre code {
+  background-color: transparent;
+  padding: 0;
+  border-radius: 0;
+  border: none;
+  color: #D1D1D1;
+  font-size: 13px;
+  line-height: 1.6;
 }
 
-.editorContent > ul {
+/* Lists */
+.editorContent ul, 
+.editorContent ol {
+  padding-left: 1.5em;
+  margin-top: 0.5em;
+  margin-bottom: 0.5em;
+  color: #D2D2D2;
+}
+.editorContent ul {
   list-style-type: disc;
-  padding-left: 20px;
-  margin-top: 8px;
-  margin-bottom: 8px;
 }
-
-.editorContent > ol {
+.editorContent ol {
   list-style-type: decimal;
-  padding-left: 20px;
-  margin-top: 8px;
-  margin-bottom: 8px;
 }
-
 .editorContent li {
-  margin-top: 2px;
-  margin-bottom: 2px;
+  margin-top: 0.25em;
+  margin-bottom: 0.25em;
+}
+.editorContent li > p {
+  margin-top: 0.25em;
+  margin-bottom: 0.25em;
 }
 
-.editorContent strong { font-weight: 600; color: white; }
-.editorContent em { font-style: italic; }
-.editorContent u { text-decoration: underline; text-underline-offset: 2px; }
-.editorContent s, .editorContent del { text-decoration: line-through; }
-.editorContent code { 
-  background: #1a1a1e; 
-  color: #e06c75; 
-  padding: 2px 6px; 
-  border-radius: 4px; 
-  font-size: 13px; 
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; 
-}
-.editorContent code::before { content: none; }
-.editorContent code::after { content: none; }
-.editorContent a { color: #2eaadc; text-decoration: underline; }
-.editorContent a:hover { color: rgba(46, 170, 220, 0.8); }
-.editorContent mark { border-radius: 2px; padding: 0 2px; }
-.editorContent mark[data-color="#FFFF00"] { background: #FFFF00; color: black; }
-.editorContent mark[data-color="#FF0000"] { background: #FF0000; color: white; }
-.editorContent td, .editorContent th { 
-  border: 1px solid rgba(255,255,255,0.1); 
-  padding: 8px; 
-}
-.editorContent th { background: rgba(255,255,255,0.05); font-weight: 600; }
-.editorContent table { border-collapse: collapse; width: 100%; }
-
-.editorContent .is-empty::before {
-  color: #8A8F98;
-  content: attr(data-placeholder);
-  float: left;
-  pointer-events: none;
-  height: 0;
-}
-
+/* Task Lists */
 .editorContent ul[data-type="taskList"] {
-  list-style-type: none;
-  padding-left: 0;
+  list-style: none;
+  padding: 0;
 }
 .editorContent ul[data-type="taskList"] li {
   display: flex;
   align-items: flex-start;
-  gap: 10px;
+  margin-bottom: 4px;
 }
-.editorContent ul[data-type="taskList"] li label {
-  display: flex;
-  align-items: center;
+.editorContent ul[data-type="taskList"] li > label {
+  margin-right: 8px;
+  margin-top: 2px;
   user-select: none;
 }
-.editorContent ul[data-type="taskList"] li div {
-  flex: 1 1 0%;
+.editorContent ul[data-type="taskList"] li > div {
+  flex: 1;
 }
 .editorContent ul[data-type="taskList"] input[type="checkbox"] {
+  accent-color: #5E6AD2;
   width: 16px;
   height: 16px;
-  border-radius: 6px;
-  border-color: #404040;
   background-color: #171717;
-  accent-color: #3b82f6;
 }
 .editorContent ul[data-type="taskList"] li[data-checked="true"] div {
   text-decoration: line-through;
   color: #737373;
+}
+
+/* Tables - Linear exact match */
+.editorContent table {
+  border-collapse: separate;
+  border-spacing: 0;
+  width: 100%;
+  margin-top: 1.5em;
+  margin-bottom: 1.5em;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 6px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.015);
+}
+
+.editorContent th,
+.editorContent td {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  padding: 12px 16px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.editorContent th:last-child,
+.editorContent td:last-child {
+  border-right: none;
+}
+
+.editorContent tr:last-child td {
+  border-bottom: none;
+}
+
+.editorContent th {
+  font-weight: 500;
+  font-size: 14px;
+  color: #FFFFFF; /* Bright white headers like the screenshot */
+}
+
+.editorContent td {
+  font-size: 14px;
+  color: #D2D2D2;
+}
+
+/* Placeholder */
+.editorContent p.is-editor-empty:first-child::before,
+.editorContent :global(.is-empty)::before {
+  color: rgba(255, 255, 255, 0.25);
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
+
+/* Focus and Drag Handlers */
+.editorContent *:focus {
+  outline: none;
+}
+
+.editorContent img {
+  max-width: 100%;
+  border-radius: 6px;
+  margin-top: 1em;
+  margin-bottom: 1em;
+  border: 1px solid rgba(255,255,255,0.1);
+}
+
+.editorContent hr {
+  border: none;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  margin-top: 2em;
+  margin-bottom: 2em;
+}
+
+.editorContent table {
+  table-layout: auto !important;
+}
+.editorContent table th, .editorContent table td {
+  width: auto !important;
+  min-width: 0 !important;
 }

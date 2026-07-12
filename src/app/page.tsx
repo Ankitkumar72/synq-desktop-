@@ -22,7 +22,7 @@ import { toNoteSlug } from "@/lib/utils/note-slug"
 import { formatDistanceToNowStrict } from "date-fns"
 import { cn } from "@/lib/utils"
 import { Note } from "@/shared"
-import { createEmptyNoteContent } from "@/shared"
+import { createEmptyNoteContent, getPlainTextFromStoredContent } from "@/shared"
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -50,33 +50,37 @@ function NoteCard({ note, initials }: { note: Note, initials: string }) {
 
   const isCode = note.title?.toLowerCase().includes('dsa') || note.category === 'code'
 
+  const textBody = note.excerpt || 
+    (note.body === '{"ops":[{"insert":"\\n"}]}' || note.body?.trim() === '' ? null : note.body) || 
+    getPlainTextFromStoredContent(note.content ?? null);
+
   return (
     <Link 
       href={`/notes/${toNoteSlug(note.title || '', note.id)}`}
-      className="bg-[#1E1E1E] rounded-[16px] flex flex-col flex-1 min-w-[240px] shrink-0 cursor-pointer hover:bg-[#252525] transition-all duration-200 border border-white/[0.06] group relative overflow-hidden"
+      className="bg-[#1E1E1E] rounded-[16px] flex flex-col flex-1 min-w-[240px] max-h-full shrink-0 cursor-pointer hover:bg-[#252525] transition-all duration-200 border border-white/[0.06] group relative overflow-hidden"
     >
       {/* card-header: icon area */}
-      <div className="h-[52px] px-4 flex items-center shrink-0">
+      <div className="h-[40px] px-4 flex items-center shrink-0">
         <div className={cn(
-          "w-8 h-8 rounded-lg flex items-center justify-center transition-colors",
+          "w-7 h-7 rounded-lg flex items-center justify-center transition-colors",
           isCode ? "bg-red-500/10 text-red-400" : "bg-white/5 text-[#666] group-hover:text-[#999]"
         )}>
-          {isCode ? <Code2 className="w-4 h-4" /> : <FileText className="w-4 h-4" />}
+          {isCode ? <Code2 className="w-3.5 h-3.5" /> : <FileText className="w-3.5 h-3.5" />}
         </div>
       </div>
 
-      {/* card-content */}
-      <div className="px-4 pb-4 flex flex-col flex-1 min-h-0">
-        <h4 className="text-[#E8E8E8] text-[13px] font-semibold leading-snug group-hover:text-white transition-colors line-clamp-2 mb-1.5">
+      {/* card-content — overflow hidden so nothing escapes the card */}
+      <div className="px-4 pb-3 flex flex-col flex-1 min-h-0 overflow-hidden">
+        <h4 className="text-[#E8E8E8] text-[13px] font-semibold leading-snug group-hover:text-white transition-colors truncate mb-1">
           {note.title || "Untitled Note"}
         </h4>
-        {note.excerpt && (
-          <p className="text-[#555] text-[11px] leading-relaxed line-clamp-2">
-            {note.excerpt}
+        {textBody && (
+          <p className="text-[#555] text-[11px] leading-relaxed line-clamp-1 break-all">
+            {textBody}
           </p>
         )}
         
-        <div className="flex items-center gap-1.5 mt-auto pt-3">
+        <div className="flex items-center gap-1.5 mt-auto pt-2">
           <div className="w-4 h-4 rounded-full bg-[#2E2E2E] flex items-center justify-center text-[8px] text-[#777] font-bold border border-white/5">
             {initials}
           </div>
@@ -242,11 +246,11 @@ export default function DashboardPage() {
           </div>
         </motion.header>
 
-        {/* Notes Section */}
-        <motion.div variants={itemVariants} className="h-[204px] mb-6">
+        {/* Notes Section — fixed height, content stays contained */}
+        <motion.div variants={itemVariants} className="mb-6 h-[220px]">
           <DashboardCard title="Notes" href="/notes" className="h-full">
             {notesOnly.length > 0 ? (
-              <div className="flex gap-3 overflow-x-auto no-scrollbar pb-1 -mx-1 px-1">
+              <div className="flex gap-3 overflow-x-auto no-scrollbar h-full -mx-1 px-1">
                 {notesOnly.map((note) => (
                   <NoteCard
                     key={note.id}

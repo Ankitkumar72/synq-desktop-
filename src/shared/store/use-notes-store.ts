@@ -66,6 +66,7 @@ interface NotesState {
   restoreNote: (id: string) => Promise<void>
   permanentlyDeleteNote: (id: string) => Promise<void>
   fetchNotes: (includeDeleted?: boolean, prefetchedData?: Note[]) => Promise<void>
+  fetchNoteById: (id: string) => Promise<void>
   setSelectedNoteId: (id: string | null) => void
   pinNote: (id: string, isPinned: boolean) => Promise<void>
   focusedNoteId: string | null
@@ -563,6 +564,35 @@ export const useNotesStore = create<NotesState>()(
         } catch (err) {
           console.error('[NotesStore] Unexpected error in fetchNotes:', err);
           set({ isLoading: false });
+        }
+      },
+
+      fetchNoteById: async (id: string) => {
+        if (!supabase) return
+        try {
+          set({ isLoading: true })
+          const { data, error } = await supabase
+            .from(TABLES.WEB_NOTES)
+            .select('*')
+            .eq(COLUMNS.ID, id)
+            .single()
+            
+          if (error) {
+            console.error('[NotesStore] Error fetching single note:', error)
+            set({ isLoading: false })
+            return
+          }
+          
+          if (data) {
+            const currentNotes = get().notes
+            const merged = mergeNotesList(currentNotes, [sanitizeNote(data)], true, true)
+            set({ notes: merged, isLoading: false })
+          } else {
+            set({ isLoading: false })
+          }
+        } catch (err) {
+          console.error('[NotesStore] Unexpected error in fetchNoteById:', err)
+          set({ isLoading: false })
         }
       },
 

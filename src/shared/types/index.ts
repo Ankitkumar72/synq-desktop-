@@ -108,6 +108,7 @@ export interface Folder {
   field_versions?: Record<string, string>
   created_at: string
   updated_at: string
+  deleted_at?: string
 }
 
 export interface CalendarEvent {

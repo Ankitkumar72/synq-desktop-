@@ -37,6 +37,8 @@ import {
 import { FolderContextMenu } from "@/components/folders/folder-context-menu"
 
 
+import { DeleteConfirmationModal } from "@/components/ui/delete-confirmation-modal"
+
 function getIconColorClass(colorValue?: string) {
   if (!colorValue) return 'text-stone-500'
   if (colorValue.includes('blue')) return 'text-blue-500'
@@ -57,6 +59,7 @@ export default function ProjectsPage() {
   type SortField = 'name' | 'date' | 'type' | 'size' | 'tags' | 'date_created' | 'date_modified' | 'date_taken' | 'dimensions' | 'rating'
   const [sortColumn, setSortColumn] = useState<SortField>('name')
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc')
+  const [deleteFolderId, setDeleteFolderId] = useState<string | null>(null)
 
   const toggleFolder = (folderId: string) => {
     setExpandedFolders(prev => {
@@ -87,7 +90,7 @@ export default function ProjectsPage() {
         break;
       }
       case 'delete':
-        deleteFolder(folderId)
+        setDeleteFolderId(folderId)
         break;
       case 'open':
         toggleFolder(folderId)
@@ -202,8 +205,17 @@ export default function ProjectsPage() {
     )
   }
 
+  const deleteFolderItem = deleteFolderId ? folders.find(f => f.id === deleteFolderId) : null
+
   return (
     <AnimatePage className="h-full w-full overflow-y-auto custom-scrollbar">
+      <DeleteConfirmationModal 
+        isOpen={!!deleteFolderId}
+        onOpenChange={(open) => !open && setDeleteFolderId(null)}
+        onConfirm={() => deleteFolderId && deleteFolder(deleteFolderId)}
+        itemName={deleteFolderItem?.name || "Untitled Folder"}
+        itemType="folder"
+      />
       <div className="p-8 space-y-6 max-w-7xl mx-auto">
         <div className="flex items-center justify-between">
           <div className="flex flex-col gap-1">

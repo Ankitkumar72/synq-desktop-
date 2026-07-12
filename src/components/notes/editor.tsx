@@ -33,6 +33,7 @@ import { sendNoteBroadcast } from "@/shared"
 import { hlc } from "@/shared"
 
 import DOMPurify from 'dompurify'
+import Collaboration from '@tiptap/extension-collaboration'
 
 import styles from './editor-content.module.css'
 
@@ -249,6 +250,25 @@ function isFlatPlainTextFragment(fragment: Y.XmlFragment): boolean {
       if (isXmlTextFormatted(grandChild)) {
         return false
       }
+    }
+  }
+
+  return true
+}
+
+/**
+ * Checks if all top-level nodes are paragraphs, regardless of inline formatting.
+ * This catches content that has bold/italic marks but is missing block-level
+ * structure (headings, lists, blockquotes, etc.), indicating raw markdown
+ * was stored without being parsed into proper ProseMirror nodes.
+ */
+function isStructurallyFlatFragment(fragment: Y.XmlFragment): boolean {
+  if (fragment.length === 0) return true
+
+  for (let i = 0; i < fragment.length; i++) {
+    const child = fragment.get(i)
+    if (!(child instanceof Y.XmlElement) || child.nodeName !== 'paragraph') {
+      return false
     }
   }
 
@@ -580,10 +600,10 @@ export function NoteEditor({
           // Safe Hydration Rule: Hydrate from body if no meaningful remote editor state and body exists
           const currentMarkdown = getMarkdownFromYDoc(id)
           const hasMeaningfulCRDT = currentMarkdown.trim().length > 0
-          
+
           const storeNote = useNotesStore.getState().notes.find(n => n.id === id)
           const hasMeaningfulContent = storeNote?.content && (Array.isArray(storeNote.content) ? storeNote.content.length > 0 : Object.keys(storeNote.content).length > 0)
-          
+
           if (!hasMeaningfulCRDT && !hasMeaningfulContent && storeNote?.body && storeNote.body.trim().length > 0) {
             await initYDocFromMarkdown(id, typeof storeNote.body === 'string' ? storeNote.body : '')
             console.log(`[NoteEditor] Hydrated YDoc from existing body for ${id.slice(0, 8)}…`)
@@ -722,7 +742,7 @@ export function NoteEditor({
             }
 
             const serialized = JSON.stringify(stash)
-            if (serialized.length > 4 * 1024 * 1024) { 
+            if (serialized.length > 4 * 1024 * 1024) {
               console.warn('[NoteEditor] Unload stash exceeds 4MB. Saving Yjs binary only.')
               stash.content = null
             }
@@ -755,7 +775,15 @@ export function NoteEditor({
     }
   }, [id, ydoc, persistNow])
 
-  const extensions = useMemo(() => getEditorExtensions(), [])
+  const extensions = useMemo(() => {
+    return [
+      ...getEditorExtensions(),
+      Collaboration.configure({
+        document: ydoc,
+        field: 'content',
+      })
+    ]
+  }, [ydoc])
 
   const editorProps = useMemo(() => ({
     attributes: {
@@ -771,14 +799,14 @@ export function NoteEditor({
             if (file) {
               const pos = view.state.selection.from
               event.preventDefault()
-              
+
               showToast("Processing image...")
               compressImage(file, 1600).then(({ blob, dataUrl }) => {
                 // Insert instantly as base64 preview
                 const tr = view.state.tr
                 tr.insert(pos, view.state.schema.nodes.image.create({ src: dataUrl }))
                 view.dispatch(tr)
-                
+
                 showToast("Uploading image...")
                 // Upload in background
                 uploadImage(blob, 'jpg').then((url) => {
@@ -799,7 +827,7 @@ export function NoteEditor({
                   }
                 }).catch(() => showToast("Image upload failed."))
               }).catch(() => showToast("Image compression failed."))
-              
+
               return true
             }
           }
@@ -817,13 +845,13 @@ export function NoteEditor({
           if (file.type.startsWith('image/')) {
             event.preventDefault()
             handled = true
-            
+
             showToast("Processing image...")
             compressImage(file, 1600).then(({ blob, dataUrl }) => {
               const tr = view.state.tr
               tr.insert(pos, view.state.schema.nodes.image.create({ src: dataUrl }))
               view.dispatch(tr)
-              
+
               showToast("Uploading image...")
               uploadImage(blob, 'jpg').then((url) => {
                 if (url) {
@@ -856,12 +884,6 @@ export function NoteEditor({
       const parser = new DOMParser()
       const doc = parser.parseFromString(html, 'text/html')
 
-      // 1.5. If the HTML text content contains raw markdown, translate it to rich elements
-      const plainText = doc.body.textContent || ''
-      if (containsRawMarkdown(plainText)) {
-        const parsedHtml = markdownToHtml(plainText)
-        doc.body.innerHTML = parsedHtml
-      }
 
       // 2. Convert elements with inline background-color style to <mark> elements for Tiptap Highlight
       doc.querySelectorAll('[style*="background-color"], [style*="background:"]').forEach(el => {
@@ -1003,6 +1025,7 @@ export function NoteEditor({
     if (!isLoading && editor && !editor.isDestroyed) {
       let fragmentLength = 0
       let isPlain = true
+      let isStructurallyFlat = true
       let isYjsCorrupted = false
 
       const plainText = getMarkdownFromYDoc(id)
@@ -1012,6 +1035,7 @@ export function NoteEditor({
         const fragment = ydoc.getXmlFragment('content')
         fragmentLength = fragment.length
         isPlain = isFlatPlainTextFragment(fragment)
+        isStructurallyFlat = isStructurallyFlatFragment(fragment)
 
         if (fragmentLength > 0 && contentValue && typeof contentValue === 'object' && !Array.isArray(contentValue)) {
           const jsonStr = JSON.stringify(contentValue)
@@ -1031,6 +1055,7 @@ export function NoteEditor({
         console.log('Note ID:', id)
         console.log('Fragment length:', fragmentLength)
         console.log('Is flat plain-text:', isPlain)
+        console.log('Is structurally flat (paragraphs only):', isStructurallyFlat)
         console.log('Contains Flutter tags:', hasFlutter)
         console.log('Contains raw Markdown:', hasRawMarkdown)
         console.log('Already repaired in this session:', repRef)
@@ -1039,7 +1064,8 @@ export function NoteEditor({
 
       const shouldRepair = fragmentLength > 0 && (
         hasFlutter ||
-        (isPlain && hasRawMarkdown)
+        (isPlain && hasRawMarkdown) ||
+        (isStructurallyFlat && hasRawMarkdown)
       ) && !repRef
 
       if (shouldRepair && plainText) {
@@ -1047,12 +1073,47 @@ export function NoteEditor({
 
         try {
           if (__DEV__) console.group('[NoteEditor] Self-healing repair triggered for note:', id)
-          const cleanedMarkdown = convertCustomTagsToMarkdown(plainText)
-          if (__DEV__) console.log('[NoteEditor] Translated mobile tags to standard Markdown:', cleanedMarkdown)
-          const parsedNode = (editor.storage as unknown as { markdown: { parser: { parse: (text: string) => Parameters<Editor['commands']['setContent']>[0] } } }).markdown.parser.parse(cleanedMarkdown)
-          editor.commands.setContent(parsedNode)
+
+          let repaired = false
+
+          // Strategy 1: Try content JSON if it has rich block-level structure (headings, lists, etc.)
+          if (!repaired && contentValue && typeof contentValue === 'object' && !Array.isArray(contentValue)) {
+            const jsonContent = contentValue as { content?: Array<{ type: string }> }
+            const hasRichBlocks = jsonContent.content?.some(node =>
+              ['heading', 'bulletList', 'orderedList', 'codeBlock', 'blockquote', 'table', 'taskList'].includes(node.type)
+            )
+            if (hasRichBlocks) {
+              if (__DEV__) console.log('[NoteEditor] Repair: Re-seeding from rich content JSON')
+              editor.commands.setContent(contentValue)
+              repaired = true
+            }
+          }
+
+          // Strategy 2: Try body field from store if it has proper line breaks
+          if (!repaired) {
+            const storeNote = useNotesStore.getState().notes.find(n => n.id === id)
+            if (storeNote?.body && storeNote.body.includes('\n') && storeNote.body.trim().length > 10) {
+              if (__DEV__) console.log('[NoteEditor] Repair: Re-parsing from body field (has line breaks)')
+              const cleanedBody = convertCustomTagsToMarkdown(storeNote.body)
+              const parsedNode = (editor.storage as unknown as { markdown: { parser: { parse: (text: string) => Parameters<Editor['commands']['setContent']>[0] } } }).markdown.parser.parse(cleanedBody)
+              editor.commands.setContent(parsedNode)
+              repaired = true
+            }
+          }
+
+          // Strategy 3: Fall back to Yjs-extracted markdown
+          if (!repaired) {
+            if (__DEV__) console.log('[NoteEditor] Repair: Falling back to Yjs markdown extraction')
+            const cleanedMarkdown = convertCustomTagsToMarkdown(plainText)
+            if (__DEV__) console.log('[NoteEditor] Translated mobile tags to standard Markdown:', cleanedMarkdown)
+            const parsedNode = (editor.storage as unknown as { markdown: { parser: { parse: (text: string) => Parameters<Editor['commands']['setContent']>[0] } } }).markdown.parser.parse(cleanedMarkdown)
+            editor.commands.setContent(parsedNode)
+          }
+
+          if (__DEV__) console.groupEnd()
         } catch (_err) {
           console.error('[NoteEditor] Failed to parse raw Yjs markdown plain text during repair:', _err)
+          if (__DEV__) console.groupEnd()
         }
       } else if (fragmentLength === 0 || isYjsCorrupted) {
 

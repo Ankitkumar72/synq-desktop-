@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useMemo, useEffect, useRef } from "react";
-import { Plus, Clock, FileText, ChevronDown } from "lucide-react"
+import { Plus, Clock, FileText, ChevronDown, Search } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -28,7 +28,8 @@ import { ActivePresenceAvatars } from "@/components/notes/active-presence"
 import { AnimatePage } from "@/components/layout/animate-page"
 import { useNotesStore } from "@/shared"
 import { useUIStore } from "@/shared"
-import { useProjectStore } from "@/shared"
+import { useFolderStore } from "@/shared"
+import { useSearchStore } from "@/shared/store/use-search-store"
 import { Note } from "@/shared"
 import { usePathname } from "next/navigation"
 import { Suspense } from "react"
@@ -79,11 +80,17 @@ function NoteSidebarItem({
 }
 
 
+import { DeleteConfirmationModal } from "@/components/ui/delete-confirmation-modal"
+
 function NotesPageContent() {
   const hasHydrated = useNotesStore(s => s._hasHydrated);
-  const notes = useNotesStore(s => s.notes); const selectedNoteId = useNotesStore(s => s.selectedNoteId); const setSelectedNoteId = useNotesStore(s => s.setSelectedNoteId); const addNote = useNotesStore(s => s.addNote); const updateNote = useNotesStore(s => s.updateNote); const deleteNote = useNotesStore(s => s.deleteNote); const pinNote = useNotesStore(s => s.pinNote); const updateNoteLocal = useNotesStore(s => s.updateNoteLocal)
-  const projects = useProjectStore(s => s.projects); const fetchProjects = useProjectStore(s => s.fetchProjects)
+  const notes = useNotesStore(s => s.notes); const selectedNoteId = useNotesStore(s => s.selectedNoteId); const setSelectedNoteId = useNotesStore(s => s.setSelectedNoteId); const addNote = useNotesStore(s => s.addNote); const updateNote = useNotesStore(s => s.updateNote); const deleteNote = useNotesStore(s => s.deleteNote); const pinNote = useNotesStore(s => s.pinNote); const updateNoteLocal = useNotesStore(s => s.updateNoteLocal); const fetchNoteById = useNotesStore(s => s.fetchNoteById)
+  const folders = useFolderStore(s => s.folders); const fetchFolders = useFolderStore(s => s.fetchFolders)
   const isSidebarOpen = useUIStore(s => s.isSidebarOpen)
+  const searchQuery = useSearchStore(s => s.query)
+  const searchResults = useSearchStore(s => s.results)
+  const isSearching = useSearchStore(s => s.isSearching)
+  const setSearchQuery = useSearchStore(s => s.setQuery)
   const pathname = usePathname()
   // Extract slug from path: /notes/My-Note-uuid → My-Note-uuid
   const pathSlug = pathname.startsWith('/notes/') ? decodeURIComponent(pathname.slice('/notes/'.length)) : null
@@ -94,6 +101,8 @@ function NotesPageContent() {
     pinned: true,
     all: true
   })
+
+  const [deleteNoteId, setDeleteNoteId] = useState<string | null>(null)
 
   const isInitialMount = useRef(true)
   const lastUrlId = useRef<string | null>(urlNoteId)
@@ -122,10 +131,10 @@ function NotesPageContent() {
   }, [urlNoteId, notes, selectedNoteId, setSelectedNoteId])
 
   useEffect(() => {
-    if (projects.length === 0) {
-      fetchProjects()
+    if (folders.length === 0) {
+      fetchFolders()
     }
-  }, [projects.length, fetchProjects])
+  }, [folders.length, fetchFolders])
 
   // Sync URL with selectedNoteId using silent history updates
   useEffect(() => {
@@ -162,13 +171,13 @@ function NotesPageContent() {
 
   const pinnedNotes = useMemo(() => filteredNotes.filter(n => n.pinned), [filteredNotes])
   const globalNotes = useMemo(() => {
-    const folderIds = new Set(projects.map(p => p.id))
+    const folderIds = new Set(folders.map(p => p.id))
     return filteredNotes.filter(n => {
       if (n.folder_id && folderIds.has(n.folder_id)) return false
       if (n.category && folderIds.has(n.category)) return false
       return true
     })
-  }, [filteredNotes, projects])
+  }, [filteredNotes, folders])
 
   const selectedNote = useMemo(() => {
     return notes.find(n => n.id === selectedNoteId)
@@ -224,7 +233,7 @@ function NotesPageContent() {
         pinNote(noteId, !note.pinned)
         break
       case "delete":
-        deleteNote(noteId)
+        setDeleteNoteId(noteId)
         break
       case "duplicate":
         const newId = await addNote({
@@ -264,8 +273,17 @@ function NotesPageContent() {
     )
   }
 
+  const deleteNoteItem = deleteNoteId ? notes.find(n => n.id === deleteNoteId) : null
+
   return (
     <AnimatePage className="h-full">
+      <DeleteConfirmationModal 
+        isOpen={!!deleteNoteId}
+        onOpenChange={(open) => !open && setDeleteNoteId(null)}
+        onConfirm={() => deleteNoteId && deleteNote(deleteNoteId)}
+        itemName={deleteNoteItem?.title || "Untitled Note"}
+        itemType="document"
+      />
       <div className="flex h-full bg-transparent text-neutral-300 font-sans selection:bg-neutral-700">
         {/* Sidebar */}
         <div className={cn(
@@ -274,6 +292,67 @@ function NotesPageContent() {
         )}>
           <ScrollArea className="flex-1">
             <div className="flex flex-col px-2 pt-4 pb-6">
+              
+              {/* Search Input */}
+              <div className="px-1.5 pb-4">
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-neutral-500" />
+                  <input
+                    type="text"
+                    placeholder="Search notes..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full bg-white/5 hover:bg-white/10 focus:bg-white/10 border-none rounded-md pl-8 pr-3 py-1.5 text-[13px] text-neutral-200 placeholder:text-neutral-500 focus:outline-none focus:ring-1 focus:ring-white/10 transition-all font-sans"
+                  />
+                </div>
+              </div>
+
+              {searchQuery ? (
+                /* Search Results View */
+                <div className="flex flex-col gap-[2px]">
+                  <div className="px-3.5 py-1 text-[11px] font-medium text-neutral-500 uppercase tracking-wider mb-1">
+                    Search Results
+                  </div>
+                  {isSearching ? (
+                    <div className="flex items-center gap-2 px-3.5 py-2 text-[13px] text-neutral-500">
+                      <div className="w-3 h-3 border-2 border-neutral-700 border-t-neutral-400 rounded-full animate-spin" />
+                      Searching...
+                    </div>
+                  ) : searchResults.length === 0 ? (
+                    <div className="px-3.5 py-2 text-[13px] text-neutral-500 italic">
+                      No results found for &quot;{searchQuery}&quot;
+                    </div>
+                  ) : (
+                    searchResults.map((result) => {
+                      const noteObj = notes.find(n => n.id === result.id) || { id: result.id, title: result.title } as Note;
+                      return (
+                        <div key={result.id} className="flex flex-col">
+                          <NoteSidebarItem
+                            note={noteObj}
+                            isSelected={selectedNoteId === result.id}
+                            onClick={async () => {
+                              if (!notes.some(n => n.id === result.id)) {
+                                await fetchNoteById(result.id)
+                              }
+                              setSelectedNoteId(result.id)
+                            }}
+                            onAction={handleNoteAction}
+                          />
+                          {result.excerpt && (
+                            <div className="px-8 pr-2 pb-2 text-[11px] text-neutral-500 line-clamp-2 leading-snug">
+                              {result.excerpt.split('**').map((part, i) => 
+                                i % 2 === 1 ? <b key={i} className="text-neutral-300 font-medium">{part}</b> : part
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })
+                  )}
+                </div>
+              ) : (
+                /* Standard Sidebar View */
+                <>
               {/* Pinned Section */}
               {pinnedNotes.length > 0 && (
                 <div className="flex flex-col">
@@ -361,7 +440,7 @@ function NotesPageContent() {
               </div>
 
               {/* Individual Folders (As Sections) */}
-              {projects.length > 0 && projects.map(folder => {
+              {folders.length > 0 && folders.map(folder => {
                 const folderNotes = filteredNotes.filter(n => n.folder_id === folder.id || n.category === folder.id)
                 const isExpanded = expandedSections[`folder-${folder.id}`] !== false; // default true
                 
@@ -414,6 +493,8 @@ function NotesPageContent() {
                   </div>
                 )
               })}
+              </>
+              )}
             </div>
           </ScrollArea>
         </div>
@@ -444,7 +525,7 @@ function NotesPageContent() {
               <header className="h-12 border-b border-neutral-800/50 flex items-center justify-between px-6 shrink-0">
                 <div className="flex items-center gap-3 text-[13px] font-medium">
                   {(() => {
-                    const parentFolder = projects.find(p => p.id === selectedNote.folder_id || p.id === selectedNote.category);
+                    const parentFolder = folders.find(p => p.id === selectedNote.folder_id || p.id === selectedNote.category);
                     if (parentFolder) {
                       return (
                         <div className="flex items-center truncate max-w-[400px]">

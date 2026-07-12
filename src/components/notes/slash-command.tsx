@@ -222,9 +222,9 @@ const SlashCommandList = forwardRef<{ onKeyDown: (props: SuggestionKeyDownProps)
     return (
       <div
         ref={listRef}
-        className="w-64 max-h-[320px] overflow-y-auto p-1.5 bg-neutral-950/95 border border-neutral-800 rounded-xl shadow-2xl backdrop-blur-md flex flex-col gap-0.5"
+        className="w-[280px] max-h-[320px] overflow-y-auto p-1.5 bg-[#1C1C1E]/95 backdrop-blur-xl border border-white/[0.08] rounded-md shadow-[0_16px_32px_rgba(0,0,0,0.4)] flex flex-col gap-0.5"
       >
-        <div className="text-[10px] uppercase font-bold tracking-wider text-neutral-500 px-2.5 py-1 select-none">
+        <div className="text-[10px] font-medium uppercase tracking-wider text-white/40 px-2 py-1.5 mb-0.5 select-none">
           Basic Blocks
         </div>
         {props.items.map((item, index) => {
@@ -236,28 +236,27 @@ const SlashCommandList = forwardRef<{ onKeyDown: (props: SuggestionKeyDownProps)
               key={item.title}
               onClick={() => selectItem(index)}
               className={cn(
-                "w-full flex items-center gap-3 px-2.5 py-1.5 rounded-lg text-left transition-all duration-150 select-none",
+                "w-full flex items-center gap-3 px-2.5 py-1.5 rounded-lg text-left select-none transition-colors duration-100",
                 isSelected
-                  ? "bg-white/5 text-white"
-                  : "text-neutral-400 hover:bg-white/[0.02] hover:text-neutral-200"
+                  ? "bg-white/[0.08] text-white"
+                  : "text-white/70 hover:bg-white/[0.04] hover:text-white"
               )}
             >
-              <div
-                className={cn(
-                  "flex items-center justify-center shrink-0 w-7 h-7 rounded-md border transition-colors",
-                  isSelected
-                    ? "bg-white/5 border-white/10 text-white"
-                    : "bg-white/[0.01] border-white/[0.03] text-neutral-500"
-                )}
-              >
-                <Icon className="w-3.5 h-3.5" />
+              <div className={cn(
+                "flex items-center justify-center shrink-0",
+                isSelected ? "text-white" : "text-white/40"
+              )}>
+                <Icon className="w-4 h-4" />
               </div>
-              <div className="flex-1 min-w-0">
-                <div className="text-xs font-semibold tracking-tight">{item.title}</div>
-                <div className="text-[10px] text-neutral-500 line-clamp-1">{item.description}</div>
+              <div className="flex-1 min-w-0 flex flex-col justify-center">
+                <div className={cn("text-[13px] font-medium leading-tight mb-0.5", isSelected ? "text-white" : "text-white/90")}>{item.title}</div>
+                <div className={cn("text-[12px] leading-tight line-clamp-1", isSelected ? "text-white/60" : "text-white/40")}>{item.description}</div>
               </div>
               {item.shortcut && (
-                <span className="text-[10px] font-mono font-medium text-neutral-600 bg-neutral-900 border border-neutral-800 px-1 py-0.5 rounded shrink-0 select-none">
+                <span className={cn(
+                  "text-[10px] font-mono font-medium shrink-0 select-none",
+                  isSelected ? "text-white/50" : "text-white/30"
+                )}>
                   {item.shortcut}
                 </span>
               )}

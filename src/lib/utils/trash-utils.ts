@@ -1,6 +1,6 @@
 import { differenceInDays, addDays, isBefore } from 'date-fns'
 
-const RETENTION_DAYS = 14
+export const RETENTION_DAYS = 14
 
 
 export function getDaysRemaining(deletedAt: string | Date | undefined): number {

@@ -824,3 +824,56 @@ END;
 $$;
 
 GRANT EXECUTE ON FUNCTION public.unregister_device(TEXT) TO authenticated;
+
+-- ============================================================
+-- FULL-TEXT SEARCH (NOTES)
+-- ============================================================
+
+DO $$
+BEGIN
+  IF to_regclass('public.notes') IS NOT NULL THEN
+    IF NOT EXISTS (
+      SELECT 1 FROM information_schema.columns 
+      WHERE table_schema = 'public' AND table_name = 'notes' AND column_name = 'search_vector'
+    ) THEN
+      ALTER TABLE public.notes ADD COLUMN search_vector tsvector;
+    END IF;
+  END IF;
+END $$;
+
+CREATE INDEX IF NOT EXISTS idx_notes_search_vector ON public.notes USING GIN (search_vector);
+
+CREATE OR REPLACE FUNCTION public.update_note_search_vector()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.search_vector := setweight(to_tsvector('english', COALESCE(NEW.title, '')), 'A') ||
+                        setweight(to_tsvector('english', COALESCE(NEW.body, '')), 'B');
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DO $$
+BEGIN
+  IF to_regclass('public.notes') IS NOT NULL THEN
+    EXECUTE 'DROP TRIGGER IF EXISTS trg_notes_search_vector ON public.notes';
+    EXECUTE 'CREATE TRIGGER trg_notes_search_vector BEFORE INSERT OR UPDATE OF title, body ON public.notes FOR EACH ROW EXECUTE FUNCTION public.update_note_search_vector()';
+  END IF;
+END $$;
+
+CREATE OR REPLACE FUNCTION public.search_notes(p_query TEXT, p_limit INT DEFAULT 20)
+RETURNS TABLE(id UUID, title TEXT, excerpt TEXT, rank REAL, updated_at TIMESTAMPTZ)
+LANGUAGE sql SECURITY INVOKER SET search_path = public AS $$
+  SELECT n.id, n.title, 
+    ts_headline('english', COALESCE(n.body, ''), websearch_to_tsquery('english', p_query),
+      'MaxWords=30, MinWords=15, StartSel=**, StopSel=**') AS excerpt,
+    ts_rank(n.search_vector, websearch_to_tsquery('english', p_query)) AS rank,
+    n.updated_at
+  FROM public.notes n
+  WHERE n.user_id = auth.uid()
+    AND n.search_vector @@ websearch_to_tsquery('english', p_query)
+    AND n.is_deleted = false
+  ORDER BY rank DESC, n.updated_at DESC
+  LIMIT LEAST(p_limit, 50);
+$$;
+
+GRANT EXECUTE ON FUNCTION public.search_notes(TEXT, INT) TO authenticated;

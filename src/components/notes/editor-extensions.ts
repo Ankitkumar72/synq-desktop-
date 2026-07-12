@@ -2,7 +2,6 @@ import StarterKit from '@tiptap/starter-kit'
 
 import { Markdown } from 'tiptap-markdown'
 import Link from '@tiptap/extension-link'
-import Underline from '@tiptap/extension-underline'
 import TaskList from '@tiptap/extension-task-list'
 import TaskItem from '@tiptap/extension-task-item'
 import Highlight from '@tiptap/extension-highlight'
@@ -34,6 +33,7 @@ export function getEditorExtensions() {
       gapcursor: false,
       dropcursor: false,
       trailingNode: false,
+      link: false,
     }),
     CodeBlockLowlight.configure({
       lowlight,
@@ -48,7 +48,6 @@ export function getEditorExtensions() {
         class: 'text-[#2eaadc] underline hover:text-[#2eaadc]/80 transition-colors cursor-pointer',
       },
     }),
-    Underline,
     TaskList,
     TaskItem.configure({
       nested: true,
@@ -60,7 +59,7 @@ export function getEditorExtensions() {
       allowBase64: true,
     }),
     Table.configure({
-      resizable: true,
+      resizable: false,
     }),
     TableRow,
     TableHeader,
@@ -83,7 +82,7 @@ export function getEditorExtensions() {
       transformCopiedText: true,
     }),
     Placeholder.configure({
-      placeholder: ({ node }: any) => {
+      placeholder: ({ node, editor }: any) => {
         if (node.type.name === 'heading') {
           return `Heading ${node.attrs.level}`
         }
@@ -91,6 +90,19 @@ export function getEditorExtensions() {
           return 'Type something...'
         }
         if (node.type.name === 'paragraph') {
+          // Check if the note body is essentially empty (only heading + empty paragraph(s))
+          const doc = editor.state.doc
+          let hasNonHeadingContent = false
+          doc.forEach((child: any) => {
+            if (child.type.name !== 'heading' && child.type.name !== 'paragraph') {
+              hasNonHeadingContent = true
+            } else if (child.type.name === 'paragraph' && child.textContent.length > 0) {
+              hasNonHeadingContent = true
+            }
+          })
+          if (!hasNonHeadingContent) {
+            return 'Start writing...'
+          }
           return "Type '/' for commands"
         }
         if (node.type.name === 'codeBlock') {
@@ -121,7 +133,19 @@ export function getEditorExtensions() {
     TrailingNode,
   ]
 
+  const uniqueExtensions = []
+  const names = new Set()
+  for (const ext of extensions) {
+    const name = ext?.name || ext?.config?.name
+    if (name) {
+      if (!names.has(name)) {
+        names.add(name)
+        uniqueExtensions.push(ext)
+      }
+    } else {
+      uniqueExtensions.push(ext)
+    }
+  }
 
-
-  return extensions
+  return uniqueExtensions
 }
