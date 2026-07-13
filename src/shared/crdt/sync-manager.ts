@@ -16,7 +16,7 @@ import {
   type QueuedOperation,
   RETRY_BACKOFF_MS,
 } from './offline-queue'
-import { getDocState, markLocallyModified, getMarkdownFromYDoc, getExcerptFromYDoc } from './crdt-doc'
+import { getDocState, markLocallyModified, getMarkdownFromYDoc, getExcerptFromYDoc, getPlainTextFromYDoc } from './crdt-doc'
 
 const __DEV__ = process.env.NODE_ENV !== 'production'
 
@@ -234,12 +234,14 @@ interface SaveYDocOptions {
   opId?: string
   snapshot?: Uint8Array | null
   content?: unknown
+  fieldVersions?: Record<string, string>
 }
 
 export async function saveYDocToSupabase(noteId: string, userId: string, options: SaveYDocOptions = {}): Promise<void> {
   const state = getDocState(noteId)
   const updateData = options.updateData && options.updateData.length > 0 ? options.updateData : state
   const body = getMarkdownFromYDoc(noteId)
+  const plainText = getPlainTextFromYDoc(noteId)
   const excerpt = getExcerptFromYDoc(noteId)
   const timestamp = hlc.increment()
   const updatedAt = new Date().toISOString()
@@ -262,6 +264,9 @@ export async function saveYDocToSupabase(noteId: string, userId: string, options
       snapshot: snapshot ?? undefined,
       updatedAt,
       content,
+      contentMarkdown: body,
+      plainText,
+      fieldVersions: options.fieldVersions,
     })
     return
   }
@@ -279,6 +284,9 @@ export async function saveYDocToSupabase(noteId: string, userId: string, options
         excerpt,
         updatedAt,
         content,
+        contentMarkdown: body,
+        plainText,
+        fieldVersions: options.fieldVersions,
       })
     )
     if (result.seq > 0) {
@@ -305,6 +313,8 @@ export async function saveYDocToSupabase(noteId: string, userId: string, options
           snapshot: snapshot ?? undefined,
           updatedAt,
           content,
+          contentMarkdown: body,
+          fieldVersions: options.fieldVersions,
         })
         triggerFlush()
         return
@@ -339,12 +349,16 @@ export async function saveYDocToSupabase(noteId: string, userId: string, options
   const noteUpdate: Record<string, unknown> = {
     body,
     content_markdown: body,
+    plain_text: plainText,
     excerpt,
     hlc_timestamp: timestamp,
     updated_at: updatedAt,
   }
   if (content !== undefined) {
     noteUpdate.content = content
+  }
+  if (options.fieldVersions) {
+    noteUpdate.field_versions = options.fieldVersions
   }
 
   const { error: noteError } = await supabase

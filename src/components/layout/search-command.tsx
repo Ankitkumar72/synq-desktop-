@@ -126,16 +126,16 @@ export function SearchCommand() {
       })
     }
     if (activeFilter === "all" || activeFilter === "docs") {
-      (notes || []).filter(n =>
-        (tokens.every(token => 
+      (notes || []).filter(n => {
+        const textToSearch = n.plain_text || n.body || ""
+        return (tokens.every(token => 
           (n.title && n.title.toLowerCase().includes(token)) ||
-          (n.body && n.body.toLowerCase().includes(token))
-        )) &&
-        !n.is_deleted
-      ).forEach(n => {
+          (textToSearch.toLowerCase().includes(token))
+        )) && !n.is_deleted
+      }).forEach(n => {
         results.push({ 
           id: n.id, type: 'doc', title: n.title || 'Untitled', metadata: 'Note', icon: FileText, href: `/notes/${n.id}`,
-          snippet: getSnippet(n.body || "", tokens),
+          snippet: getSnippet(n.plain_text || n.body || "", tokens),
           author: authorName,
           updatedAt: formatDate(n.updated_at)
         })

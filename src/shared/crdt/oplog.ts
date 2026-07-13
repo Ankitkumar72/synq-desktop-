@@ -29,11 +29,19 @@ export interface ApplyNoteCrdtUpdateInput {
   clientId: string
   opId: string
   updateData: Uint8Array
-  body: string | null
-  excerpt: string | null
+  body?: string | null
+  setBody?: boolean
+  excerpt?: string | null
+  setExcerpt?: boolean
   snapshot?: Uint8Array
   updatedAt?: string
   content?: unknown
+  setContent?: boolean
+  contentMarkdown?: string | null
+  setContentMarkdown?: boolean
+  plainText?: string | null
+  setPlainText?: boolean
+  fieldVersions?: Record<string, string>
 }
 
 export interface ApplyNoteCrdtUpdateResult {
@@ -74,7 +82,16 @@ export async function applyNoteCrdtUpdate(input: ApplyNoteCrdtUpdateInput): Prom
     p_op_id: input.opId,
     p_update_data: toIntArray(input.updateData) || [],
     p_body: input.body,
+    p_set_body: input.setBody ?? input.body !== undefined,
     p_excerpt: input.excerpt,
+    p_set_excerpt: input.setExcerpt ?? input.excerpt !== undefined,
+    p_content: input.content,
+    p_set_content: input.setContent ?? input.content !== undefined,
+    p_content_markdown: input.contentMarkdown ?? input.body,
+    p_set_content_markdown: input.setContentMarkdown ?? (input.contentMarkdown !== undefined || input.body !== undefined),
+    p_plain_text: input.plainText,
+    p_set_plain_text: input.setPlainText ?? input.plainText !== undefined,
+    p_field_versions: input.fieldVersions ?? {},
     p_hlc_timestamp: hlc.increment(),
     p_updated_at: input.updatedAt || new Date().toISOString(),
     p_snapshot: toIntArray(input.snapshot),
@@ -89,21 +106,6 @@ export async function applyNoteCrdtUpdate(input: ApplyNoteCrdtUpdateInput): Prom
       throw new NonRetryableRpcError(error.message, status, code)
     }
     throw error
-  }
-
-  if (input.content !== undefined) {
-    const { error: contentError } = await supabase
-      .from('notes')
-      .update({ 
-        content: input.content,
-        content_markdown: input.body 
-      })
-      .eq('id', input.noteId)
-
-    if (contentError) {
-      if (__DEV__) console.error('[Oplog] Failed to update notes.content column:', contentError)
-      throw contentError
-    }
   }
 
   const row = Array.isArray(data) ? data[0] : data

@@ -33,6 +33,7 @@ export function sanitizeNote(note: Partial<Note>): Note {
     content: note.content || null,
     body: normalizedBody,
     content_markdown: note.content_markdown ?? null,
+    plain_text: note.plain_text ?? null,
     excerpt: note.excerpt || null,
     tags: Array.isArray(note.tags) ? note.tags : [],
     category: note.category ?? 'personal',
@@ -142,7 +143,7 @@ export const useNotesStore = create<NotesState>()(
             : `local-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 
           const newFieldVersions: Record<string, string> = {}
-          const defaultFields = ['title', 'content', 'body', 'excerpt', 'pinned', 'category', 'priority', 'folder_id', 'updated_at', 'created_at']
+          const defaultFields = ['title', 'content', 'body', 'excerpt', 'plain_text', 'pinned', 'category', 'priority', 'folder_id', 'updated_at', 'created_at']
 
           defaultFields.forEach(key => {
             newFieldVersions[key] = timestamp
@@ -225,8 +226,17 @@ export const useNotesStore = create<NotesState>()(
           newFieldVersions[key] = timestamp
         })
 
-        if ('content' in updates) newFieldVersions['body'] = timestamp;
-        if ('body' in updates) newFieldVersions['content'] = timestamp;
+        if ('content' in updates) {
+          newFieldVersions['body'] = timestamp;
+          newFieldVersions['plain_text'] = timestamp;
+        }
+        if ('body' in updates) {
+          newFieldVersions['content'] = timestamp;
+          newFieldVersions['plain_text'] = timestamp;
+        }
+        if ('plain_text' in updates) {
+          newFieldVersions['plain_text'] = timestamp;
+        }
         newFieldVersions['updated_at'] = timestamp;
 
         const syncUpdates: Partial<Note> = {

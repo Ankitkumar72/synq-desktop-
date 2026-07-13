@@ -52,7 +52,8 @@ const stashSchema = z.object({
   body: z.string().nullable().optional(),
   excerpt: z.string().nullable().optional(),
   content: z.any().optional(),
-  updatedAt: z.string().optional()
+  updatedAt: z.string().optional(),
+  fieldVersions: z.record(z.string(), z.string()).optional()
 })
 
 function containsFlutterTags(text: string): boolean {
@@ -341,10 +342,23 @@ export function NoteEditor({
       const updateData = pendingBatch.length === 1
         ? pendingBatch[0]
         : Y.mergeUpdates(pendingBatch)
+      const note = useNotesStore.getState().notes.find(n => n.id === id)
+      const ts = hlc.increment()
+      const fieldVersions: Record<string, string> = {
+        ...(note?.field_versions || {}),
+        body: ts,
+        excerpt: ts,
+        updated_at: ts,
+        content: ts,
+        content_markdown: ts,
+        plain_text: ts,
+      }
+
       await saveYDocToSupabase(id, userId, {
         updateData,
         snapshot,
         content: contentVal || undefined,
+        fieldVersions,
       })
       hasPendingLocalChangeRef.current = false
       persistRetryCountRef.current = 0
@@ -396,6 +410,9 @@ export function NoteEditor({
       body: timestamp,
       excerpt: timestamp,
       updated_at: timestamp,
+      content: timestamp,
+      content_markdown: timestamp,
+      plain_text: timestamp,
     }
 
     void sendNoteBroadcast({
@@ -458,6 +475,7 @@ export function NoteEditor({
                     snapshot,
                     updatedAt: stashed.updatedAt || new Date().toISOString(),
                     content: stashed.content,
+                    fieldVersions: stashed.fieldVersions,
                   })
                   triggerFlush()
                 }
@@ -494,16 +512,32 @@ export function NoteEditor({
             remoteSeq = remoteDoc.lastSeq
           }
 
-          // Safe Hydration Rule: Hydrate from body if no meaningful remote editor state and body exists
+          // Read-Time Reconciliation: Sync Gap resolution between Flutter and Web
           const currentMarkdown = getMarkdownFromYDoc(id)
           const hasMeaningfulCRDT = currentMarkdown.trim().length > 0
 
           const storeNote = useNotesStore.getState().notes.find(n => n.id === id)
           const hasMeaningfulContent = storeNote?.content && (Array.isArray(storeNote.content) ? storeNote.content.length > 0 : Object.keys(storeNote.content).length > 0)
 
-          if (!hasMeaningfulCRDT && !hasMeaningfulContent && storeNote?.body && storeNote.body.trim().length > 0) {
-            await initYDocFromMarkdown(id, typeof storeNote.body === 'string' ? storeNote.body : '')
-            console.log(`[NoteEditor] Hydrated YDoc from existing body for ${id.slice(0, 8)}…`)
+          let flutterIsLastWriter = false
+          if (storeNote?.field_versions && typeof storeNote.field_versions === 'object') {
+            const versions = storeNote.field_versions as Record<string, string>
+            const bodyHlc = versions.body
+            const contentHlc = versions.content || versions.updateData
+            if (bodyHlc && typeof bodyHlc === 'string') {
+              if (!contentHlc) {
+                flutterIsLastWriter = true
+              } else if (typeof contentHlc === 'string' && bodyHlc > contentHlc) {
+                flutterIsLastWriter = true
+              }
+            }
+          }
+
+          if ((flutterIsLastWriter || (!hasMeaningfulCRDT && !hasMeaningfulContent)) && storeNote?.body && storeNote.body.trim().length > 0) {
+            const rawBody = typeof storeNote.body === 'string' ? storeNote.body : ''
+            const markdownToHydrate = convertCustomTagsToMarkdown(rawBody)
+            await initYDocFromMarkdown(id, markdownToHydrate)
+            console.log(`[NoteEditor] Hydrated YDoc from existing body for ${id.slice(0, 8)} (flutterIsLastWriter: ${flutterIsLastWriter})`)
             hasHydratedMeaningfulContentRef.current = true
           } else if (hasMeaningfulCRDT || hasMeaningfulContent) {
             hasHydratedMeaningfulContentRef.current = true
@@ -627,6 +661,18 @@ export function NoteEditor({
               ? editorRef.current.getJSON()
               : null
 
+            const note = useNotesStore.getState().notes.find(n => n.id === id)
+            const ts = hlc.increment()
+            const fieldVersions: Record<string, string> = {
+              ...(note?.field_versions || {}),
+              body: ts,
+              excerpt: ts,
+              updated_at: ts,
+              content: ts,
+              content_markdown: ts,
+              plain_text: ts,
+            }
+
             const stash = {
               noteId: id,
               opId: `unload-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
@@ -636,6 +682,7 @@ export function NoteEditor({
               excerpt,
               content: contentVal,
               updatedAt: nowStr,
+              fieldVersions,
             }
 
             const serialized = JSON.stringify(stash)
@@ -1085,10 +1132,22 @@ export function NoteEditor({
             : Y.mergeUpdates(pendingBatch)
 
           const snapshot = Y.encodeStateAsUpdate(ydoc)
+          const note = useNotesStore.getState().notes.find(n => n.id === id)
+          const ts = hlc.increment()
+          const fieldVersions: Record<string, string> = {
+            ...(note?.field_versions || {}),
+            body: ts,
+            excerpt: ts,
+            updated_at: ts,
+            content: ts,
+            content_markdown: ts,
+          }
+
           void saveYDocToSupabase(id, userId, {
             updateData,
             snapshot,
             content: contentVal,
+            fieldVersions,
           })
 
           updateNoteLocal(id, { body, excerpt, content: contentVal, updated_at: new Date().toISOString() })

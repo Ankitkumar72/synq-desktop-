@@ -70,9 +70,10 @@ export interface Note {
   user_id?: string
   title: string
   content?: NoteContent
-  body?: string | null // Plain text for Flutter (Mobile)
+  body?: string | null // Markdown for Flutter (Mobile)
   content_markdown?: string | null
-  excerpt?: string | null
+  plain_text?: string | null // Unbounded clean plain-text for search
+  excerpt?: string | null // Bounded plain-text for cards
   tags: string[]
   category?: string
   priority?: Priority

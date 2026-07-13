@@ -301,11 +301,23 @@ export function getMarkdownFromYDoc(noteId: string): string {
   return text
 }
 
+export function getPlainTextFromYDoc(noteId: string): string {
+  const ydoc = docCache.get(noteId)
+  if (!ydoc) return ''
+
+  const editor = new Editor({
+    extensions: getHeadlessExtensions(ydoc)
+  })
+  const text = editor.getText({ blockSeparator: '\n\n' })
+  editor.destroy()
+  return text
+}
+
 /**
  * Build an excerpt from Y.Doc content.
  */
 export function getExcerptFromYDoc(noteId: string): string | null {
-  const text = getMarkdownFromYDoc(noteId)
+  const text = getPlainTextFromYDoc(noteId)
   if (!text) return null
   return text.length > 100 ? `${text.slice(0, 100)}...` : text
 }

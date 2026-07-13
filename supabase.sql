@@ -74,6 +74,7 @@ CREATE TABLE IF NOT EXISTS public.notes (
   excerpt TEXT,
   body TEXT,
   content_markdown TEXT,
+  plain_text TEXT,
   category TEXT DEFAULT 'personal',
   priority TEXT DEFAULT 'none',
   is_task BOOLEAN DEFAULT false,
@@ -421,14 +422,28 @@ CREATE OR REPLACE FUNCTION public.apply_note_crdt_update(
   p_client_id TEXT,
   p_op_id TEXT,
   p_update_data BIGINT[],
-  p_body TEXT,
-  p_excerpt TEXT,
-  p_hlc_timestamp TEXT DEFAULT NULL,
+  p_hlc_timestamp TEXT,
   p_updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()),
   p_snapshot BIGINT[] DEFAULT NULL,
-  p_title TEXT DEFAULT NULL
-) RETURNS TABLE(applied BOOLEAN, seq BIGINT)
-LANGUAGE plpgsql SECURITY INVOKER SET search_path = public AS $$
+
+  p_body TEXT DEFAULT NULL,
+  p_excerpt TEXT DEFAULT NULL,
+  p_content JSONB DEFAULT NULL,
+  p_content_markdown TEXT DEFAULT NULL,
+  p_plain_text TEXT DEFAULT NULL,
+  p_field_versions JSONB DEFAULT '{}'::jsonb,
+
+  p_set_body BOOLEAN DEFAULT false,
+  p_set_excerpt BOOLEAN DEFAULT false,
+  p_set_content BOOLEAN DEFAULT false,
+  p_set_content_markdown BOOLEAN DEFAULT false,
+  p_set_plain_text BOOLEAN DEFAULT false
+)
+RETURNS TABLE(applied BOOLEAN, seq BIGINT)
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path = public
+AS $$
 DECLARE
   v_seq BIGINT;
 BEGIN
@@ -436,41 +451,74 @@ BEGIN
     RAISE EXCEPTION 'forbidden' USING ERRCODE = '42501';
   END IF;
 
-  INSERT INTO public.crdt_note_updates (entity_type, entity_id, user_id, client_id, op_id, update_data)
-  VALUES ('note', p_entity_id, p_user_id, p_client_id, p_op_id, COALESCE(p_update_data, '{}'))
+  INSERT INTO public.crdt_note_updates (
+    entity_type,
+    entity_id,
+    user_id,
+    client_id,
+    op_id,
+    update_data
+  ) VALUES (
+    'note',
+    p_entity_id,
+    p_user_id,
+    p_client_id,
+    p_op_id,
+    COALESCE(p_update_data, '{}')
+  )
   ON CONFLICT (entity_type, entity_id, op_id) DO NOTHING
   RETURNING crdt_note_updates.seq INTO v_seq;
 
   IF v_seq IS NULL THEN
     SELECT u.seq INTO v_seq
     FROM public.crdt_note_updates u
-    WHERE u.entity_type = 'note' AND u.entity_id = p_entity_id AND u.op_id = p_op_id
+    WHERE u.entity_type = 'note'
+      AND u.entity_id = p_entity_id
+      AND u.op_id = p_op_id
     LIMIT 1;
-
-    RETURN QUERY SELECT FALSE, v_seq;
+    RETURN QUERY SELECT FALSE AS applied, v_seq AS seq;
     RETURN;
   END IF;
 
-  UPDATE public.notes n SET
-    body = COALESCE(p_body, n.body),
-    excerpt = COALESCE(p_excerpt, n.excerpt),
-    title = COALESCE(p_title, n.title),
+  UPDATE public.notes n
+  SET
+    body = CASE WHEN p_set_body THEN p_body ELSE n.body END,
+    excerpt = CASE WHEN p_set_excerpt THEN p_excerpt ELSE n.excerpt END,
+    content = CASE WHEN p_set_content THEN p_content ELSE n.content END,
+    content_markdown = CASE WHEN p_set_content_markdown THEN p_content_markdown ELSE n.content_markdown END,
+    plain_text = CASE WHEN p_set_plain_text THEN p_plain_text ELSE n.plain_text END,
+    field_versions = COALESCE(n.field_versions, '{}'::jsonb) || COALESCE(p_field_versions, '{}'::jsonb),
     hlc_timestamp = COALESCE(p_hlc_timestamp, n.hlc_timestamp),
     updated_at = COALESCE(p_updated_at, timezone('utc'::text, now()))
-  WHERE n.id = p_entity_id AND n.user_id = p_user_id;
+  WHERE n.id = p_entity_id
+    AND n.user_id = p_user_id;
 
   IF NOT FOUND THEN
     RAISE EXCEPTION 'note not found or forbidden' USING ERRCODE = '42501';
   END IF;
 
   IF p_snapshot IS NOT NULL THEN
-    INSERT INTO public.crdt_documents (entity_type, entity_id, user_id, state, last_seq, updated_at)
-    VALUES ('note', p_entity_id, p_user_id, p_snapshot, v_seq, COALESCE(p_updated_at, timezone('utc'::text, now())))
-    ON CONFLICT (entity_type, entity_id) DO UPDATE SET
-      user_id = EXCLUDED.user_id,
-      state = EXCLUDED.state,
-      last_seq = EXCLUDED.last_seq,
-      updated_at = EXCLUDED.updated_at;
+    INSERT INTO public.crdt_documents (
+      entity_type,
+      entity_id,
+      user_id,
+      state,
+      last_seq,
+      updated_at
+    ) VALUES (
+      'note',
+      p_entity_id,
+      p_user_id,
+      p_snapshot,
+      v_seq,
+      COALESCE(p_updated_at, timezone('utc'::text, now()))
+    )
+    ON CONFLICT (entity_type, entity_id) DO UPDATE
+      SET
+        user_id = EXCLUDED.user_id,
+        state = EXCLUDED.state,
+        last_seq = EXCLUDED.last_seq,
+        updated_at = EXCLUDED.updated_at;
 
     DELETE FROM public.crdt_note_updates AS del_cnu
     WHERE del_cnu.entity_type = 'note'
@@ -478,17 +526,106 @@ BEGIN
       AND del_cnu.seq < COALESCE((
         SELECT inner_cnu.seq
         FROM public.crdt_note_updates AS inner_cnu
-        WHERE inner_cnu.entity_type = 'note' AND inner_cnu.entity_id = p_entity_id
+        WHERE inner_cnu.entity_type = 'note'
+          AND inner_cnu.entity_id = p_entity_id
         ORDER BY inner_cnu.seq DESC
-        OFFSET 499 LIMIT 1
+        OFFSET 500
+        LIMIT 1
       ), 0);
   END IF;
 
-  RETURN QUERY SELECT TRUE, v_seq;
+  RETURN QUERY SELECT TRUE AS applied, v_seq AS seq;
+EXCEPTION WHEN OTHERS THEN
+  RAISE EXCEPTION 'apply_note_crdt_update failed: %', SQLSTATE;
 END;
 $$;
 
-GRANT EXECUTE ON FUNCTION public.apply_note_crdt_update(UUID, UUID, TEXT, TEXT, BIGINT[], TEXT, TEXT, TEXT, TIMESTAMPTZ, BIGINT[], TEXT) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.apply_note_crdt_update(
+  UUID, UUID, TEXT, TEXT, BIGINT[], TEXT, TIMESTAMPTZ, BIGINT[],
+  TEXT, TEXT, JSONB, TEXT, TEXT, JSONB, BOOLEAN, BOOLEAN, BOOLEAN, BOOLEAN, BOOLEAN
+) TO authenticated;
+
+CREATE OR REPLACE FUNCTION public.ingest_legacy_note_item(
+  p_id UUID,
+  p_user_id UUID,
+  p_title TEXT,
+  p_body TEXT,
+  p_scheduled_time TIMESTAMPTZ,
+  p_end_time TIMESTAMPTZ,
+  p_is_task BOOLEAN,
+  p_hlc_timestamp TEXT,
+  p_is_deleted BOOLEAN DEFAULT false,
+  p_created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()),
+  p_updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()),
+  p_field_versions JSONB DEFAULT '{}'::jsonb,
+  p_device_last_edited TEXT DEFAULT 'legacy-client',
+  p_priority TEXT DEFAULT 'medium',
+  p_category TEXT DEFAULT 'personal',
+  p_is_completed BOOLEAN DEFAULT false,
+  p_color TEXT DEFAULT NULL
+)
+RETURNS VOID
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path = public
+AS $$
+BEGIN
+  IF p_is_task = true THEN
+    INSERT INTO public.tasks (
+      id, user_id, title, description, start_at, end_at,
+      hlc_timestamp, is_deleted, created_at, updated_at, field_versions,
+      priority, status
+    ) VALUES (
+      p_id, COALESCE(p_user_id, auth.uid()), p_title, p_body,
+      p_scheduled_time, COALESCE(p_end_time, (p_scheduled_time + interval '30 minutes')),
+      p_hlc_timestamp, COALESCE(p_is_deleted, false), COALESCE(p_created_at, now()),
+      COALESCE(p_updated_at, now()), p_field_versions,
+      COALESCE(p_priority, 'medium'),
+      CASE WHEN p_is_completed THEN 'completed' ELSE 'todo' END
+    )
+    ON CONFLICT (id) DO UPDATE SET
+      title = EXCLUDED.title,
+      description = EXCLUDED.description,
+      start_at = EXCLUDED.start_at,
+      end_at = EXCLUDED.end_at,
+      hlc_timestamp = EXCLUDED.hlc_timestamp,
+      field_versions = EXCLUDED.field_versions,
+      updated_at = EXCLUDED.updated_at,
+      status = EXCLUDED.status,
+      is_deleted = EXCLUDED.is_deleted
+    WHERE EXCLUDED.hlc_timestamp > tasks.hlc_timestamp
+       OR tasks.hlc_timestamp IS NULL;
+  ELSE
+    INSERT INTO public.events (
+      id, user_id, title, description, start_date, end_date,
+      hlc_timestamp, is_deleted, created_at, updated_at, field_versions,
+      color
+    ) VALUES (
+      p_id, COALESCE(p_user_id, auth.uid()), p_title, p_body,
+      p_scheduled_time, COALESCE(p_end_time, p_scheduled_time),
+      p_hlc_timestamp, COALESCE(p_is_deleted, false), COALESCE(p_created_at, now()),
+      COALESCE(p_updated_at, now()), p_field_versions,
+      p_color
+    )
+    ON CONFLICT (id) DO UPDATE SET
+      title = EXCLUDED.title,
+      description = EXCLUDED.description,
+      start_date = EXCLUDED.start_date,
+      end_date = EXCLUDED.end_date,
+      hlc_timestamp = EXCLUDED.hlc_timestamp,
+      field_versions = EXCLUDED.field_versions,
+      updated_at = EXCLUDED.updated_at,
+      is_deleted = EXCLUDED.is_deleted,
+      color = EXCLUDED.color
+    WHERE EXCLUDED.hlc_timestamp > events.hlc_timestamp
+       OR events.hlc_timestamp IS NULL;
+  END IF;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.ingest_legacy_note_item(
+  UUID, UUID, TEXT, TEXT, TIMESTAMPTZ, TIMESTAMPTZ, BOOLEAN, TEXT, BOOLEAN, TIMESTAMPTZ, TIMESTAMPTZ, JSONB, TEXT, TEXT, TEXT, BOOLEAN, TEXT
+) TO authenticated;
 
 -- 5. Get CRDT updates
 CREATE OR REPLACE FUNCTION public.get_note_crdt_updates(
