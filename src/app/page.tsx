@@ -22,7 +22,7 @@ import { toNoteSlug } from "@/lib/utils/note-slug"
 import { formatDistanceToNowStrict } from "date-fns"
 import { cn } from "@/lib/utils"
 import { Note } from "@/shared"
-import { createEmptyNoteContent, getPlainTextFromStoredContent } from "@/shared"
+import { createEmptyNoteContent, getPlainTextFromStoredContent, stripMarkdown } from "@/shared"
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -50,9 +50,10 @@ function NoteCard({ note, initials }: { note: Note, initials: string }) {
 
   const isCode = note.title?.toLowerCase().includes('dsa') || note.category === 'code'
 
-  const textBody = note.excerpt || 
+  const rawBody = note.excerpt || 
     (note.body === '{"ops":[{"insert":"\\n"}]}' || note.body?.trim() === '' ? null : note.body) || 
     getPlainTextFromStoredContent(note.content ?? null);
+  const textBody = rawBody ? stripMarkdown(rawBody) : null;
 
   return (
     <Link 
@@ -141,7 +142,7 @@ export default function DashboardPage() {
       .filter(n => {
         const isDeleted = !!n.deleted_at || n.is_deleted
         const isScratch = n.category === 'scratchpad' || n.title?.toLowerCase() === 'scratch pad'
-        const isTaskLike = !!n.is_task
+        const isTaskLike = false
         return !isDeleted && !isScratch && !isTaskLike
       })
       .slice(0, 15)

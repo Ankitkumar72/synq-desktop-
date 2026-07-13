@@ -40,7 +40,6 @@ export function sanitizeNote(note: Partial<Note>): Note {
     priority: note.priority ?? 'none',
     hlc_timestamp: note.hlc_timestamp || hlc.now(),
     is_deleted: note.is_deleted ?? false,
-    is_task: note.is_task ?? false,
     pinned: note.pinned ?? false,
     folder_id: note.folder_id ?? undefined,
     updated_at: note.updated_at ?? new Date().toISOString(),

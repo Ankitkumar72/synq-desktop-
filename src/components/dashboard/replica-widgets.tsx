@@ -4,7 +4,7 @@ import { Plus, Trash2 } from "lucide-react"
 import { format } from "date-fns"
 import { Note } from "@/shared"
 import { QuickCreateModal } from "@/components/layout/quick-create"
-import { getPlainTextFromStoredContent } from "@/shared"
+import { getPlainTextFromStoredContent, stripMarkdown } from "@/shared/notes/note-content"
 
 export function NotesGrid({ items, onDelete }: { items: Note[], onDelete?: (id: string) => void }) {
   return (
@@ -14,7 +14,7 @@ export function NotesGrid({ items, onDelete }: { items: Note[], onDelete?: (id: 
           key={note.id}
           id={note.id}
           title={note.title}
-          content={note.excerpt || note.plain_text || getPlainTextFromStoredContent(note.content ?? null)}
+          content={note.plain_text || stripMarkdown(note.excerpt || '') || stripMarkdown(getPlainTextFromStoredContent(note.content ?? null))}
           time={note.updated_at ? format(new Date(note.updated_at), 'MMM d') : ''}
           onDelete={onDelete}
         />

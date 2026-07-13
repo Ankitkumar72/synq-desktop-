@@ -39,7 +39,7 @@ export default function FolderPage() {
     )
   }
 
-  const folderNotes = notes.filter(n => n.folder_id === folderId && !n.is_deleted && !n.is_task)
+  const folderNotes = notes.filter(n => n.folder_id === folderId && !n.is_deleted)
   const filteredNotes = folderNotes.filter(n => n.title.toLowerCase().includes(searchQuery.toLowerCase()))
 
   const handleAddNote = async () => {

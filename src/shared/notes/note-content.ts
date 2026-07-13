@@ -174,3 +174,23 @@ export function createNoteEditorSnapshot(editor: Editor): NoteEditorSnapshot {
     excerpt: buildExcerpt(plainText),
   }
 }
+
+export function stripMarkdown(text: string): string {
+  if (!text) return ''
+  return text
+    // Remove headers
+    .replace(/^#+\s+/gm, '')
+    // Remove bold/italic (**, __, *, _)
+    .replace(/(\*\*|__|\*|_)(.*?)\1/g, '$2')
+    // Remove strikethrough (~~)
+    .replace(/~~(.*?)~~/g, '$1')
+    // Remove links
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    // Remove blockquotes
+    .replace(/^>\s+/gm, '')
+    // Remove inline code
+    .replace(/`([^`]+)`/g, '$1')
+    // Remove image tags
+    .replace(/!\[([^\]]*)\]\([^)]+\)/g, '')
+    .trim()
+}

@@ -90,7 +90,7 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
   const handleRemoteNotes = useCallback((payload: RealtimePostgresChangesPayload<Note>) => {
     const { eventType, new: newRecord, old: oldRecord } = payload
     const notesStore = useNotesStore.getState()
-    if (newRecord && 'is_task' in newRecord && (newRecord as Note).is_task) return
+    // `is_task` is removed; all notes are true notes now
     if (newRecord && 'hlc_timestamp' in newRecord) hlc.receive(newRecord.hlc_timestamp || '')
     
     const note = newRecord as Note

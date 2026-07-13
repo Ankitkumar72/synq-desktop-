@@ -84,9 +84,6 @@ export interface Note {
   field_versions?: Record<string, string>
   deleted_hlc?: string | null
   is_deleted: boolean
-  is_task?: boolean
-  scheduled_time?: string | null
-  end_time?: string | null
   pinned: boolean
   date?: string
   updated_at: string

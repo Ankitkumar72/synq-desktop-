@@ -114,7 +114,7 @@ function NotesPageContent() {
 
     if (actualUrlId && actualUrlId !== selectedNoteId) {
       if (!hasSyncedFromUrl.current || actualUrlId !== lastUrlId.current) {
-        const noteExists = notes.some(n => n.id === actualUrlId && !n.is_deleted && !n.deleted_at && !n.is_task)
+        const noteExists = notes.some(n => n.id === actualUrlId && !n.is_deleted && !n.deleted_at)
         if (noteExists) {
           setSelectedNoteId(actualUrlId)
           lastUrlId.current = actualUrlId
@@ -170,7 +170,7 @@ function NotesPageContent() {
 
   const filteredNotes = useMemo(() => {
     return notes
-      .filter(note => !note.deleted_at && !note.is_task)
+      .filter(note => !note.deleted_at)
       .sort((a, b) => {
         if (typeof a.order === 'number' && typeof b.order === 'number') {
           return a.order - b.order
