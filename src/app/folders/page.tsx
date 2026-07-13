@@ -6,15 +6,11 @@ import {
   MoreHorizontal,
   Search,
   Pin,
-  PinOff,
   ChevronsUpDown,
   ChevronUp,
   ChevronDown,
   Folder,
-  Check,
-  Trash2,
-  Edit3,
-  AlignLeft
+  Check
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
