@@ -15,17 +15,13 @@ import {
   getNoteSyncClientId
 } from "@/shared/realtime/note-sync"
 import { 
-  validateStore, 
-  executeRecovery, 
-  beginBootstrap, 
-  advanceBootstrapStage, 
-  BootstrapStage, 
-  finalizeBootstrap, 
+  validateStore,
   updateCheckpointAfterSync, 
   getValidatedCursor, 
   runBackgroundHealthCheck,
-  StoreHealthState 
+  StoreTrustLevel 
 } from "@/shared/store/store-health"
+import { BootstrapCoordinator } from "./bootstrap-coordinator"
 import { RealtimeChannel, RealtimePostgresChangesPayload, Session } from '@supabase/supabase-js'
 
 export enum SyncState {
@@ -178,26 +174,32 @@ export class SyncEngine {
     try {
       Telemetry.trackStoreEvent('store.validation.started');
       const healthReport = validateStore();
-      let lastSeqId = getValidatedCursor();
 
-      if (healthReport.state !== StoreHealthState.HEALTHY) {
+      if (healthReport.level === StoreTrustLevel.UNTRUSTED || healthReport.level === StoreTrustLevel.DEGRADED) {
         this.setState(SyncState.RECOVERING);
         Telemetry.trackStoreEvent('store.validation.failed', {
-          state: healthReport.state,
+          level: healthReport.level,
           recoveryType: healthReport.recoveryType,
           details: healthReport.details,
         });
-        await executeRecovery(healthReport);
-        lastSeqId = 0;
+        
+        const success = await BootstrapCoordinator.getInstance().startFullRebuild();
+        if (!success) {
+          this.setState(SyncState.ERROR);
+          return;
+        }
+      } else if (healthReport.level === StoreTrustLevel.BOOTSTRAPPING_IN_PROGRESS) {
+        this.setState(SyncState.RECOVERING);
+        const success = await BootstrapCoordinator.getInstance().startFullRebuild();
+        if (!success) {
+          this.setState(SyncState.ERROR);
+          return;
+        }
       }
 
       this.setState(SyncState.SYNCING);
       
-      const isFullBootstrap = lastSeqId === 0;
-      if (isFullBootstrap) {
-        beginBootstrap();
-      }
-      
+      let lastSeqId = getValidatedCursor();
       let hasMore = true;
       while (hasMore) {
         const { data, error } = await supabase.rpc('get_delta_sync', { 
@@ -215,10 +217,6 @@ export class SyncEngine {
         }
 
         if (data) {
-          if (isFullBootstrap) {
-            advanceBootstrapStage(BootstrapStage.VERIFYING);
-          }
-
           const promises = [
             useTaskStore.getState().fetchTasks(true, data.tasks),
             useNotesStore.getState().fetchNotes(true, data.notes),
@@ -230,17 +228,12 @@ export class SyncEngine {
           await Promise.allSettled(promises);
           
           if (data.latest_seq_id !== undefined) {
-            if (isFullBootstrap) {
-              finalizeBootstrap(data.latest_seq_id);
-            } else {
-              updateCheckpointAfterSync(data.latest_seq_id);
-            }
+            updateCheckpointAfterSync(data.latest_seq_id);
             lastSeqId = data.latest_seq_id;
           }
           
           this.hydrateMissingNoteContent(data.notes);
 
-          // If we received fewer records than the limit across all types, we are done
           const totalRecords = (data.tasks?.length || 0) + (data.notes?.length || 0) + (data.events?.length || 0) + (data.projects?.length || 0) + (data.folders?.length || 0);
           if (totalRecords < 1000) {
             hasMore = false;
@@ -407,12 +400,14 @@ export class SyncEngine {
       if (typeof document !== 'undefined' && document.hidden) return;
       if (!this.currentUserId || this.isSubscribing) return;
       
+      if (this.currentState === SyncState.RECOVERING) return;
+      
       if (!this.realtimeConnected) this.subscribeToRealtime();
 
       const bgReport = runBackgroundHealthCheck();
-      if (bgReport.state !== StoreHealthState.HEALTHY) {
+      if (bgReport.level === StoreTrustLevel.UNTRUSTED) {
         this.setState(SyncState.RECOVERING);
-        this.fetchData(); // fetchData triggers recovery
+        this.fetchData(); // fetchData will trigger startFullRebuild
       }
     }, HEALTH_CHECK_INTERVAL);
   }
