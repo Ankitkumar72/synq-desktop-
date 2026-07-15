@@ -155,8 +155,19 @@ function NotesPageContent() {
       const expectedPath = `/notes/${expectedSlug}`
 
       if (currentPath !== expectedPath) {
-        window.history.replaceState(null, '', expectedPath)
-        lastUrlId.current = selectedNoteId
+        if (lastUrlId.current !== selectedNoteId) {
+          // If we switched to a new note, update URL immediately
+          window.history.replaceState(null, '', expectedPath)
+          lastUrlId.current = selectedNoteId
+        } else {
+          // If we are just editing the title of the current note, debounce the URL update by 1s
+          const timer = setTimeout(() => {
+            if (window.location.pathname !== expectedPath) {
+              window.history.replaceState(null, '', expectedPath)
+            }
+          }, 1000)
+          return () => clearTimeout(timer)
+        }
       }
     } else {
       if (window.location.pathname !== '/notes') {
