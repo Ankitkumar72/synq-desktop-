@@ -71,7 +71,7 @@ export const useFolderStore = create<FolderState>()(
           }
 
           const currentFolders = get().folders
-          const merged = mergeFolderList(currentFolders, data || [], true, includeDeleted)
+          const merged = mergeFolderList(currentFolders, data || [], !prefetchedData, includeDeleted)
           set({ folders: merged, isLoading: false })
         } catch (err) {
           console.error('[FolderStore] Unexpected error in fetchFolders:', err)

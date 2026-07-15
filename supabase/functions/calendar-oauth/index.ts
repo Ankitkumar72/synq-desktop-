@@ -4,7 +4,7 @@ import { encryptToken } from "../shared/crypto.ts";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") || "";
 
-Deno.serve(async (req) => {
+Deno.serve(async (req: Request) => {
   const url = new URL(req.url);
   const path = url.pathname; // e.g. /calendar-oauth/init or /calendar-oauth/callback
 

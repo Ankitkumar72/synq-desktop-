@@ -23,6 +23,8 @@ interface EventState {
   deleteEvent: (id: string) => Promise<void>
   restoreEvent: (id: string) => Promise<void>
   permanentlyDeleteEvent: (id: string) => Promise<void>
+  bulkUpdateEvents: (ids: string[], updates: Partial<CalendarEvent>) => Promise<void>
+  bulkDeleteEvents: (ids: string[]) => Promise<void>
   fetchEvents: (includeDeleted?: boolean, prefetchedData?: CalendarEvent[]) => Promise<void>
   mergeEventLocal: (remote: CalendarEvent) => void
   clearStore: () => void
@@ -209,6 +211,105 @@ export const useEventStore = create<EventState>()(
         }
       },
 
+      bulkUpdateEvents: async (ids: string[], updates: Partial<CalendarEvent>) => {
+        if (!supabase) return
+        if (ids.length === 0) return
+
+        const timestamp = hlc.increment()
+        const now = new Date().toISOString()
+        
+        set(state => {
+          const newEvents = state.events.map(ev => {
+            if (!ids.includes(ev.id)) return ev
+            const updatedKeys = Object.keys(updates).filter(k => !SKIP_FIELDS.includes(k))
+            const newVersions = stampFields(ev.field_versions || {}, updatedKeys, timestamp)
+            return {
+              ...ev,
+              ...updates,
+              hlc_timestamp: timestamp,
+              field_versions: newVersions,
+              updated_at: now
+            }
+          })
+          return { events: newEvents }
+        })
+
+        if (getOnlineStatus()) {
+          const { error } = await supabase.rpc('bulk_update_events', {
+            p_event_ids: ids,
+            p_updates: updates,
+            p_hlc_timestamp: timestamp
+          })
+          
+          if (error) {
+            console.error('Error bulk updating events:', error)
+            for (const id of ids) {
+              await enqueueOperation({
+                entityType: 'event',
+                entityId: id,
+                operationType: 'update',
+                payload: { ...updates, hlc_timestamp: timestamp, updated_at: now },
+                hlcTimestamp: timestamp,
+              })
+            }
+            triggerFlush()
+          }
+        } else {
+          for (const id of ids) {
+            await enqueueOperation({
+              entityType: 'event',
+              entityId: id,
+              operationType: 'update',
+              payload: { ...updates, hlc_timestamp: timestamp, updated_at: now },
+              hlcTimestamp: timestamp,
+            })
+          }
+        }
+      },
+
+      bulkDeleteEvents: async (ids: string[]) => {
+        if (!supabase) return
+        if (ids.length === 0) return
+
+        const timestamp = hlc.increment()
+        const now = new Date().toISOString()
+
+        set(state => ({
+          events: state.events.filter(ev => !ids.includes(ev.id))
+        }))
+
+        if (getOnlineStatus()) {
+          const { error } = await supabase.rpc('bulk_delete_events', {
+            p_event_ids: ids,
+            p_hlc_timestamp: timestamp
+          })
+          
+          if (error) {
+            console.error('Error bulk deleting events:', error)
+            for (const id of ids) {
+              await enqueueOperation({
+                entityType: 'event',
+                entityId: id,
+                operationType: 'delete',
+                payload: { is_deleted: true, deleted_hlc: timestamp, hlc_timestamp: timestamp, updated_at: now },
+                hlcTimestamp: timestamp,
+              })
+            }
+            triggerFlush()
+          }
+        } else {
+          for (const id of ids) {
+            await enqueueOperation({
+              entityType: 'event',
+              entityId: id,
+              operationType: 'delete',
+              payload: { is_deleted: true, deleted_hlc: timestamp, hlc_timestamp: timestamp, updated_at: now },
+              hlcTimestamp: timestamp,
+            })
+          }
+        }
+      },
+
       fetchEvents: async (includeDeleted = false, prefetchedData?: CalendarEvent[]) => {
         if (!supabase || get().isLoading) return
         if (get().events.length === 0) {
@@ -253,7 +354,7 @@ export const useEventStore = create<EventState>()(
           }
 
           const currentEvents = get().events
-          const merged = mergeEventsList(currentEvents, data || [], true, includeDeleted)
+          const merged = mergeEventsList(currentEvents, data || [], !prefetchedData, includeDeleted)
           set({ events: merged, isLoading: false })
         } catch (err) {
           const errMsg = err instanceof Error ? err.message : JSON.stringify(err)

@@ -25,6 +25,28 @@ export const Telemetry = {
   },
 
   /**
+   * Tracks mutation lifecycle events for the Production-Grade Delivery System.
+   */
+  trackMutation: (
+    event: 'mutation_queued' | 'mutation_dispatched' | 'mutation_committed' | 'mutation_dead_letter' | 'mutation_retry',
+    mutationId: string,
+    metadata?: Record<string, unknown>
+  ) => {
+    const payload = {
+      event,
+      mutation_id: mutationId,
+      ...metadata,
+      timestamp: new Date().toISOString(),
+    }
+    
+    if (event === 'mutation_dead_letter' || event === 'mutation_retry') {
+      console.warn(`[Telemetry] Mutation ${event}: ${mutationId}`, payload)
+    } else {
+      console.info(`[Telemetry] Mutation ${event}: ${mutationId}`, payload)
+    }
+  },
+
+  /**
    * Tracks the number of items in the offline queues during a flush cycle.
    */
   trackQueueDepth: (crudDepth: number, crdtDepth: number) => {
@@ -74,5 +96,25 @@ export const Telemetry = {
     }
     
     console.warn(`[Telemetry] Realtime Reconnecting (Attempt ${attempt}) due to ${reason}`, payload)
+  },
+
+  /**
+   * Tracks store validation, recovery, and bootstrap lifecycle events.
+   * Events: store.validation.started, store.validation.failed, store.rebuild.started,
+   *         store.reset.complete, store.bootstrap.completed, store.health.degraded
+   */
+  trackStoreEvent: (event: string, data?: Record<string, unknown>) => {
+    const payload = {
+      event,
+      ...data,
+      timestamp: new Date().toISOString(),
+    }
+
+    const isError = event.includes('failed') || event.includes('degraded') || event.includes('rebuild')
+    if (isError) {
+      console.warn(`[Telemetry] ${event}`, payload)
+    } else {
+      console.info(`[Telemetry] ${event}`, payload)
+    }
   }
 }

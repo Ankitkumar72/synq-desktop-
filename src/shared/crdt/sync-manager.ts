@@ -2,14 +2,9 @@
 
 import { supabase, isGhostClient } from '../supabase/supabase'
 import { hlc } from '../hlc'
-import {
-  applyNoteCrdtUpdate,
-  enqueueQueuedNoteCrdtUpdate,
-  flushQueuedNoteCrdtUpdates,
-  getQueuedNoteCrdtDepth,
-  setLocalLastSeq,
-  isNonRetryableError,
-} from './oplog'
+// Removed old oplog imports.
+// Now using the unified mutation delivery system for CRDT updates.
+import { MutationManager } from '../sync/mutation-manager'
 import {
   flushQueue,
   getQueueDepth,
@@ -21,55 +16,9 @@ import { getDocState, markLocallyModified, getMarkdownFromYDoc, getExcerptFromYD
 import type { RejectedField } from './field-crdt'
 import { Telemetry } from '../telemetry'
 
-const __DEV__ = process.env.NODE_ENV !== 'production'
 
-type CircuitState = 'closed' | 'open' | 'half-open'
 
-class CircuitBreaker {
-  private state: CircuitState = 'closed'
-  private failures = 0
-  private lastFailureAt = 0
-
-  constructor(
-    private readonly threshold = 5,        
-    private readonly resetAfterMs = 30_000  
-  ) {}
-
-  async execute<T>(fn: () => Promise<T>): Promise<T> {
-    if (this.state === 'open') {
-      const elapsed = Date.now() - this.lastFailureAt
-      if (elapsed < this.resetAfterMs) {
-        throw new Error('[CircuitBreaker] Open, skipping request')
-      }
-      this.state = 'half-open'
-    }
-
-    try {
-      const result = await fn()
-      this.reset()
-      return result
-    } catch (err) {
-      this.recordFailure()
-      throw err
-    }
-  }
-
-  private reset() {
-    this.failures = 0
-    this.state = 'closed'
-  }
-
-  private recordFailure() {
-    this.failures++
-    this.lastFailureAt = Date.now()
-    if (this.failures >= this.threshold) {
-      if (__DEV__) console.warn(`[CircuitBreaker] Opened after ${this.failures} consecutive failures`)
-      this.state = 'open'
-    }
-  }
-}
-
-const crdtBreaker = new CircuitBreaker(5, 30_000)
+// CircuitBreaker removed as logic was moved to new dispatcher
 
 let isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true
 let flushTimer: ReturnType<typeof setTimeout> | null = null
@@ -86,6 +35,8 @@ export function initSyncManager(): void {
 
   if (typeof window === 'undefined') return
 
+  initCRDTWorker()
+
   window.addEventListener('online', handleOnline)
   window.addEventListener('offline', handleOffline)
 
@@ -97,7 +48,51 @@ export function initSyncManager(): void {
   }
 }
 
+let crdtWorker: Worker | null = null
+const workerResolvers = new Map<string, { resolve: (val: any) => void, reject: (err: any) => void }>()
+
+function initCRDTWorker() {
+  if (crdtWorker || typeof window === 'undefined') return
+  
+  crdtWorker = new Worker(new URL('./crdt.worker.ts', import.meta.url), { type: 'module' })
+  
+  crdtWorker.onmessage = (e) => {
+    const data = e.data
+    if (data.type === 'ACK' || data.type === 'ERROR') {
+      const p = workerResolvers.get(data.msgId)
+      if (p) {
+        if (data.type === 'ERROR') p.reject(new Error(data.error))
+        else p.resolve(data)
+        workerResolvers.delete(data.msgId)
+      }
+    } else if (data.type === 'PATCH_READY') {
+      // In hybrid architecture, we take the pre-computed patch from the background worker
+      // and apply it to the main thread's live Y.Doc without blocking on the diff computation.
+      import('./crdt-doc').then(({ applyRemoteUpdateIfLoaded }) => {
+        applyRemoteUpdateIfLoaded(data.noteId, data.update)
+      })
+    }
+  }
+}
+
+export function postToCRDTWorker(req: any): Promise<any> {
+  return new Promise((resolve, reject) => {
+    if (!crdtWorker) {
+      reject(new Error('CRDT Worker not initialized'))
+      return
+    }
+    const msgId = crypto.randomUUID()
+    workerResolvers.set(msgId, { resolve, reject })
+    crdtWorker.postMessage({ msgId, req })
+  })
+}
+
 export function destroySyncManager(): void {
+  if (crdtWorker) {
+    crdtWorker.terminate()
+    crdtWorker = null
+  }
+  workerResolvers.clear()
   if (typeof window === 'undefined') return
 
   window.removeEventListener('online', handleOnline)
@@ -149,27 +144,17 @@ async function performFlush(): Promise<void> {
   try {
     do {
       needsFlushAgain = false
-      const [crudDepth, crdtDepth] = await Promise.all([
-        getQueueDepth(),
-        getQueuedNoteCrdtDepth(),
-      ])
-      if (crudDepth + crdtDepth === 0) break
+      const crudDepth = await getQueueDepth()
+      if (crudDepth === 0) break
 
-      const [crudResult, crdtResult] = await Promise.all([
-        flushQueue(executeOperation),
-        flushQueuedNoteCrdtUpdates(),
-      ])
+      const crudResult = await flushQueue(executeOperation)
 
-      const [newCrudDepth, newCrdtDepth] = await Promise.all([
-        getQueueDepth(),
-        getQueuedNoteCrdtDepth(),
-      ])
-      const newDepth = newCrudDepth + newCrdtDepth
-      notifyQueueListeners(newDepth)
+      const newCrudDepth = await getQueueDepth()
+      notifyQueueListeners(newCrudDepth)
       
-      Telemetry.trackQueueDepth(newCrudDepth, newCrdtDepth)
+      Telemetry.trackQueueDepth(newCrudDepth, 0)
 
-      if ((crudResult.failed + crdtResult.failed) > 0) {
+      if (crudResult.failed > 0) {
         scheduleFlush(RETRY_BACKOFF_MS * 2.5) 
         break 
       }
@@ -228,13 +213,6 @@ function createOpId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
 }
 
-function isRpcUnavailableError(err: unknown): boolean {
-  if (!err || typeof err !== 'object') return false
-  const maybe = err as { code?: string; message?: string; details?: string }
-  const message = `${maybe.message || ''} ${maybe.details || ''}`.toLowerCase()
-  return maybe.code === '42883' || message.includes('function') && message.includes('does not exist')
-}
-
 interface SaveYDocOptions {
   updateData?: Uint8Array
   opId?: string
@@ -249,7 +227,6 @@ export async function saveYDocToSupabase(noteId: string, userId: string, options
   const body = getMarkdownFromYDoc(noteId)
   const plainText = getPlainTextFromYDoc(noteId)
   const excerpt = getExcerptFromYDoc(noteId)
-  const timestamp = hlc.increment()
   const updatedAt = new Date().toISOString()
   const opId = options.opId || createOpId()
   const clientId = hlc.getNodeId()
@@ -258,128 +235,28 @@ export async function saveYDocToSupabase(noteId: string, userId: string, options
 
   markLocallyModified(noteId)
 
-  if (!isOnline) {
-    await enqueueQueuedNoteCrdtUpdate({
+  // Submit via the new unified MutationManager pipeline
+  // This is durable before network, so we don't need to try RPC first and fallback to queue.
+  await MutationManager.submit(
+    'default', // workspaceId placeholder if we don't have it globally scoped here
+    noteId,
+    'NOTE_CRDT_UPDATE',
+    {
       noteId,
       userId,
       clientId,
       opId,
-      updateData,
+      updateData: updateData ? Array.from(updateData) : null,
+      snapshot: snapshot ? Array.from(snapshot) : null,
       body,
       excerpt,
-      snapshot: snapshot ?? undefined,
       updatedAt,
       content,
       contentMarkdown: body,
       plainText,
       fieldVersions: options.fieldVersions,
-    })
-    return
-  }
-
-  try {
-    const result = await crdtBreaker.execute(() =>
-      applyNoteCrdtUpdate({
-        noteId,
-        userId,
-        clientId,
-        opId,
-        updateData,
-        snapshot: snapshot ?? undefined,
-        body,
-        excerpt,
-        updatedAt,
-        content,
-        contentMarkdown: body,
-        plainText,
-        fieldVersions: options.fieldVersions,
-      })
-    )
-    if (result.seq > 0) {
-      setLocalLastSeq(noteId, result.seq)
     }
-    return
-  } catch (rpcError) {
-
-    if (isNonRetryableError(rpcError)) {
-      if (__DEV__) console.error('[SyncManager] Non-retryable RPC error, discarding operation:', rpcError)
-      return
-    }
-
-    if (!isRpcUnavailableError(rpcError)) {
-      try {
-        await enqueueQueuedNoteCrdtUpdate({
-          noteId,
-          userId,
-          clientId,
-          opId,
-          updateData,
-          body,
-          excerpt,
-          snapshot: snapshot ?? undefined,
-          updatedAt,
-          content,
-          contentMarkdown: body,
-          fieldVersions: options.fieldVersions,
-        })
-        triggerFlush()
-        return
-      } catch (queueErr) {
-        if (__DEV__) console.error('[SyncManager] Failed to enqueue CRDT op after RPC error:', queueErr)
-        throw rpcError
-      }
-    }
-
-    if (__DEV__) console.warn('[SyncManager] Atomic RPC unavailable, falling back to legacy save path:', rpcError)
-  }
-
-  const { error: crdtError } = await supabase
-    .from('crdt_documents')
-    .upsert({
-      entity_type: 'note',
-      entity_id: noteId,
-      user_id: userId,
-      state: Array.from(state),
-      updated_at: updatedAt,
-    }, { onConflict: 'entity_type,entity_id' })
-
-  if (crdtError) {
-    const errorMessage = crdtError instanceof Error
-      ? crdtError.message
-      : (crdtError && typeof crdtError === 'object' && Object.keys(crdtError).length > 0
-        ? JSON.stringify(crdtError)
-        : 'Unknown error (check crdt_documents table exists)')
-    if (__DEV__) console.error('[SyncManager] Failed to save CRDT state:', errorMessage)
-  }
-
-  const noteUpdate: Record<string, unknown> = {
-    body,
-    content_markdown: body,
-    plain_text: plainText,
-    excerpt,
-    hlc_timestamp: timestamp,
-    updated_at: updatedAt,
-  }
-  if (content !== undefined) {
-    noteUpdate.content = content
-  }
-  if (options.fieldVersions) {
-    noteUpdate.field_versions = options.fieldVersions
-  }
-
-  const { error: noteError } = await supabase
-    .from('notes')
-    .update(noteUpdate)
-    .eq('id', noteId)
-
-  if (noteError) {
-    const errorMessage = noteError instanceof Error
-      ? noteError.message
-      : (noteError && typeof noteError === 'object' && Object.keys(noteError).length > 0
-        ? JSON.stringify(noteError)
-        : 'Unknown error')
-    if (__DEV__) console.error('[SyncManager] Failed to update note body:', errorMessage)
-  }
+  );
 }
 
 export interface RemoteDocSnapshot {
@@ -424,11 +301,8 @@ export function getOnlineStatus(): boolean {
 }
 
 export async function getTotalQueueDepth(): Promise<number> {
-  const [crudDepth, crdtDepth] = await Promise.all([
-    getQueueDepth(),
-    getQueuedNoteCrdtDepth(),
-  ])
-  return crudDepth + crdtDepth
+  const crudDepth = await getQueueDepth()
+  return crudDepth
 }
 
 export async function logRejectedFields(

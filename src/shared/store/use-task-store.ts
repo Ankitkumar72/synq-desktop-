@@ -95,7 +95,7 @@ export const useTaskStore = create<TaskState>()(
 
           // Merge each fetched task using CRDT merge to preserve local state
           const currentTasks = get().tasks
-          const merged = mergeTaskList(currentTasks, data || [], true, includeDeleted)
+          const merged = mergeTaskList(currentTasks, data || [], !prefetchedData, includeDeleted)
           set({ tasks: merged, isLoading: false })
         } catch (err) {
           console.error('[TaskStore] Unexpected error in fetchTasks:', err)
@@ -332,6 +332,108 @@ export const useTaskStore = create<TaskState>()(
           }
         } else {
           await enqueueOperation({ entityType: 'task', entityId: id, operationType: 'hard_delete', payload: {}, hlcTimestamp: hlc.increment() })
+        }
+      },
+
+      bulkUpdateTasks: async (ids: string[], updates: Partial<Task>) => {
+        if (!supabase) return
+        if (ids.length === 0) return
+
+        const timestamp = hlc.increment()
+        const now = new Date().toISOString()
+        
+        // Optimistic update
+        set(state => {
+          const newTasks = state.tasks.map(t => {
+            if (!ids.includes(t.id)) return t
+            const updatedKeys = Object.keys(updates).filter(k => !SKIP_FIELDS.includes(k))
+            const newVersions = stampFields(t.field_versions || {}, updatedKeys, timestamp)
+            return {
+              ...t,
+              ...updates,
+              hlc_timestamp: timestamp,
+              field_versions: newVersions,
+              updated_at: now
+            }
+          })
+          return { tasks: newTasks }
+        })
+
+        if (getOnlineStatus()) {
+          const { error } = await supabase.rpc('bulk_update_tasks', {
+            p_task_ids: ids,
+            p_updates: updates,
+            p_hlc_timestamp: timestamp
+          })
+          
+          if (error) {
+            console.error('Error bulk updating tasks:', error)
+            // Fallback: enqueue individual updates
+            for (const id of ids) {
+              await enqueueOperation({
+                entityType: 'task',
+                entityId: id,
+                operationType: 'update',
+                payload: { ...updates, hlc_timestamp: timestamp, updated_at: now },
+                hlcTimestamp: timestamp,
+              })
+            }
+            triggerFlush()
+          }
+        } else {
+          // Offline fallback
+          for (const id of ids) {
+            await enqueueOperation({
+              entityType: 'task',
+              entityId: id,
+              operationType: 'update',
+              payload: { ...updates, hlc_timestamp: timestamp, updated_at: now },
+              hlcTimestamp: timestamp,
+            })
+          }
+        }
+      },
+
+      bulkDeleteTasks: async (ids: string[]) => {
+        if (!supabase) return
+        if (ids.length === 0) return
+
+        const timestamp = hlc.increment()
+        const now = new Date().toISOString()
+
+        set(state => ({
+          tasks: state.tasks.filter(t => !ids.includes(t.id))
+        }))
+
+        if (getOnlineStatus()) {
+          const { error } = await supabase.rpc('bulk_delete_tasks', {
+            p_task_ids: ids,
+            p_hlc_timestamp: timestamp
+          })
+          
+          if (error) {
+            console.error('Error bulk deleting tasks:', error)
+            for (const id of ids) {
+              await enqueueOperation({
+                entityType: 'task',
+                entityId: id,
+                operationType: 'delete',
+                payload: { is_deleted: true, deleted_hlc: timestamp, hlc_timestamp: timestamp, updated_at: now },
+                hlcTimestamp: timestamp,
+              })
+            }
+            triggerFlush()
+          }
+        } else {
+          for (const id of ids) {
+            await enqueueOperation({
+              entityType: 'task',
+              entityId: id,
+              operationType: 'delete',
+              payload: { is_deleted: true, deleted_hlc: timestamp, hlc_timestamp: timestamp, updated_at: now },
+              hlcTimestamp: timestamp,
+            })
+          }
         }
       },
 

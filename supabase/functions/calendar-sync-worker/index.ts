@@ -7,7 +7,7 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "
 // We use the service_role key because this is an internal worker triggered by pg_net
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-Deno.serve(async (req) => {
+Deno.serve(async (req: Request) => {
   // pg_net sends a POST request with the new row's ID
   if (req.method !== "POST") return new Response("Method not allowed", { status: 405 });
 
@@ -174,7 +174,7 @@ Deno.serve(async (req) => {
           }, { onConflict: "user_id, provider" });
         }
 
-      } catch (syncErr) {
+      } catch (syncErr: any) {
         console.error("Google Delta Sync failed:", syncErr);
         await supabase.from("sync_jobs").update({ status: "failed", error_details: syncErr.message }).eq("id", job_id);
         return new Response("Sync error", { status: 200 });

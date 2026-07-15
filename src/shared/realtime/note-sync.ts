@@ -2,13 +2,19 @@ import type { RealtimeChannel } from '@supabase/supabase-js'
 import type { Note } from '../types'
 
 export const NOTE_BROADCAST_EVENT = 'note-update'
+export const NOTE_META_BROADCAST_EVENT = 'note-meta-update'
 
 export interface NoteBroadcastPayload extends Pick<Note, 'id' | 'content' | 'body' | 'excerpt' | 'hlc_timestamp' | 'updated_at'> {
   field_versions: Record<string, string>
   sender_id: string
 }
 
-let noteBroadcastChannel: RealtimeChannel | null = null
+export interface NoteMetaBroadcastPayload extends Pick<Note, 'id' | 'title' | 'excerpt' | 'updated_seq_id' | 'updated_at' | 'is_deleted'> {
+  sender_id: string
+}
+
+let globalBroadcastChannel: RealtimeChannel | null = null
+let activeNoteBroadcastChannel: RealtimeChannel | null = null
 
 let memoryClientId: string | null = null
 
@@ -31,15 +37,19 @@ export function getNoteSyncClientId() {
   return memoryClientId
 }
 
-export function bindNoteBroadcastChannel(channel: RealtimeChannel | null) {
-  noteBroadcastChannel = channel
+export function bindGlobalBroadcastChannel(channel: RealtimeChannel | null) {
+  globalBroadcastChannel = channel
+}
+
+export function bindActiveNoteChannel(channel: RealtimeChannel | null) {
+  activeNoteBroadcastChannel = channel
 }
 
 export async function sendNoteBroadcast(payload: Omit<NoteBroadcastPayload, 'sender_id'>) {
-  if (!noteBroadcastChannel) return 'not-ready'
+  if (!activeNoteBroadcastChannel) return 'not-ready'
 
   try {
-    return await noteBroadcastChannel.send({
+    return await activeNoteBroadcastChannel.send({
       type: 'broadcast',
       event: NOTE_BROADCAST_EVENT,
       payload: {
@@ -48,7 +58,25 @@ export async function sendNoteBroadcast(payload: Omit<NoteBroadcastPayload, 'sen
       },
     })
   } catch (error) {
-    console.warn('[NoteSync] Broadcast send failed:', error)
+    console.warn('[NoteSync] CRDT Broadcast send failed:', error)
+    return 'error'
+  }
+}
+
+export async function sendNoteMetadataBroadcast(payload: Omit<NoteMetaBroadcastPayload, 'sender_id'>) {
+  if (!globalBroadcastChannel) return 'not-ready'
+
+  try {
+    return await globalBroadcastChannel.send({
+      type: 'broadcast',
+      event: NOTE_META_BROADCAST_EVENT,
+      payload: {
+        ...payload,
+        sender_id: getNoteSyncClientId(),
+      },
+    })
+  } catch (error) {
+    console.warn('[NoteSync] Metadata Broadcast send failed:', error)
     return 'error'
   }
 }

@@ -598,7 +598,7 @@ export const useNotesStore = create<NotesState>()(
 
           if (data) {
             const currentNotes = get().notes
-            const merged = mergeNotesList(currentNotes, data.map(sanitizeNote), true, includeDeleted)
+            const merged = mergeNotesList(currentNotes, data.map(sanitizeNote), !prefetchedData, includeDeleted)
 
             set({ notes: merged, isLoading: false });
           } else {
@@ -628,7 +628,7 @@ export const useNotesStore = create<NotesState>()(
           
           if (data) {
             const currentNotes = get().notes
-            const merged = mergeNotesList(currentNotes, [sanitizeNote(data)], true, true)
+            const merged = mergeNotesList(currentNotes, [sanitizeNote(data)], false, true)
             set({ notes: merged, isLoading: false })
           } else {
             set({ isLoading: false })

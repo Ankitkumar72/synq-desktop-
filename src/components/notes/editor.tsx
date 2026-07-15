@@ -24,12 +24,12 @@ import {
   initYDocFromMarkdown,
 } from "@/shared"
 import { saveYDocToSupabase, loadYDocFromSupabase, triggerFlush } from "@/shared"
-import { getLocalLastSeq, getNoteCrdtUpdates, setLocalLastSeq, toUint8Update, enqueueQueuedNoteCrdtUpdate } from "@/shared"
+import { getLocalLastSeq, getNoteCrdtUpdates, setLocalLastSeq, toUint8Update, enqueueQueuedNoteCrdtUpdate, getDocState } from "@/shared"
 import { isNonRetryableError } from "@/shared"
 import { useUserStore } from "@/shared"
 import type { NoteContent } from "@/shared"
 import { getEditorContentValue } from "@/shared"
-import { sendNoteBroadcast } from "@/shared"
+import { sendNoteBroadcast, sendNoteMetadataBroadcast } from "@/shared"
 import { hlc } from "@/shared"
 
 import DOMPurify from 'dompurify'
@@ -424,6 +424,17 @@ export function NoteEditor({
       updated_at: now,
       field_versions: mergedVersions,
     })
+
+    if (note) {
+      void sendNoteMetadataBroadcast({
+        id: note.id,
+        title: note.title,
+        excerpt: excerpt || note.excerpt,
+        updated_seq_id: 0, // Using 0 as it's a broadcast placeholder; the true seq_id is set by DB
+        updated_at: now,
+        is_deleted: note.is_deleted,
+      })
+    }
   }, [id, updateNoteLocal, ydoc])
 
   useEffect(() => {
@@ -581,6 +592,7 @@ export function NoteEditor({
           }
 
           const pageSize = 500
+          let totalOpsCount = 0
           for (let page = 0; page < 20; page++) {
             if (generation !== initGenerationRef.current) return
             const ops = await withTimeout(getNoteCrdtUpdates(id, cursor, pageSize), 15000, 'getNoteCrdtUpdates timeout')
@@ -596,7 +608,17 @@ export function NoteEditor({
             if (cursor > 0) {
               setLocalLastSeq(id, cursor)
             }
+            totalOpsCount += ops.length
             if (ops.length < pageSize) break
+          }
+          
+          if (totalOpsCount > 50) {
+            console.log(`[NoteEditor] Compacting CRDT doc with ${totalOpsCount} deltas`)
+            const userId = useUserStore.getState().user?.id
+            if (userId) {
+              // Passing `snapshot` triggers the Swap Transaction on the server
+              void saveYDocToSupabase(id, userId, { snapshot: getDocState(id) })
+            }
           }
         } catch (_err) {
           const isTimeout = _err instanceof Error && _err.message.includes('timeout')

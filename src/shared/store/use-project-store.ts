@@ -81,7 +81,7 @@ export const useProjectStore = create<ProjectState>()(
           }
 
           const currentProjects = get().projects
-          const merged = mergeProjectList(currentProjects, data || [], true, includeDeleted)
+          const merged = mergeProjectList(currentProjects, data || [], !prefetchedData, includeDeleted)
           set({ projects: merged, isLoading: false })
         } catch (err) {
           console.error('[ProjectStore] Unexpected error in fetchProjects:', err)

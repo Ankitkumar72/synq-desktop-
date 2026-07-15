@@ -34,6 +34,7 @@ export interface Task {
   order?: number
   recurrence_rule?: string | null
   parent_recurring_id?: string | null
+  updated_seq_id?: number
 }
 
 export interface Project {
@@ -54,6 +55,7 @@ export interface Project {
   created_at: string
   updated_at?: string
   deleted_at?: string | null
+  updated_seq_id?: number
 }
 
 export interface Activity {
@@ -65,6 +67,7 @@ export interface Activity {
   target_id?: string
   target_type?: string
   created_at: string
+  updated_seq_id?: number
 }
 
 export interface Note {
@@ -91,6 +94,7 @@ export interface Note {
   updated_at: string
   created_at: string
   deleted_at?: string | null
+  updated_seq_id?: number
 }
 
 export interface Folder {

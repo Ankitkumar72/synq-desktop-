@@ -5,7 +5,7 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-Deno.serve(async (req) => {
+Deno.serve(async (req: Request) => {
   // Webhooks from Microsoft Graph or Google Calendar are POST requests
   if (req.method !== "POST") {
     return new Response("Method not allowed", { status: 405 });

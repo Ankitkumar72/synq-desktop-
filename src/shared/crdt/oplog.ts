@@ -75,7 +75,9 @@ const OPLOG_QUEUE_PREFIX = 'synq-crdt-opq:'
 const OPLOG_LAST_SEQ_PREFIX = 'synq-crdt-last-seq:'
 const MAX_QUEUE_RETRIES = 10
 
-export async function applyNoteCrdtUpdate(input: ApplyNoteCrdtUpdateInput): Promise<ApplyNoteCrdtUpdateResult> {
+export async function applyNoteCrdtUpdate(input: ApplyNoteCrdtUpdateInput & { clientLastSync?: string }): Promise<ApplyNoteCrdtUpdateResult> {
+  const clientLastSync = input.clientLastSync || (typeof window !== 'undefined' ? window.localStorage.getItem('synq_last_sync_time') || undefined : undefined);
+
   const { data, error } = await supabase.rpc('apply_note_crdt_update', {
     p_entity_id: input.noteId,
     p_user_id: input.userId,
@@ -96,6 +98,7 @@ export async function applyNoteCrdtUpdate(input: ApplyNoteCrdtUpdateInput): Prom
     p_hlc_timestamp: hlc.increment(),
     p_updated_at: input.updatedAt || new Date().toISOString(),
     p_snapshot: toIntArray(input.snapshot),
+    p_client_last_sync: clientLastSync,
   })
 
   if (error) {
