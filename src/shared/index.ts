@@ -10,6 +10,7 @@ export * from './store/use-project-store';
 export * from './store/use-task-store';
 export * from './store/use-ui-store';
 export * from './store/use-user-store';
+export * from './store/use-conflict-store';
 
 // realtime
 export * from './realtime/note-sync';
@@ -39,3 +40,4 @@ export * from './notes/note-content';
 
 // utils
 export * from './utils/performance';
+export * from './telemetry';

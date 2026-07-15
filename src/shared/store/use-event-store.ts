@@ -4,9 +4,9 @@ import { CalendarEvent } from '../types'
 import { hlc, HLC } from '../hlc'
 import { supabase } from '../supabase/supabase'
 import { useUserStore } from './use-user-store'
-import { mergeFields, stampFields } from '../crdt/field-crdt'
+import { mergeFields, stampFields, isTombstoned } from '../crdt/field-crdt'
 import { enqueueOperation } from '../crdt/offline-queue'
-import { triggerFlush, getOnlineStatus } from '../crdt/sync-manager'
+import { triggerFlush, getOnlineStatus, logRejectedFields } from '../crdt/sync-manager'
 import { idbStorage } from './idb-storage'
 
 const SKIP_FIELDS = ['id', 'user_id', 'created_at', 'field_versions', 'hlc_timestamp', 'deleted_hlc']
@@ -285,13 +285,15 @@ export const useEventStore = create<EventState>()(
           const remoteClientId = remote.hlc_timestamp ? HLC.extractNodeId(remote.hlc_timestamp) : 'unknown'
           const localClientId = hlc.getNodeId()
 
-          // Handle deletion
-          if (remote.is_deleted) {
-            return { events: state.events.map(ev => ev.id === remote.id ? { ...ev, ...remote } : ev) }
+          // Causal Tombstone Firewall:
+          // If the local record is soft-deleted, and this incoming edit is causally older, drop it entirely.
+          if (remote.hlc_timestamp && isTombstoned(local, remote.hlc_timestamp)) {
+            console.log('[Sync] Dropping zombie edit for', remote.id);
+            return state;
           }
 
           // Per-field CRDT merge
-          const { merged, mergedVersions } = mergeFields(
+          const { merged, mergedVersions, rejectedFields } = mergeFields(
             local,
             remote,
             local.field_versions || {},
@@ -300,6 +302,14 @@ export const useEventStore = create<EventState>()(
             remoteClientId,
             SKIP_FIELDS
           )
+
+          if (rejectedFields.length > 0) {
+            console.log(`[Sync] Rejected stale fields for ${remote.id}:`, rejectedFields);
+            const userId = useUserStore.getState().user?.id;
+            if (userId) {
+              void logRejectedFields('event', remote.id, userId, rejectedFields);
+            }
+          }
 
           merged.field_versions = mergedVersions
 

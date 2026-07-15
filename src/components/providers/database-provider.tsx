@@ -9,6 +9,7 @@ import { useUserStore } from "@/shared"
 import { useEventStore } from "@/shared"
 import { useProfileStore } from "@/shared"
 import { useFolderStore } from "@/shared"
+import { useConflictStore } from "@/shared"
 import { registerDevice, type DeviceRegistrationResult } from '@/lib/device-manager'
 import { DeviceLimitPage } from '@/components/device-limit-page'
 import { hlc } from "@/shared"
@@ -18,6 +19,7 @@ import { bindNoteBroadcastChannel, getNoteSyncClientId, NOTE_BROADCAST_EVENT, ty
 import { initSyncManager, destroySyncManager } from "@/shared"
 import { destroyAllYDocs, applyRemoteUpdate, applyRemoteUpdateIfLoaded, hasYDoc } from "@/shared"
 import { getLocalLastSeq, getNoteCrdtUpdates, setLocalLastSeq, toUint8Update, type NoteCrdtUpdateRow, processWithTimeBudget } from "@/shared"
+import { Telemetry } from "@/shared"
 
 const MAX_REALTIME_RETRIES = 5
 const RETRY_BASE_DELAY_MS = 2000
@@ -47,20 +49,26 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
   const oplogBufferRef = useRef<Map<string, NoteCrdtUpdateRow[]>>(new Map())
   const oplogDrainTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
 
+  // Specifically track which note the user is actively editing
+  const activeEditNoteId = useNotesStore(s => s.activeEditNoteId)
+
   const fetchData = useCallback(async () => {
     try {
-      const { data, error } = await supabase.rpc('get_bootstrap_data')
+      const lastSyncAt = typeof window !== 'undefined' ? localStorage.getItem('synq_last_sync_at') : null;
+      const { data, error } = await supabase.rpc('get_delta_sync', { p_last_sync_at: lastSyncAt })
       
       if (error) {
         if (error.code !== 'PGRST202') {
-          console.error('[DatabaseProvider] Error fetching bootstrap data:', error)
+          console.error('[DatabaseProvider] Error fetching delta sync data:', error)
         }
         const fetchFns = [
           () => useTaskStore.getState().fetchTasks(),
           () => useNotesStore.getState().fetchNotes(),
           () => useEventStore.getState().fetchEvents(),
           () => useProjectStore.getState().fetchProjects(),
-          () => useFolderStore.getState().fetchFolders()
+          () => useFolderStore.getState().fetchFolders(),
+          () => useConflictStore.getState().fetchConflicts(),
+          () => useConflictStore.getState().fetchConflicts()
         ]
         
         // Parallelize fallback fetches to avoid network waterfalls
@@ -73,12 +81,17 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (data) {
+        if (typeof window !== 'undefined' && data.sync_timestamp) {
+           localStorage.setItem('synq_last_sync_at', data.sync_timestamp);
+        }
         const promises = [
-          useTaskStore.getState().fetchTasks(false, data.tasks),
-          useNotesStore.getState().fetchNotes(false, data.notes),
-          useEventStore.getState().fetchEvents(false, data.events),
-          useProjectStore.getState().fetchProjects(false, data.projects),
-          useFolderStore.getState().fetchFolders(false, data.folders)
+          useTaskStore.getState().fetchTasks(true, data.tasks),
+          useNotesStore.getState().fetchNotes(true, data.notes),
+          useEventStore.getState().fetchEvents(true, data.events),
+          useProjectStore.getState().fetchProjects(true, data.projects),
+          useFolderStore.getState().fetchFolders(true, data.folders),
+          useConflictStore.getState().fetchConflicts(),
+          useConflictStore.getState().fetchConflicts()
         ]
         await Promise.allSettled(promises)
       }
@@ -278,9 +291,19 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
     const noteId = newRecord.entity_id
     if (!hasYDoc(noteId)) return
 
+    const incomingSeq = Number(newRecord.seq || 0)
+    const localSeq = getLocalLastSeq(noteId)
+    const lag = incomingSeq - localSeq
+    if (lag > 20) {
+      Telemetry.trackCrdtLag(noteId, lag, 'force_resync')
+      // TODO: force full snapshot sync logic (Milestone 2)
+    } else if (lag > 5) {
+      Telemetry.trackCrdtLag(noteId, lag, 'warning')
+    }
+
     const existing = oplogBufferRef.current.get(noteId) || []
     existing.push({
-      seq: Number(newRecord.seq || 0),
+      seq: incomingSeq,
       entity_id: noteId,
       op_id: String(newRecord.op_id || ''),
       client_id: String(newRecord.client_id || ''),
@@ -349,16 +372,6 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
       )
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'crdt_documents' },
-        handleRemoteCRDT as (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => void
-      )
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'crdt_note_updates' },
-        handleRemoteCrdtNoteUpdate as (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => void
-      )
-      .on(
-        'postgres_changes',
         { event: '*', schema: 'public', table: 'events' },
         handleRemoteEvents as (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => void
       )
@@ -395,6 +408,8 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
       ) {
         realtimeConnectedRef.current = false
         bindNoteBroadcastChannel(null)
+        
+        Telemetry.trackRealtimeReconnect(attempt, status)
 
         if (attempt < MAX_REALTIME_RETRIES) {
           const delay = RETRY_BASE_DELAY_MS * Math.pow(2, attempt)
@@ -406,7 +421,7 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
         }
       }
     })
-  }, [fetchData, handleRemoteTasks, handleRemoteProjects, handleRemoteNotes, handleRemoteCRDT, handleRemoteCrdtNoteUpdate, handleRemoteNoteBroadcast, handleRemoteEvents, handleRemoteFolders])
+  }, [fetchData, handleRemoteTasks, handleRemoteProjects, handleRemoteNotes, handleRemoteNoteBroadcast, handleRemoteEvents, handleRemoteFolders])
 
   const teardownRealtime = useCallback(() => {
     subscriptionGenRef.current++
@@ -575,6 +590,29 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
       if (healthCheckTimerRef.current) clearInterval(healthCheckTimerRef.current)
     }
   }, [fetchData, subscribeToRealtime, teardownRealtime, startPollFallback, startHealthCheck])
+
+  // Scoped CRDT Subscriptions: Only subscribe to CRDT operations for the note actively being edited
+  useEffect(() => {
+    if (!activeEditNoteId) return
+
+    const crdtChannel = supabase
+      .channel(`crdt:${activeEditNoteId}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'crdt_documents', filter: `entity_id=eq.${activeEditNoteId}` },
+        handleRemoteCRDT as (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => void
+      )
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'crdt_note_updates', filter: `entity_id=eq.${activeEditNoteId}` },
+        handleRemoteCrdtNoteUpdate as (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => void
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(crdtChannel)
+    }
+  }, [activeEditNoteId, handleRemoteCRDT, handleRemoteCrdtNoteUpdate])
 
   if (deviceLimitExceeded && deviceInfo) {
     return (

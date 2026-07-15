@@ -6,7 +6,9 @@ import { Note } from '../types'
 import { supabase } from '../supabase/supabase'
 import { useUserStore } from './use-user-store'
 import { enqueueOperation } from '../crdt/offline-queue'
-import { triggerFlush, getOnlineStatus, saveYDocToSupabase } from '../crdt/sync-manager'
+import { triggerFlush, getOnlineStatus, saveYDocToSupabase, logRejectedFields } from '../crdt/sync-manager'
+import { isTombstoned } from '../crdt/field-crdt'
+import type { RejectedField } from '../crdt/field-crdt'
 import {
   getOrCreateYDoc,
   setActiveEdit,
@@ -311,6 +313,12 @@ export const useNotesStore = create<NotesState>()(
             state.activeEditNoteId === remoteNote.id &&
             (Date.now() - state.activeEditAt) < ACTIVE_NOTE_EDIT_GRACE_MS
 
+          // Causal Tombstone Firewall
+          if (remoteNote.hlc_timestamp && isTombstoned(existing, remoteNote.hlc_timestamp)) {
+            console.log('[Sync] Dropping zombie edit for note', remoteNote.id);
+            return state;
+          }
+
           // If the whole record is newer, or we don't have field versions, merge it
           if (HLC.compare(remoteNote.hlc_timestamp, existing.hlc_timestamp) > 0) {
             const mergedNode = { ...existing }
@@ -318,6 +326,7 @@ export const useNotesStore = create<NotesState>()(
             const localFields = existing.field_versions || {}
             const hasRemoteFieldVersions = Object.keys(remoteFields).length > 0
             const mergedFieldVersions: Record<string, string> = { ...localFields }
+            const rejectedFields: RejectedField[] = []
 
             Object.entries(remoteNote).forEach(([key, value]) => {
               if (key === 'field_versions' || key === 'hlc_timestamp') return
@@ -356,6 +365,13 @@ export const useNotesStore = create<NotesState>()(
                       }, 1500)
                     )
                   }
+                } else if (hasRemoteFieldVersions && remoteV && localV && HLC.compare(remoteV, localV) <= 0) {
+                  rejectedFields.push({
+                    field: key,
+                    rejectedValue: value,
+                    incomingHlc: remoteV,
+                    winningHlc: localV
+                  });
                 }
               }
 
@@ -371,6 +387,16 @@ export const useNotesStore = create<NotesState>()(
                    
                   (mergedNode as any)[key] = value
                   mergedFieldVersions[key] = remoteV
+                } else if (remoteV && localV && HLC.compare(remoteV, localV) <= 0) {
+                  // Avoid pushing duplicates for bridged body fields
+                  if (!((key === 'content_markdown' || key === 'body') && !isActivelyEditing)) {
+                    rejectedFields.push({
+                      field: key,
+                      rejectedValue: value,
+                      incomingHlc: remoteV,
+                      winningHlc: localV
+                    });
+                  }
                 }
               } else if (value !== undefined) {
                  
@@ -378,6 +404,14 @@ export const useNotesStore = create<NotesState>()(
                 mergedFieldVersions[key] = remoteNote.hlc_timestamp
               }
             })
+
+            if (rejectedFields.length > 0) {
+              console.log(`[Sync] Rejected stale fields for note ${remoteNote.id}:`, rejectedFields);
+              const userId = useUserStore.getState().user?.id;
+              if (userId) {
+                void logRejectedFields('note', remoteNote.id, userId, rejectedFields);
+              }
+            }
 
             mergedNode.hlc_timestamp = remoteNote.hlc_timestamp
             mergedNode.field_versions = mergedFieldVersions

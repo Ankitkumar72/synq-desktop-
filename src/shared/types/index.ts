@@ -22,6 +22,8 @@ export interface Task {
   end_at?: string | null
   project_id?: string
   assignee_id?: string
+  estimate?: number
+  tags?: string[]
   hlc_timestamp?: string
   field_versions?: Record<string, string>
   is_deleted?: boolean
@@ -118,6 +120,11 @@ export interface CalendarEvent {
   end_date: string
   location?: string
   color: string
+  recurrence_rule?: string
+  parent_recurring_id?: string
+  is_all_day?: boolean
+  timezone?: string
+  reminders?: any[]
   hlc_timestamp?: string
   field_versions?: Record<string, string>
   is_deleted?: boolean

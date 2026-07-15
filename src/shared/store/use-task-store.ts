@@ -4,9 +4,9 @@ import { Task } from '../types'
 import { hlc, HLC } from '../hlc'
 import { supabase } from '../supabase/supabase'
 import { useUserStore } from './use-user-store'
-import { mergeFields, stampFields } from '../crdt/field-crdt'
+import { mergeFields, stampFields, isTombstoned } from '../crdt/field-crdt'
 import { enqueueOperation } from '../crdt/offline-queue'
-import { triggerFlush, getOnlineStatus } from '../crdt/sync-manager'
+import { triggerFlush, getOnlineStatus, logRejectedFields } from '../crdt/sync-manager'
 import { idbStorage } from './idb-storage'
 
 const SKIP_FIELDS = ['id', 'user_id', 'created_at', 'field_versions', 'hlc_timestamp', 'deleted_hlc']
@@ -432,7 +432,11 @@ export const useTaskStore = create<TaskState>()(
           }
 
           // Per-field CRDT merge
-          const { merged, mergedVersions } = mergeFields(
+          if (remote.hlc_timestamp && isTombstoned(local, remote.hlc_timestamp)) {
+            console.log('[Sync] Dropping zombie edit for task', remote.id);
+            return state;
+          }
+          const { merged, mergedVersions, rejectedFields } = mergeFields(
             local,
             remote,
             local.field_versions || {},
@@ -442,6 +446,13 @@ export const useTaskStore = create<TaskState>()(
             SKIP_FIELDS
           )
 
+          if (rejectedFields.length > 0) {
+            console.log(`[Sync] Rejected stale fields for task ${remote.id}:`, rejectedFields);
+            const userId = useUserStore.getState().user?.id;
+            if (userId) {
+              void logRejectedFields('task', remote.id, userId, rejectedFields);
+            }
+          }
           merged.field_versions = mergedVersions
 
           const newTasks = [...state.tasks]

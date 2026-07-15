@@ -23,7 +23,7 @@ const NoteEditor = dynamic(
   }
 )
 
-import { SyncStatusIndicator } from "@/components/notes/sync-status-indicator"
+
 import { ActivePresenceAvatars } from "@/components/notes/active-presence"
 import { AnimatePage } from "@/components/layout/animate-page"
 import { useNotesStore } from "@/shared"
@@ -493,7 +493,6 @@ function NotesPageContent() {
 
                 <div className="flex items-center gap-4">
                   <ActivePresenceAvatars noteId={selectedNote.id} />
-                  <SyncStatusIndicator />
                   <div className="flex items-center gap-1.5 text-[11px] text-neutral-600 font-mono">
                     <Clock className="w-3 h-3" />
                     <span>{formatRelativeDate(selectedNote.updated_at)}</span>

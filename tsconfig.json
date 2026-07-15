@@ -49,6 +49,7 @@
     "node_modules",
     "public/sw.js",
     "public/sw.js.map",
-    "public/swe-worker*"
+    "public/swe-worker*",
+    "supabase"
   ]
 }

@@ -493,6 +493,19 @@ export function NoteEditor({
 
         if (generation !== initGenerationRef.current) return
 
+        // Ensure the full note payload (including content) is loaded,
+        // since the Delta Sync RPC omits it to save bandwidth.
+        try {
+          const storeNote = useNotesStore.getState().notes.find(n => n.id === id)
+          if (!storeNote?.content) {
+            await withTimeout(useNotesStore.getState().fetchNoteById(id), 5000, 'fetchNoteById timeout')
+          }
+        } catch (err) {
+          console.warn('[NoteEditor] Failed to fetch full note payload:', err)
+        }
+
+        if (generation !== initGenerationRef.current) return
+
         try {
           await withTimeout(waitForPersistence(id), 3000, 'waitForPersistence timeout')
         } catch (err) {

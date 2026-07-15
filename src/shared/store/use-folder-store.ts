@@ -4,9 +4,9 @@ import { Folder } from '../types'
 import { hlc, HLC } from '../hlc'
 import { supabase } from '../supabase/supabase'
 import { useUserStore } from './use-user-store'
-import { mergeFields, stampFields } from '../crdt/field-crdt'
+import { mergeFields, stampFields, isTombstoned } from '../crdt/field-crdt'
 import { enqueueOperation } from '../crdt/offline-queue'
-import { triggerFlush, getOnlineStatus } from '../crdt/sync-manager'
+import { triggerFlush, getOnlineStatus, logRejectedFields } from '../crdt/sync-manager'
 import { TABLES, COLUMNS } from '../constants'
 import { idbStorage } from './idb-storage'
 
@@ -260,14 +260,16 @@ export const useFolderStore = create<FolderState>()(
 
           const local = state.folders[localIdx]
 
-          if (remote.is_deleted) {
-            return { folders: state.folders.filter((f) => f.id !== remote.id) }
+          // Causal Tombstone Firewall
+          if (remote.hlc_timestamp && isTombstoned(local, remote.hlc_timestamp)) {
+            console.log('[Sync] Dropping zombie edit for folder', remote.id);
+            return state;
           }
 
           const remoteClientId = remote.hlc_timestamp ? HLC.extractNodeId(remote.hlc_timestamp) : 'unknown'
           const localClientId = hlc.getNodeId()
 
-          const { merged, mergedVersions } = mergeFields(
+          const { merged, mergedVersions, rejectedFields } = mergeFields(
             local,
             remote,
             local.field_versions || {},
@@ -276,6 +278,14 @@ export const useFolderStore = create<FolderState>()(
             remoteClientId,
             SKIP_FIELDS
           )
+
+          if (rejectedFields.length > 0) {
+            console.log(`[Sync] Rejected stale fields for folder ${remote.id}:`, rejectedFields);
+            const userId = useUserStore.getState().user?.id;
+            if (userId) {
+              void logRejectedFields('folder', remote.id, userId, rejectedFields);
+            }
+          }
 
           merged.field_versions = mergedVersions
           const newFolders = [...state.folders]

@@ -5,7 +5,7 @@ import { isNonRetryableError } from './oplog'
 const __DEV__ = process.env.NODE_ENV !== 'production'
 export interface QueuedOperation {
   id: string              
-  entityType: 'task' | 'project' | 'event' | 'note' | 'folder'
+  entityType: 'task' | 'project' | 'event' | 'note' | 'folder' | 'crdt_conflict_log'
   entityId: string        
   operationType: 'insert' | 'update' | 'delete' | 'hard_delete'
 

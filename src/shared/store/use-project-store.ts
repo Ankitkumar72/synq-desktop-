@@ -4,9 +4,9 @@ import { Project } from '../types'
 import { hlc, HLC } from '../hlc'
 import { supabase } from '../supabase/supabase'
 import { useUserStore } from './use-user-store'
-import { mergeFields, stampFields } from '../crdt/field-crdt'
+import { mergeFields, stampFields, isTombstoned } from '../crdt/field-crdt'
 import { enqueueOperation } from '../crdt/offline-queue'
-import { triggerFlush, getOnlineStatus } from '../crdt/sync-manager'
+import { triggerFlush, getOnlineStatus, logRejectedFields } from '../crdt/sync-manager'
 import { idbStorage } from './idb-storage'
 
 const SKIP_FIELDS = ['id', 'user_id', 'created_at', 'field_versions', 'hlc_timestamp', 'deleted_hlc']
@@ -333,14 +333,16 @@ export const useProjectStore = create<ProjectState>()(
 
           const local = state.projects[localIdx]
 
-          if (remote.is_deleted) {
-            return { projects: state.projects.filter((p) => p.id !== remote.id) }
+          // Causal Tombstone Firewall
+          if (remote.hlc_timestamp && isTombstoned(local, remote.hlc_timestamp)) {
+            console.log('[Sync] Dropping zombie edit for project', remote.id);
+            return state;
           }
 
           const remoteClientId = remote.hlc_timestamp ? HLC.extractNodeId(remote.hlc_timestamp) : 'unknown'
           const localClientId = hlc.getNodeId()
 
-          const { merged, mergedVersions } = mergeFields(
+          const { merged, mergedVersions, rejectedFields } = mergeFields(
             local,
             remote,
             local.field_versions || {},
@@ -349,6 +351,14 @@ export const useProjectStore = create<ProjectState>()(
             remoteClientId,
             SKIP_FIELDS
           )
+
+          if (rejectedFields.length > 0) {
+            console.log(`[Sync] Rejected stale fields for project ${remote.id}:`, rejectedFields);
+            const userId = useUserStore.getState().user?.id;
+            if (userId) {
+              void logRejectedFields('project', remote.id, userId, rejectedFields);
+            }
+          }
 
           merged.field_versions = mergedVersions
           const newProjects = [...state.projects]

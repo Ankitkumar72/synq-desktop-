@@ -1,6 +1,7 @@
 import { supabase, isGhostClient } from '../supabase/supabase'
 import { hlc } from '../hlc'
 import { del as idbDel, get as idbGet, keys as idbKeys, set as idbSet, getMany as idbGetMany } from 'idb-keyval'
+import { Telemetry } from '../telemetry'
 
 const __DEV__ = process.env.NODE_ENV !== 'production'
 export class NonRetryableRpcError extends Error {
@@ -98,7 +99,7 @@ export async function applyNoteCrdtUpdate(input: ApplyNoteCrdtUpdateInput): Prom
   })
 
   if (error) {
-
+    Telemetry.trackRpcResult('apply_note_crdt_update', false, error)
     if (isNonRetryableError(error)) {
       const status = (error as { status?: number }).status ?? 400
       const code = (error as { code?: string }).code
@@ -108,6 +109,7 @@ export async function applyNoteCrdtUpdate(input: ApplyNoteCrdtUpdateInput): Prom
     throw error
   }
 
+  Telemetry.trackRpcResult('apply_note_crdt_update', true)
   const row = Array.isArray(data) ? data[0] : data
   return {
     applied: !!row?.applied,

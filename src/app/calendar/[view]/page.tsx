@@ -12,6 +12,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { QuickCreateModal } from "@/components/layout/quick-create"
 import { AnimatePage } from "@/components/layout/animate-page"
+import { GripVertical } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useEventStore } from "@/shared"
 import { useTaskStore } from "@/shared"
@@ -247,8 +248,27 @@ export default function CalendarPage() {
             )}
           </div>
 
-          <div className="flex-1 overflow-y-auto px-2 space-y-8 scrollbar-none pb-4">
-            {/* Static Calendars section removed as requested */}
+          <div className="flex-1 overflow-y-auto px-2 space-y-2 scrollbar-none pb-4 mt-4">
+            <div className="px-2 mb-2">
+              <span className="text-[14px] font-bold text-stone-300">Tasks</span>
+            </div>
+            {tasks.filter(t => t.status !== 'done' && !t.is_deleted).map(task => (
+              <div
+                key={task.id}
+                draggable
+                onDragStart={(e) => {
+                  e.dataTransfer.setData('application/json', JSON.stringify({ ...task, type: 'task' }))
+                  e.dataTransfer.effectAllowed = 'copyMove'
+                }}
+                className="flex items-center gap-2 p-2 rounded-lg hover:bg-white/5 cursor-grab active:cursor-grabbing group transition-colors border border-transparent hover:border-white/10"
+              >
+                <GripVertical className="w-4 h-4 text-stone-600 group-hover:text-stone-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-[13px] font-medium text-stone-300 truncate">{task.title}</p>
+                  {task.due_date && <p className="text-[11px] text-stone-500">Due {format(new Date(task.due_date), 'MMM d')}</p>}
+                </div>
+              </div>
+            ))}
           </div>
         </aside>
 

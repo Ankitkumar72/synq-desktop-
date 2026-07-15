@@ -15,6 +15,7 @@ import {
   isSameDay,
 } from "date-fns"
 import { TimeGrid } from "./time-grid"
+import { useTaskStore } from "@/shared"
 import { useCalendarEngine, useDragSession } from "./hooks/useCalendarEngine"
 import { OverlayRenderer } from "./render/OverlayRenderer"
 import { CalendarItem } from "./types"
@@ -28,6 +29,7 @@ interface WeekViewProps {
 }
 
 const isAllDayEvent = (event: CalendarEvent) => {
+  if (event.is_all_day !== undefined) return event.is_all_day;
   const start = new Date(event.start_date)
   const end = new Date(event.end_date)
   return (end.getTime() - start.getTime()) >= 24 * 60 * 60 * 1000
@@ -44,6 +46,7 @@ export function WeekView({ currentDate, events, tasks, onItemClick, onSelectDate
   const HOUR_HEIGHT = 48
   const { layoutEngine, dragController } = useCalendarEngine({ hourHeight: HOUR_HEIGHT, columnWidth: 100 })
   const dragSession = useDragSession(dragController)
+  const updateTask = useTaskStore(s => s.updateTask)
   
   const [now, setNow] = useState(new Date())
   const [mounted, setMounted] = useState(false)
@@ -158,17 +161,40 @@ export function WeekView({ currentDate, events, tasks, onItemClick, onSelectDate
                   const slotDate = new Date(day)
                   slotDate.setHours(hour, 0, 0, 0)
                   return (
-                    <QuickCreateModal
+                    <div
                       key={hour}
-                      defaultType="task"
-                      defaultDate={slotDate}
-                      trigger={
-                        <button 
-                          className="w-full hover:bg-white/[0.02] transition-colors cursor-pointer border-none outline-none"
-                          style={{ height: `${HOUR_HEIGHT}px` }}
-                        />
-                      }
-                    />
+                      onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }}
+                      onDrop={async (e) => {
+                        e.preventDefault();
+                        try {
+                          const data = e.dataTransfer.getData('application/json');
+                          if (data) {
+                            const item = JSON.parse(data);
+                            if (item.type === 'task') {
+                              const endAt = new Date(slotDate);
+                              endAt.setMinutes(endAt.getMinutes() + 30);
+                              await updateTask(item.id, { 
+                                start_at: slotDate.toISOString(),
+                                end_at: endAt.toISOString()
+                              });
+                            }
+                          }
+                        } catch (error) {
+                          console.error('Failed to sync calendar:', error)
+                        }
+                      }}
+                    >
+                      <QuickCreateModal
+                        defaultType="task"
+                        defaultDate={slotDate}
+                        trigger={
+                          <button 
+                            className="w-full hover:bg-white/[0.02] transition-colors cursor-pointer border-none outline-none"
+                            style={{ height: `${HOUR_HEIGHT}px` }}
+                          />
+                        }
+                      />
+                    </div>
                   )
                 })}
               </div>

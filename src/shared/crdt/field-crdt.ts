@@ -16,6 +16,24 @@ export interface FieldVersion {
 
 export type FieldVersionMap = Record<string, string>
 
+export interface RejectedField {
+  field: string
+  rejectedValue: unknown
+  incomingHlc: string
+  winningHlc: string
+}
+
+/**
+ * Check if an incoming edit is causally stale against a tombstone watermark.
+ */
+export function isTombstoned(
+  local: { deleted_hlc?: string | null },
+  incomingHlc: string
+): boolean {
+  if (!local.deleted_hlc) return false;
+  return HLC.compare(incomingHlc, local.deleted_hlc) <= 0;
+}
+
 /**
  * Compare two HLC timestamps with deterministic tie-breaking.
  * If timestamps are equal, the higher clientId wins (lexicographic).
@@ -54,10 +72,11 @@ export function mergeFields<T extends Record<string, any>>(
   remoteFieldVersions: FieldVersionMap,
   localClientId: string,
   remoteClientId: string,
-  skipFields: string[] = ['id', 'user_id', 'created_at', 'field_versions', 'hlc_timestamp']
-): { merged: T; mergedVersions: FieldVersionMap } {
+  skipFields: string[] = ['id', 'user_id', 'created_at', 'field_versions', 'hlc_timestamp', 'deleted_hlc']
+): { merged: T; mergedVersions: FieldVersionMap; rejectedFields: RejectedField[] } {
   const merged = { ...local } as T
   const mergedVersions = { ...localFieldVersions }
+  const rejectedFields: RejectedField[] = []
 
   for (const key of Object.keys(remote)) {
     if (skipFields.includes(key)) continue
@@ -80,21 +99,37 @@ export function mergeFields<T extends Record<string, any>>(
         // Remote wins
         ;(merged as Record<string, unknown>)[key] = remote[key]
         mergedVersions[key] = remoteV
+      } else {
+        // Local wins — keep local value. Log the remote losing write.
+        rejectedFields.push({
+          field: key,
+          rejectedValue: remote[key],
+          incomingHlc: remoteV,
+          winningHlc: localV
+        })
       }
-      // else local wins — keep local value
       continue
     }
 
     // If neither has a version (legacy data), fall back to record-level HLC
     const remoteHlc = remote['hlc_timestamp'] as string | undefined
     const localHlc = local['hlc_timestamp'] as string | undefined
-    if (remoteHlc && localHlc && HLC.compare(remoteHlc, localHlc) > 0) {
-      ;(merged as Record<string, unknown>)[key] = remote[key]
-      if (remoteHlc) mergedVersions[key] = remoteHlc
+    if (remoteHlc && localHlc) {
+      if (HLC.compare(remoteHlc, localHlc) > 0) {
+        ;(merged as Record<string, unknown>)[key] = remote[key]
+        if (remoteHlc) mergedVersions[key] = remoteHlc
+      } else {
+        rejectedFields.push({
+          field: key,
+          rejectedValue: remote[key],
+          incomingHlc: remoteHlc,
+          winningHlc: localHlc
+        })
+      }
     }
   }
 
-  return { merged, mergedVersions }
+  return { merged, mergedVersions, rejectedFields }
 }
 
 /**

@@ -13,10 +13,13 @@ import {
 import {
   flushQueue,
   getQueueDepth,
+  enqueueOperation,
   type QueuedOperation,
   RETRY_BACKOFF_MS,
 } from './offline-queue'
 import { getDocState, markLocallyModified, getMarkdownFromYDoc, getExcerptFromYDoc, getPlainTextFromYDoc } from './crdt-doc'
+import type { RejectedField } from './field-crdt'
+import { Telemetry } from '../telemetry'
 
 const __DEV__ = process.env.NODE_ENV !== 'production'
 
@@ -163,6 +166,8 @@ async function performFlush(): Promise<void> {
       ])
       const newDepth = newCrudDepth + newCrdtDepth
       notifyQueueListeners(newDepth)
+      
+      Telemetry.trackQueueDepth(newCrudDepth, newCrdtDepth)
 
       if ((crudResult.failed + crdtResult.failed) > 0) {
         scheduleFlush(RETRY_BACKOFF_MS * 2.5) 
@@ -175,7 +180,8 @@ async function performFlush(): Promise<void> {
 }
 
 async function executeOperation(op: QueuedOperation): Promise<void> {
-  const table = op.entityType === 'note' ? 'notes' : `${op.entityType}s`
+  let table = op.entityType === 'note' ? 'notes' : `${op.entityType}s`
+  if (op.entityType === 'crdt_conflict_log') table = 'crdt_conflict_log'
 
   let payload = op.payload
   if (op.entityType === 'project') {
@@ -423,4 +429,34 @@ export async function getTotalQueueDepth(): Promise<number> {
     getQueuedNoteCrdtDepth(),
   ])
   return crudDepth + crdtDepth
+}
+
+export async function logRejectedFields(
+  entityType: 'event' | 'task' | 'project' | 'note' | 'folder',
+  entityId: string,
+  userId: string,
+  rejectedFields: RejectedField[]
+): Promise<void> {
+  if (rejectedFields.length === 0) return;
+  const timestamp = hlc.increment();
+  for (const conflict of rejectedFields) {
+    const payload = {
+      entity_type: entityType,
+      entity_id: entityId,
+      user_id: userId,
+      field_name: conflict.field,
+      rejected_value: conflict.rejectedValue,
+      incoming_hlc: conflict.incomingHlc,
+      winning_hlc: conflict.winningHlc,
+      reason: 'lww_stale'
+    };
+    await enqueueOperation({
+      entityType: 'crdt_conflict_log',
+      entityId: crypto.randomUUID(),
+      operationType: 'insert',
+      payload,
+      hlcTimestamp: timestamp
+    });
+  }
+  triggerFlush();
 }
