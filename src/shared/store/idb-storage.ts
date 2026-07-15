@@ -2,7 +2,7 @@ import { get, set, del } from 'idb-keyval'
 import { StateStorage } from 'zustand/middleware'
 
 const ACTIVE_PREFIX_KEY = 'synq_active_idb_prefix'
-const DEFAULT_PREFIX = 'v1_'
+const DEFAULT_PREFIX = ''
 
 export function getActivePrefix(): string {
   if (typeof window === 'undefined') return DEFAULT_PREFIX

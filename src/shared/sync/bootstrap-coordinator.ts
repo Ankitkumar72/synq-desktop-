@@ -1,7 +1,7 @@
 import { supabase } from "@/shared"
 import { useTaskStore } from "@/shared/store/use-task-store"
 import { useProjectStore } from "@/shared/store/use-project-store"
-import { useNotesStore } from "@/shared/store/use-notes-store"
+import { useNotesStore, sanitizeNote } from "@/shared/store/use-notes-store"
 import { useEventStore } from "@/shared/store/use-event-store"
 import { useFolderStore } from "@/shared/store/use-folder-store"
 import { useConflictStore } from "@/shared/store/use-conflict-store"
@@ -106,7 +106,7 @@ export class BootstrapCoordinator {
         }
 
         if (data) {
-          if (data.notes) shadowData.notes.push(...data.notes);
+          if (data.notes) shadowData.notes.push(...data.notes.map((n: any) => sanitizeNote(n)));
           if (data.tasks) shadowData.tasks.push(...data.tasks);
           if (data.events) shadowData.events.push(...data.events);
           if (data.projects) shadowData.projects.push(...data.projects);
