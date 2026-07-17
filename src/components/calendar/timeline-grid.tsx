@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState } from 'react';
 import { TimelineItem } from '@/shared/timeline/timeline-types';
 import { TimelineItemCard } from './timeline-item-card';
 import { calculateTimelineLayout } from './layout-engine';

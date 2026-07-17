@@ -1,8 +1,7 @@
 import React from 'react';
-import { useTimelineStore } from '@/shared/timeline/use-timeline-store';
+
 import { useTaskStore } from '@/shared/store/use-task-store';
-import { CheckSquare, Square, GripVertical } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { Square, GripVertical } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 export function SidebarTaskList() {

@@ -1,12 +1,12 @@
-import { supabase } from "@/shared"
 import { useTaskStore } from "@/shared/store/use-task-store"
 import { useProjectStore } from "@/shared/store/use-project-store"
 import { useNotesStore, sanitizeNote } from "@/shared/store/use-notes-store"
 import { useEventStore } from "@/shared/store/use-event-store"
 import { useFolderStore } from "@/shared/store/use-folder-store"
-import { useConflictStore } from "@/shared/store/use-conflict-store"
+
 import { Telemetry } from "@/shared/telemetry"
-import { MutationJournal, Mutation, MutationState } from "./mutation-journal"
+import { MutationJournal } from "./mutation-journal"
+import { fetchDeltaSync, serializeSyncError } from "./delta-sync"
 import { writeToShadowPrefix, setActivePrefix, getActivePrefix, clearShadowPrefix } from "../store/idb-storage"
 import { 
   beginBootstrap, 
@@ -92,16 +92,12 @@ export class BootstrapCoordinator {
       };
 
       while (hasMore) {
+        const previousSeqId = lastSeqId;
         pulseHeartbeat();
-        const { data, error } = await supabase.rpc('get_delta_sync', { 
-          p_last_seq_id: lastSeqId,
-          p_limit: 1000
-        });
+        const { data, error } = await fetchDeltaSync(lastSeqId);
 
         if (error) {
-          if ((error as any).code !== 'PGRST202') {
-            console.error('[BootstrapCoordinator] Error fetching shadow delta sync:', error);
-          }
+          console.error('[BootstrapCoordinator] Error fetching shadow delta sync:', serializeSyncError(error));
           throw error;
         }
 
@@ -112,12 +108,12 @@ export class BootstrapCoordinator {
           if (data.projects) shadowData.projects.push(...data.projects);
           if (data.folders) shadowData.folders.push(...data.folders);
           
-          if (data.latest_seq_id !== undefined) {
+          if (typeof data.latest_seq_id === 'number') {
             lastSeqId = data.latest_seq_id;
           }
 
           const totalRecords = (data.tasks?.length || 0) + (data.notes?.length || 0) + (data.events?.length || 0) + (data.projects?.length || 0) + (data.folders?.length || 0);
-          if (totalRecords < 1000) {
+          if (totalRecords < 1000 || lastSeqId <= previousSeqId) {
             hasMore = false;
           }
         } else {
@@ -173,10 +169,11 @@ export class BootstrapCoordinator {
       return true;
 
     } catch (error) {
-      console.error('[BootstrapCoordinator] Shadow bootstrap failed!', error);
+      const serializedError = serializeSyncError(error);
+      console.error('[BootstrapCoordinator] Shadow bootstrap failed!', serializedError);
       this.state = BootstrapState.DEGRADED;
       await clearShadowPrefix(shadowPrefix, storeNames);
-      Telemetry.trackStoreEvent('store.bootstrap.failed', { error: String(error) });
+      Telemetry.trackStoreEvent('store.bootstrap.failed', serializedError);
       return false;
     } finally {
       this.stopHeartbeat();

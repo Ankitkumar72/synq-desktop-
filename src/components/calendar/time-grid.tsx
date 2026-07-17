@@ -11,15 +11,17 @@ import {
 interface TimeGridProps {
   children: React.ReactNode
   hourHeight?: number
+  header?: React.ReactNode
 }
 
-export function TimeGrid({ children, hourHeight = 48 }: TimeGridProps) {
+export function TimeGrid({ children, hourHeight = 48, header }: TimeGridProps) {
   const scrollContainerRef = useRef<HTMLDivElement>(null)
-  
   const hours = useMemo(() => {
-    const start = startOfDay(new Date())
-    const end = endOfDay(new Date())
-    return eachHourOfInterval({ start, end })
+    return Array.from({ length: 24 }, (_, i) => {
+      const d = new Date()
+      d.setHours(i, 0, 0, 0)
+      return d
+    })
   }, [])
 
   const HOUR_HEIGHT = hourHeight
@@ -40,33 +42,34 @@ export function TimeGrid({ children, hourHeight = 48 }: TimeGridProps) {
   return (
     <div 
       ref={scrollContainerRef}
-      className="flex-1 overflow-y-auto relative group/grid bg-[#0A0A0A] scrollbar-thin scrollbar-thumb-white/10"
+      className="time-grid-scroll flex-1 overflow-y-auto relative group/grid bg-[#0A0A0A] scrollbar-thin scrollbar-thumb-white/10"
     >
+      {header && (
+        <div className="sticky top-0 z-40">
+          {header}
+        </div>
+      )}
       <div className="flex min-w-full" style={{ height: `${24 * HOUR_HEIGHT}px` }}>
         {/* Time column */}
-        <div className="w-16 flex flex-col border-r border-white/10 select-none relative z-20 bg-[#0A0A0A]/95 backdrop-blur-md">
+        <div className="w-14 flex flex-col border-r border-white/10 select-none relative z-20 bg-[#0A0A0A]/95 backdrop-blur-md">
         {hours.map((hour, i) => (
-          <div key={i} style={{ height: `${HOUR_HEIGHT}px` }} className="relative shrink-0">
-            <span className="absolute -top-[7px] right-2 text-right text-[11px] font-medium text-white tracking-tight uppercase">
+          <div key={i} className="relative shrink-0 flex-1">
+            <span className="absolute -top-[8px] right-2.5 text-right text-[10px] font-semibold text-stone-500 tracking-wider uppercase">
               {i === 0 ? "" : format(hour, "h a")}
             </span>
           </div>
         ))}
-
-
-      </div>
+        </div>
 
       {/* Grid content */}
       <div className="flex-1 relative">
         <div 
-          className="absolute inset-0 pointer-events-none"
-          style={{ height: `${24 * HOUR_HEIGHT}px` }}
+          className="absolute inset-0 pointer-events-none flex flex-col"
         >
           {hours.map((_, i) => (
             <div 
               key={i} 
-              style={{ height: `${HOUR_HEIGHT}px` }}
-              className="border-b border-white/[0.08] last:border-b-0 relative"
+              className="border-b border-white/[0.04] relative flex-1"
             />
           ))}
         </div>

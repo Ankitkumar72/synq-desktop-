@@ -22,6 +22,7 @@ import {
   StoreTrustLevel 
 } from "@/shared/store/store-health"
 import { BootstrapCoordinator } from "./bootstrap-coordinator"
+import { fetchDeltaSync, serializeSyncError } from "./delta-sync"
 import { RealtimeChannel, RealtimePostgresChangesPayload, Session } from '@supabase/supabase-js'
 
 export enum SyncState {
@@ -202,15 +203,11 @@ export class SyncEngine {
       let lastSeqId = getValidatedCursor();
       let hasMore = true;
       while (hasMore) {
-        const { data, error } = await supabase.rpc('get_delta_sync', { 
-          p_last_seq_id: lastSeqId,
-          p_limit: 1000 // Pagination limit
-        });
+        const previousSeqId = lastSeqId;
+        const { data, error } = await fetchDeltaSync(lastSeqId);
 
         if (error) {
-          if ((error as any).code !== 'PGRST202') {
-            console.error('[SyncEngine] Error fetching delta sync data:', error);
-          }
+          console.error('[SyncEngine] Error fetching delta sync data:', serializeSyncError(error));
           await this.fallbackFetch();
           this.setState(SyncState.READY);
           return;
@@ -235,7 +232,7 @@ export class SyncEngine {
           this.hydrateMissingNoteContent(data.notes);
 
           const totalRecords = (data.tasks?.length || 0) + (data.notes?.length || 0) + (data.events?.length || 0) + (data.projects?.length || 0) + (data.folders?.length || 0);
-          if (totalRecords < 1000) {
+          if (totalRecords < 1000 || lastSeqId <= previousSeqId) {
             hasMore = false;
           }
         } else {

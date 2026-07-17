@@ -1,9 +1,8 @@
 "use client"
 
-import { useMemo, useState, useEffect, useRef } from "react"
+import { useMemo, useRef, useState, useEffect } from "react"
 import { 
   CheckSquare,
-  Clock,
   MapPin,
   AlignLeft,
 } from "lucide-react"
@@ -16,6 +15,7 @@ import {
 import { TimeGrid } from "./time-grid"
 import { useCalendarEngine, useDragSession } from "./hooks/useCalendarEngine"
 import { OverlayRenderer } from "./render/OverlayRenderer"
+import { CurrentTimeLayer } from "./render/CurrentTimeLayer"
 import { CalendarItem, ColumnRect } from "./types"
 
 interface DayViewProps {
@@ -26,70 +26,56 @@ interface DayViewProps {
 }
 
 export function DayView({ currentDate, items, onItemClick, onItemTimeChange }: DayViewProps) {
-  const HOUR_HEIGHT = 48
+  const [containerHeight, setContainerHeight] = useState(1152)
+  const wrapperRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!wrapperRef.current) return
+    const observer = new ResizeObserver(entries => {
+      setContainerHeight(entries[0].contentRect.height)
+    })
+    observer.observe(wrapperRef.current)
+    return () => observer.disconnect()
+  }, [])
+
+  const HOUR_HEIGHT = Math.max(48, containerHeight / 24)
   const { layoutEngine, dragController } = useCalendarEngine({ hourHeight: HOUR_HEIGHT, columnWidth: 100 })
   const dragSession = useDragSession(dragController)
   const columnRef = useRef<HTMLDivElement | null>(null)
-
-  const [now, setNow] = useState(new Date())
-  const [mounted, setMounted] = useState(false)
-
-  useEffect(() => {
-    const frame = setTimeout(() => setMounted(true), 0)
-    const timer = setInterval(() => setNow(new Date()), 60000)
-    return () => {
-      clearTimeout(frame)
-      clearInterval(timer)
-    }
-  }, [])
-
-  const currentTimeTop = useMemo(() => {
-    const minutesSinceMidnight = now.getHours() * 60 + now.getMinutes()
-    return (minutesSinceMidnight / 60) * HOUR_HEIGHT
-  }, [now])
 
   const dayItems = useMemo(() => {
     return items.filter(item => isSameDay(new Date(item.start), currentDate) && !item.originalItem?.deleted_at)
   }, [currentDate, items])
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden">
+    <div ref={wrapperRef} className="flex-1 flex flex-col overflow-hidden">
       <OverlayRenderer session={dragSession} />
 
       {/* Grid */}
       <TimeGrid hourHeight={HOUR_HEIGHT}>
         <div ref={columnRef} className="flex-1 relative bg-transparent">
+          <CurrentTimeLayer currentDate={currentDate} hourHeight={HOUR_HEIGHT} />
           {/* Grid interactive slots */}
           <div className="absolute inset-x-0 top-0 bottom-0 flex flex-col pointer-events-none">
             {Array.from({ length: 24 }).map((_, hour) => {
               const slotDate = new Date(currentDate)
               slotDate.setHours(hour, 0, 0, 0)
               return (
-                <QuickCreateModal
-                  key={hour}
-                  defaultType="task"
-                  defaultDate={slotDate}
-                  trigger={
-                    <button 
-                      type="button"
-                      className="w-full hover:bg-white/[0.02] transition-colors cursor-pointer pointer-events-auto border-none bg-transparent block p-0"
-                      style={{ height: `${HOUR_HEIGHT}px` }}
-                    />
-                  }
-                />
+                <div key={hour} className="flex-1 flex flex-col">
+                  <QuickCreateModal
+                    defaultType="task"
+                    defaultDate={slotDate}
+                    trigger={
+                      <button 
+                        type="button"
+                        className="w-full flex-1 h-full hover:bg-white/[0.02] transition-colors cursor-pointer pointer-events-auto border-none bg-transparent block p-0"
+                      />
+                    }
+                  />
+                </div>
               )
             })}
           </div>
-
-          {/* Current time indicator */}
-          {mounted && isSameDay(currentDate, new Date()) && (
-            <div 
-              className="absolute left-0 right-0 h-px bg-[#ef4444] z-40 pointer-events-none flex items-center"
-              style={{ top: `${currentTimeTop}px` }}
-            >
-              <div className="w-2 h-2 rounded-full bg-[#ef4444] -ml-1" />
-            </div>
-          )}
 
           {layoutEngine.calculateDayRects(dayItems, 100, dragSession).map((rect) => {
             const item = dayItems.find(i => i.id === rect.eventId);
@@ -99,16 +85,16 @@ export function DayView({ currentDate, items, onItemClick, onItemTimeChange }: D
             const end = item.end;
             const durationMinutes = Math.max(30, (end.getTime() - start.getTime()) / 60000);
 
-            // Hide if it's the currently dragged or resized original event
-            if ((dragSession.status === 'dragging' || dragSession.status === 'resizing') && dragSession.originalEvent?.id === item.id) {
-              return null;
-            }
+            const isDraggingThis = (dragSession.status === 'dragging' || dragSession.status === 'resizing') && dragSession.originalEvent?.id === item.id;
 
             return (
               <div 
                 key={item.id}
-                onClick={() => onItemClick(item)}
                 onPointerDown={(e) => {
+                  const startX = e.clientX;
+                  const startY = e.clientY;
+                  let hasMoved = false;
+
                   const getColumnRect = (): ColumnRect[] => {
                     if (!columnRef.current) return [];
                     const r = columnRef.current.getBoundingClientRect();
@@ -125,14 +111,38 @@ export function DayView({ currentDate, items, onItemClick, onItemTimeChange }: D
                   dragController.beginDrag(item, { x: e.clientX, y: e.clientY })
                   
                   const moveHandler = (moveEvt: PointerEvent) => {
+                    if (Math.abs(moveEvt.clientX - startX) > 3 || Math.abs(moveEvt.clientY - startY) > 3) {
+                      hasMoved = true;
+                    }
                     dragController.updateDrag({ x: moveEvt.clientX, y: moveEvt.clientY }, cols, HOUR_HEIGHT)
+                    
+                    // Edge scrolling
+                    const scrollContainer = document.querySelector('.time-grid-scroll') as HTMLDivElement
+                    if (scrollContainer) {
+                      const rect = scrollContainer.getBoundingClientRect()
+                      const SCROLL_THRESHOLD = 60
+                      const MAX_SCROLL_SPEED = 15
+                      
+                      if (moveEvt.clientY < rect.top + SCROLL_THRESHOLD) {
+                        const speed = MAX_SCROLL_SPEED * (1 - (moveEvt.clientY - rect.top) / SCROLL_THRESHOLD)
+                        scrollContainer.scrollBy(0, -speed)
+                      } else if (moveEvt.clientY > rect.bottom - SCROLL_THRESHOLD) {
+                        const speed = MAX_SCROLL_SPEED * (1 - (rect.bottom - moveEvt.clientY) / SCROLL_THRESHOLD)
+                        scrollContainer.scrollBy(0, speed)
+                      }
+                    }
                   }
                   const upHandler = async () => {
                     const committed = dragController.commitDrag()
                     window.removeEventListener('pointermove', moveHandler)
                     window.removeEventListener('pointerup', upHandler)
-                    if (committed && onItemTimeChange) {
-                      await onItemTimeChange(committed.id, committed.type as 'task' | 'event', committed.start, committed.end)
+                    
+                    if (hasMoved && committed && onItemTimeChange) {
+                      if (committed.start.getTime() !== item.start.getTime() || committed.end.getTime() !== item.end.getTime()) {
+                        await onItemTimeChange(committed.id, committed.type as 'task' | 'event', committed.start, committed.end)
+                      }
+                    } else if (!hasMoved) {
+                      onItemClick(item);
                     }
                   }
                   
@@ -140,16 +150,17 @@ export function DayView({ currentDate, items, onItemClick, onItemTimeChange }: D
                   window.addEventListener('pointerup', upHandler)
                 }}
                 className={cn(
-                  "absolute rounded-xl border-l-[4px] p-6 overflow-hidden z-10 transition-all hover:z-20 cursor-pointer group/event shadow-2xl",
+                  "absolute rounded-md p-2 overflow-hidden z-10 transition-all hover:z-20 cursor-pointer group/event border",
                   item.type === 'event' 
-                    ? "bg-[#4285F4]/5 border-[#4285F4] hover:bg-[#4285F4]/10" 
-                    : "bg-[#039BE5]/5 border-[#039BE5] hover:bg-[#039BE5]/10"
+                    ? "bg-[#4285F4]/20 border-[#4285F4]/30 hover:bg-[#4285F4]/30 text-[#4285F4]" 
+                    : "bg-[#039BE5]/20 border-[#039BE5]/30 hover:bg-[#039BE5]/30 text-[#039BE5]",
+                  isDraggingThis && "opacity-50 pointer-events-none"
                 )}
                 style={{ 
                   top: `${rect.y}px`, 
                   height: `${rect.height}px`,
                   left: `${rect.x}%`,
-                  width: `calc(${rect.width}% - 12px)`,
+                  width: `calc(${rect.width}% - 2px)`,
                 }}
               >
                 {/* Top Resize Handle */}
@@ -158,6 +169,9 @@ export function DayView({ currentDate, items, onItemClick, onItemTimeChange }: D
                   onPointerDown={(e) => {
                     e.stopPropagation();
                     e.preventDefault();
+                    const startX = e.clientX;
+                    const startY = e.clientY;
+                    let hasMoved = false;
                     
                     const getColumnRect = (): ColumnRect[] => {
                       if (!columnRef.current) return [];
@@ -175,14 +189,29 @@ export function DayView({ currentDate, items, onItemClick, onItemTimeChange }: D
                     dragController.beginResize(item, { x: e.clientX, y: e.clientY }, 'top')
 
                     const moveHandler = (moveEvt: PointerEvent) => {
+                      if (Math.abs(moveEvt.clientX - startX) > 3 || Math.abs(moveEvt.clientY - startY) > 3) {
+                        hasMoved = true;
+                      }
                       dragController.updateResize({ x: moveEvt.clientX, y: moveEvt.clientY }, cols, HOUR_HEIGHT)
+                      
+                      const scrollContainer = document.querySelector('.time-grid-scroll') as HTMLDivElement
+                      if (scrollContainer) {
+                        const rect = scrollContainer.getBoundingClientRect()
+                        if (moveEvt.clientY < rect.top + 60) {
+                          scrollContainer.scrollBy(0, -10)
+                        } else if (moveEvt.clientY > rect.bottom - 60) {
+                          scrollContainer.scrollBy(0, 10)
+                        }
+                      }
                     }
                     const upHandler = async () => {
                       const committed = dragController.commitDrag()
                       window.removeEventListener('pointermove', moveHandler)
                       window.removeEventListener('pointerup', upHandler)
-                      if (committed && onItemTimeChange) {
-                        await onItemTimeChange(committed.id, committed.type as 'task' | 'event', committed.start, committed.end)
+                      if (hasMoved && committed && onItemTimeChange) {
+                        if (committed.start.getTime() !== item.start.getTime() || committed.end.getTime() !== item.end.getTime()) {
+                          await onItemTimeChange(committed.id, committed.type as 'task' | 'event', committed.start, committed.end)
+                        }
                       }
                     }
 
@@ -197,6 +226,9 @@ export function DayView({ currentDate, items, onItemClick, onItemTimeChange }: D
                   onPointerDown={(e) => {
                     e.stopPropagation();
                     e.preventDefault();
+                    const startX = e.clientX;
+                    const startY = e.clientY;
+                    let hasMoved = false;
 
                     const getColumnRect = (): ColumnRect[] => {
                       if (!columnRef.current) return [];
@@ -214,14 +246,29 @@ export function DayView({ currentDate, items, onItemClick, onItemTimeChange }: D
                     dragController.beginResize(item, { x: e.clientX, y: e.clientY }, 'bottom')
 
                     const moveHandler = (moveEvt: PointerEvent) => {
+                      if (Math.abs(moveEvt.clientX - startX) > 3 || Math.abs(moveEvt.clientY - startY) > 3) {
+                        hasMoved = true;
+                      }
                       dragController.updateResize({ x: moveEvt.clientX, y: moveEvt.clientY }, cols, HOUR_HEIGHT)
+                      
+                      const scrollContainer = document.querySelector('.time-grid-scroll') as HTMLDivElement
+                      if (scrollContainer) {
+                        const rect = scrollContainer.getBoundingClientRect()
+                        if (moveEvt.clientY < rect.top + 60) {
+                          scrollContainer.scrollBy(0, -10)
+                        } else if (moveEvt.clientY > rect.bottom - 60) {
+                          scrollContainer.scrollBy(0, 10)
+                        }
+                      }
                     }
                     const upHandler = async () => {
                       const committed = dragController.commitDrag()
                       window.removeEventListener('pointermove', moveHandler)
                       window.removeEventListener('pointerup', upHandler)
-                      if (committed && onItemTimeChange) {
-                        await onItemTimeChange(committed.id, committed.type as 'task' | 'event', committed.start, committed.end)
+                      if (hasMoved && committed && onItemTimeChange) {
+                        if (committed.start.getTime() !== item.start.getTime() || committed.end.getTime() !== item.end.getTime()) {
+                          await onItemTimeChange(committed.id, committed.type as 'task' | 'event', committed.start, committed.end)
+                        }
                       }
                     }
 
@@ -230,40 +277,32 @@ export function DayView({ currentDate, items, onItemClick, onItemTimeChange }: D
                   }}
                 />
 
-                <div className="flex flex-col gap-4 h-full overflow-hidden">
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-start gap-4">
-                      {item.type === 'task' && <CheckSquare className="w-6 h-6 text-[#039BE5] mt-0.5 shrink-0" />}
-                      <div className="flex flex-col gap-1.5">
-                        <span className={cn(
-                          "text-xl font-bold tracking-tight leading-tight uppercase",
-                          item.type === 'event' ? "text-[#4285F4]" : "text-[#039BE5]"
-                        )}>
-                          {item.title}
-                        </span>
-                        <div className="flex items-center gap-2.5 text-stone-500 font-bold text-[12px] uppercase tracking-wider">
-                          <Clock className="w-4 h-4" />
-                          <span>
-                            {format(start, 'h:mm a')} – {format(end, 'h:mm a')}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
+                <div className="flex flex-col gap-1 h-full overflow-hidden">
+                  <div className="flex items-start gap-1.5">
+                    {item.type === 'task' && <CheckSquare className="w-3.5 h-3.5 mt-[1px] shrink-0 opacity-80" />}
+                    <span className="text-xs font-semibold leading-tight truncate">
+                      {item.title}
+                    </span>
                   </div>
+                  {durationMinutes >= 40 && (
+                    <div className="flex items-center gap-1 opacity-60 font-medium text-[10px] uppercase tracking-wider">
+                      <span>{format(start, 'h:mm a')}</span>
+                    </div>
+                  )}
 
                   {durationMinutes >= 60 && item.description && (
-                    <div className="flex items-start gap-3 pt-3 border-t border-white/5 opacity-70 group-hover:opacity-100 transition-opacity">
-                      <AlignLeft className="w-4 h-4 text-stone-600 shrink-0 mt-0.5" />
-                      <p className="text-[13px] text-stone-400 line-clamp-3 leading-relaxed font-medium">
+                    <div className="flex items-start gap-2 pt-1 opacity-70 group-hover:opacity-100 transition-opacity">
+                      <AlignLeft className="w-3 h-3 shrink-0 mt-[1px]" />
+                      <p className="text-[11px] line-clamp-2 leading-snug font-medium">
                         {item.description}
                       </p>
                     </div>
                   )}
 
                   {durationMinutes >= 90 && item.type === 'event' && item.originalItem?.location && (
-                    <div className="flex items-center gap-3 opacity-70 group-hover:opacity-100 transition-opacity">
-                      <MapPin className="w-4 h-4 text-stone-600 shrink-0" />
-                      <span className="text-[13px] text-stone-400 truncate font-medium">
+                    <div className="flex items-center gap-2 opacity-70 group-hover:opacity-100 transition-opacity">
+                      <MapPin className="w-3 h-3 shrink-0" />
+                      <span className="text-[11px] truncate font-medium">
                         {item.originalItem.location}
                       </span>
                     </div>
@@ -272,29 +311,37 @@ export function DayView({ currentDate, items, onItemClick, onItemTimeChange }: D
               </div>
             )
           })}
-          {/* Render drag preview ghost if dragging in DayView */}
+
+          {/* Render drag preview ghost */}
           {(dragSession.status === 'dragging' || dragSession.status === 'resizing') && 
            dragSession.previewEvent && 
            isSameDay(new Date(dragSession.previewEvent.start), currentDate) && (
-            <div
-              className={cn(
-                "absolute left-4 right-8 rounded-xl border-l-[4px] p-6 overflow-hidden z-20 pointer-events-none opacity-40 border-dashed border-2",
-                dragSession.previewEvent.type === 'event' 
-                  ? "bg-[#4285F4]/20 border-[#4285F4]" 
-                  : "bg-[#039BE5]/20 border-[#039BE5]"
-              )}
-              style={{
-                top: `${((dragSession.previewEvent.start.getHours() * 60 + dragSession.previewEvent.start.getMinutes()) / 60) * HOUR_HEIGHT}px`,
-                height: `${(Math.max(30, (dragSession.previewEvent.end.getTime() - dragSession.previewEvent.start.getTime()) / 60000) / 60) * HOUR_HEIGHT}px`,
-              }}
-            >
-
-              <div className="flex flex-col gap-4 h-full overflow-hidden justify-center">
-                <span className="text-xl font-bold uppercase tracking-tight opacity-75 truncate">
-                  {dragSession.previewEvent.title}
-                </span>
+             <div
+                className={cn(
+                  "absolute rounded-md p-2 overflow-hidden z-30 pointer-events-none border opacity-70 shadow-2xl scale-[1.02] backdrop-blur-sm",
+                  dragSession.previewEvent.type === 'event' 
+                    ? "bg-[#4285F4]/30 border-[#4285F4]/50 text-[#4285F4]" 
+                    : "bg-[#039BE5]/30 border-[#039BE5]/50 text-[#039BE5]"
+                )}
+                style={{
+                  top: `${((dragSession.previewEvent.start.getHours() * 60 + dragSession.previewEvent.start.getMinutes()) / 60) * HOUR_HEIGHT}px`,
+                  height: `${(Math.max(30, (dragSession.previewEvent.end.getTime() - dragSession.previewEvent.start.getTime()) / 60000) / 60) * HOUR_HEIGHT}px`,
+                  left: '2px',
+                  width: 'calc(100% - 4px)',
+                }}
+              >
+                <div className="flex flex-col gap-1 h-full overflow-hidden">
+                  <div className="flex items-start gap-1.5">
+                    {dragSession.previewEvent.type === 'task' && <CheckSquare className="w-3.5 h-3.5 mt-[1px] shrink-0 opacity-80" />}
+                    <span className="text-xs font-semibold leading-tight truncate">
+                      {dragSession.previewEvent.title}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1 opacity-80 font-medium text-[10px] uppercase tracking-wider">
+                    <span>{format(dragSession.previewEvent.start, 'h:mm a')}</span>
+                  </div>
+                </div>
               </div>
-            </div>
           )}
         </div>
       </TimeGrid>

@@ -7,7 +7,6 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronDown,
-  Check,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { QuickCreateModal } from "@/components/layout/quick-create"
@@ -36,7 +35,7 @@ import { WeekView } from "@/components/calendar/week-view"
 import { DayView } from "@/components/calendar/day-view"
 import { YearView } from "@/components/calendar/year-view"
 import { ItemDetail } from "@/components/calendar/item-detail"
-import { Task, CalendarEvent } from "@/shared"
+
 import { CalendarItem } from "@/components/calendar/types"
 import {
   DropdownMenu,
@@ -59,8 +58,8 @@ export default function CalendarPage() {
 
 
 
-  const events = useEventStore(s => s.events); const fetchEvents = useEventStore(s => s.fetchEvents)
-  const tasks = useTaskStore(s => s.tasks); const fetchTasks = useTaskStore(s => s.fetchTasks)
+  const fetchEvents = useEventStore(s => s.fetchEvents)
+  const fetchTasks = useTaskStore(s => s.fetchTasks)
   const { items, updateItemTime } = useTimelineStore()
   const hasMounted = useHasMounted()
 
