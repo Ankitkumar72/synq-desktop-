@@ -1,6 +1,6 @@
-import { Task, CalendarEvent } from "@/shared"
+import { TimelineItem } from "@/shared/timeline/timeline-types"
 
-export type CalendarItem = (Task & { type: 'task' }) | (CalendarEvent & { type: 'event' })
+export type CalendarItem = TimelineItem
 
 export interface EventRect {
   x: number;
@@ -10,7 +10,10 @@ export interface EventRect {
   eventId: string;
 }
 
-export type DragStatus = 'idle' | 'dragging' | 'resizing';
+import { InteractionState } from '../engine/InteractionStateMachine';
+import { PreviewModel } from '../engine/PreviewModel';
+
+export type DragStatus = InteractionState;
 
 export interface DragSessionState {
   originalEvent: CalendarItem | null;
@@ -18,6 +21,7 @@ export interface DragSessionState {
   pointer: { x: number; y: number } | null;
   status: DragStatus;
   accepted: boolean;
+  previewModel: PreviewModel | null;
 }
 
 export interface CalendarTransaction {
@@ -27,3 +31,12 @@ export interface CalendarTransaction {
   timestamp: number;
   userId?: string;
 }
+
+export interface ColumnRect {
+  date: Date;
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+}
+

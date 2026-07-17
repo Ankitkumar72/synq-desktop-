@@ -1,104 +1,731 @@
-**1. Recommended RPC Signature**
+Absolutely. If I were designing this as a **Google Staff Engineer** or **Linear/Morgen principal engineer**, I would not think of it as "drag and drop." I would think of it as a **Scheduling Interaction Engine** with clear separation between interaction, layout, domain logic, and persistence.
 
-I’d make the note-write RPC the single atomic write path for editor persistence, and I’d make it explicit about “field present” vs “field omitted” so `NULL` can be written intentionally.
+The biggest mistake many calendar apps make is coupling the UI directly to the database. Instead, build it as a pipeline of deterministic systems.
 
-```sql
-CREATE OR REPLACE FUNCTION public.apply_note_crdt_update(
-  p_entity_id UUID,
-  p_user_id UUID,
-  p_client_id TEXT,
-  p_op_id TEXT,
-  p_update_data BIGINT[],
-  p_hlc_timestamp TEXT,
-  p_updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()),
-  p_snapshot BIGINT[] DEFAULT NULL,
+---
 
-  p_body TEXT DEFAULT NULL,
-  p_excerpt TEXT DEFAULT NULL,
-  p_content JSONB DEFAULT NULL,
-  p_content_markdown TEXT DEFAULT NULL,
-  p_field_versions JSONB DEFAULT '{}'::jsonb,
+# High Level Architecture
 
-  p_set_body BOOLEAN DEFAULT false,
-  p_set_excerpt BOOLEAN DEFAULT false,
-  p_set_content BOOLEAN DEFAULT false,
-  p_set_content_markdown BOOLEAN DEFAULT false
-)
-RETURNS TABLE(applied BOOLEAN, seq BIGINT)
+```
+                    Pointer Events
+                          │
+                          ▼
+                Interaction Engine
+                          │
+          ┌───────────────┼───────────────┐
+          ▼               ▼               ▼
+    Drag Controller   Resize Controller  Selection Controller
+          │               │               │
+          └───────────────┴───────────────┘
+                          │
+                          ▼
+                Scheduling Engine
+                          │
+          ┌───────────────┼─────────────────┐
+          ▼               ▼                 ▼
+      Snap Engine   Constraint Engine   Collision Engine
+                          │
+                          ▼
+                  Layout Engine
+                          │
+                          ▼
+                   Render Tree
+                          │
+                          ▼
+               Optimistic State Store
+                          │
+                          ▼
+              Sync Queue / Offline Queue
+                          │
+                          ▼
+                 CRDT / Server Sync
 ```
 
-And inside the `UPDATE public.notes`:
+Notice something:
 
-```sql
-UPDATE public.notes n
-SET
-  body = CASE WHEN p_set_body THEN p_body ELSE n.body END,
-  excerpt = CASE WHEN p_set_excerpt THEN p_excerpt ELSE n.excerpt END,
-  content = CASE WHEN p_set_content THEN p_content ELSE n.content END,
-  content_markdown = CASE WHEN p_set_content_markdown THEN p_content_markdown ELSE n.content_markdown END,
-  field_versions = COALESCE(n.field_versions, '{}'::jsonb) || COALESCE(p_field_versions, '{}'::jsonb),
-  hlc_timestamp = p_hlc_timestamp,
-  updated_at = COALESCE(p_updated_at, timezone('utc'::text, now()))
-WHERE n.id = p_entity_id
-  AND n.user_id = p_user_id;
+**The UI never talks to the database.**
+
+It only emits **intents**.
+
+---
+
+# 1. Interaction Engine
+
+The interaction engine is responsible for understanding user intent.
+
+Not moving events.
+
+Understanding intent.
+
+For example
+
+```
+PointerDown
+
+↓
+
+Hit Test
+
+↓
+
+Target = Event
+
+↓
+
+Action?
+
+Move
+Resize Top
+Resize Bottom
+Create
+Selection
+Long Press
+Context Menu
 ```
 
-Why this is the safest version:
+Every pointer interaction becomes an immutable action.
 
-- It makes CRDT state, note projections, and field versions atomic.
-- It avoids the `COALESCE(p_content, n.content)` bug where you can’t intentionally write `NULL`.
-- It keeps `content`, `body`, and `content_markdown` aligned in one transaction.
-- It works cleanly with your current merge logic in [src/shared/store/use-notes-store.ts](</D:/Synq Desktop/src/shared/store/use-notes-store.ts:279>) and CRDT flow in [src/shared/crdt/oplog.ts](</D:/Synq Desktop/src/shared/crdt/oplog.ts:69>).
+```
+BeginDragEvent
 
-**2. Safer Phase 3 Alternative**
+UpdateDragEvent
 
-I would not reintroduce a trigger that inserts into `tasks`/`events` and then deletes from `notes`.
+CommitDragEvent
 
-The safer alternative is:
+CancelDragEvent
+```
 
-1. Keep `notes`, `tasks`, and `events` authoritative and separate.
-2. Create a dedicated RPC like `public.ingest_legacy_note_item(...)` for old-client payloads.
-3. Only legacy clients call that RPC.
-4. The RPC writes directly to `tasks` or `events`, never to `notes`.
-5. Run a one-time migration/backfill for existing bad legacy rows in `notes`.
-6. Add a DB constraint or policy later so new web-created note rows cannot carry `is_task=true` or `scheduled_time IS NOT NULL`.
+The scheduling engine consumes those actions.
 
-Recommended rollout:
+This makes the entire interaction replayable.
 
-- Step 1: Backfill existing legacy rows from `notes` into `tasks`/`events`.
-- Step 2: Delete or archive those migrated rows from `notes`.
-- Step 3: Add a check constraint for modern clients.
-- Step 4: Keep legacy compatibility through RPC, not hidden triggers.
+Google uses similar event pipelines across many products.
 
-This is safer because:
+---
 
-- No surprise delete during note save.
-- No recursive trigger/realtime weirdness.
-- No ghost-row behavior from cross-table mutation side effects.
-- Much easier to audit and monitor.
+# 2. Immutable Scheduling Actions
 
-**3. Scale Roadmap: Next 3 Milestones**
+Never mutate events directly.
 
-**Milestone 1: Correctness First**
-- Ship the atomic note RPC.
-- Remove the second client-side `notes.update(...)` in [src/shared/crdt/oplog.ts](</D:/Synq Desktop/src/shared/crdt/oplog.ts:94>).
-- Version `content`, `content_markdown`, `body`, and `excerpt` together.
-- Add a migration to clean existing legacy note/task/event overlap.
-- Add backend metrics for RPC failure rate, queue depth, CRDT seq lag, and realtime reconnects.
+Instead create commands.
 
-**Milestone 2: Sync Efficiency**
-- Replace full bootstrap with delta sync by `updated_at` or cursor.
-- Keep CRDT realtime only for actively opened notes.
-- Use lighter list payloads for sidebar, dashboard, and calendar views.
-- Move bulk task/event operations into RPCs instead of many client writes.
-- Add pagination and bounded fetches for notes, tasks, and events.
+```
+MoveEventIntent
 
-**Milestone 3: Scale Hardening**
-- Add stricter DB constraints so `notes` cannot accept legacy task/event-shaped rows from modern clients.
-- Add partial indexes for active records by `user_id` and `updated_at`.
-- Add archival/compaction policy for `crdt_note_updates`.
-- Consider partitioning or archival for high-volume oplog/history tables.
-- Add observability dashboards and alerting for sync divergence, stale queues, and bootstrap latency.
+{
+    eventId
+    originalStart
+    originalEnd
 
+    proposedStart
+    proposedEnd
 
+    sourceCalendar
 
+    destinationCalendar
+
+    dragSessionId
+}
+```
+
+Nothing changes yet.
+
+Everything is still a proposal.
+
+---
+
+# 3. Transaction Pipeline
+
+The proposal flows through validation.
+
+```
+MoveEvent
+
+↓
+
+Validate
+
+↓
+
+Conflict Detection
+
+↓
+
+Business Rules
+
+↓
+
+Snap
+
+↓
+
+Layout
+
+↓
+
+Render
+
+↓
+
+Persist
+```
+
+Every stage can reject or modify the proposal.
+
+---
+
+# 4. Scheduling Engine
+
+This is where real intelligence lives.
+
+```
+Move Event
+
+↓
+
+Apply Snap
+
+↓
+
+Validate Constraints
+
+↓
+
+Resolve Conflicts
+
+↓
+
+Calculate Layout
+
+↓
+
+Generate Render State
+```
+
+The UI simply renders whatever the engine produces.
+
+---
+
+# 5. Snap Engine
+
+Don't hardcode
+
+```
+Round to 15 minutes
+```
+
+Instead create policies.
+
+```
+SnapPolicy
+
+5 min
+
+10 min
+
+15 min
+
+30 min
+
+Working Hours
+
+Calendar Grid
+
+Smart Snap
+```
+
+Then
+
+```
+snap(DateTime input)
+
+↓
+
+returns
+
+DateTime
+```
+
+Different calendars can use different snapping behavior.
+
+---
+
+# 6. Constraint Engine
+
+Every organization has different scheduling rules.
+
+Instead of
+
+```
+if(...)
+```
+
+Use composable constraints.
+
+```
+WorkingHoursConstraint
+
+OverlapConstraint
+
+CalendarPermissionConstraint
+
+HolidayConstraint
+
+TravelBufferConstraint
+
+MaximumDurationConstraint
+
+ReadOnlyCalendarConstraint
+```
+
+Pipeline
+
+```
+Move Proposal
+
+↓
+
+Constraint A
+
+↓
+
+Constraint B
+
+↓
+
+Constraint C
+
+↓
+
+Result
+```
+
+Each constraint returns
+
+```
+Valid
+
+or
+
+Invalid
+
+or
+
+Suggested Alternative
+```
+
+---
+
+# 7. Collision Engine
+
+This deserves its own subsystem.
+
+Input
+
+```
+Events
+```
+
+Output
+
+```
+Event A
+
+column = 0
+
+width = 50%
+
+Event B
+
+column = 1
+
+width = 50%
+```
+
+The collision engine knows nothing about Flutter.
+
+Only rectangles.
+
+```
+Event
+
+↓
+
+Interval Graph
+
+↓
+
+Connected Components
+
+↓
+
+Column Assignment
+
+↓
+
+Layout Rectangles
+```
+
+Google Calendar uses an interval partitioning style algorithm for this class of problem.
+
+---
+
+# 8. Layout Engine
+
+The layout engine converts time into pixels.
+
+Nothing more.
+
+Input
+
+```
+Events
+```
+
+Output
+
+```
+Rectangles
+
+x
+
+y
+
+width
+
+height
+```
+
+No dragging.
+
+No networking.
+
+No database.
+
+Pure function.
+
+```
+layout(events)
+
+↓
+
+List<RenderBox>
+```
+
+This makes it testable.
+
+---
+
+# 9. Rendering Layer
+
+Flutter widgets should never calculate layout.
+
+Instead
+
+```
+RenderTree
+
+↓
+
+Positioned
+
+↓
+
+AnimatedPositioned
+
+↓
+
+CustomPaint
+```
+
+Widgets simply paint.
+
+---
+
+# 10. Drag Session
+
+Dragging is not just pointer movement.
+
+It is a state machine.
+
+```
+Idle
+
+↓
+
+Pressed
+
+↓
+
+Dragging
+
+↓
+
+Hovering
+
+↓
+
+Snapping
+
+↓
+
+Dropping
+
+↓
+
+Committed
+
+↓
+
+Finished
+```
+
+Each transition is deterministic.
+
+```
+PointerMove
+
+↓
+
+Dragging
+
+↓
+
+PointerUp
+
+↓
+
+Commit
+```
+
+---
+
+# 11. Optimistic Transaction
+
+Never wait for the server.
+
+```
+User Drops
+
+↓
+
+Local Store Updated
+
+↓
+
+UI Updates
+
+↓
+
+Queue Sync
+
+↓
+
+Background Upload
+
+↓
+
+Server Response
+```
+
+If sync fails
+
+```
+Rollback
+
+or
+
+Retry Queue
+```
+
+This is critical for an offline-first application like Synq.
+
+---
+
+# 12. Offline Queue
+
+Every action becomes an operation.
+
+```
+Operation
+
+id
+
+timestamp
+
+type
+
+payload
+
+retryCount
+
+status
+```
+
+Example
+
+```
+Move Event
+
+↓
+
+Queue
+
+↓
+
+Internet?
+
+No
+
+↓
+
+Store
+
+↓
+
+Retry Later
+```
+
+The UI never notices.
+
+---
+
+# 13. Event Sourcing
+
+Instead of
+
+```
+Event.start = ...
+```
+
+Store
+
+```
+EventMoved
+
+EventResized
+
+EventDeleted
+
+TaskScheduled
+
+TaskUnscheduled
+```
+
+Then
+
+```
+Replay
+
+↓
+
+Current State
+```
+
+This gives you excellent auditability and supports collaborative editing more naturally.
+
+---
+
+# 14. CRDT Compatibility
+
+In a collaborative system, never sync pixels.
+
+Sync semantic operations.
+
+```
+Move Event
+
+↓
+
+Operation
+
+↓
+
+CRDT
+
+↓
+
+Merge
+
+↓
+
+Render
+```
+
+Users A and B can drag the same event simultaneously, and your merge policy resolves the semantic change rather than conflicting screen coordinates.
+
+---
+
+# 15. Performance
+
+Google Calendar targets smooth interaction by minimizing work per frame.
+
+During a drag:
+
+* Avoid rebuilding the full widget tree.
+* Recompute layout only for affected events.
+* Cache immutable layout information.
+* Keep hit testing efficient with spatial indexing when event counts are high.
+* Separate drag preview rendering from the main layout.
+
+Aim for the work done on each pointer move to be proportional to the number of affected events, not the total number of events in the calendar.
+
+---
+
+# 16. Suggested Module Structure
+
+```
+calendar/
+│
+├── interaction/
+│   ├── drag_controller.dart
+│   ├── resize_controller.dart
+│   ├── gesture_router.dart
+│   └── selection_controller.dart
+│
+├── scheduling/
+│   ├── scheduling_engine.dart
+│   ├── snap_engine.dart
+│   ├── constraint_engine.dart
+│   ├── collision_engine.dart
+│   ├── interval_graph.dart
+│   └── layout_engine.dart
+│
+├── render/
+│   ├── render_models.dart
+│   ├── calendar_renderer.dart
+│   └── painters/
+│
+├── domain/
+│   ├── event.dart
+│   ├── task.dart
+│   ├── scheduling_operation.dart
+│   └── scheduling_intent.dart
+│
+├── persistence/
+│   ├── optimistic_store.dart
+│   ├── sync_queue.dart
+│   ├── crdt_adapter.dart
+│   └── repository.dart
+│
+└── tests/
+    ├── layout_tests.dart
+    ├── collision_tests.dart
+    ├── constraint_tests.dart
+    └── interaction_tests.dart
+```
+
+---
+
+## Principles I'd insist on during design review
+
+* **Pure engines, impure edges**: Layout, snapping, and collision logic should be deterministic and free of UI or network dependencies.
+* **Intent over mutation**: Pointer events become scheduling intents; only validated intents produce state changes.
+* **Optimistic by default**: The interface should respond instantly, with persistence handled asynchronously.
+* **Composable policies**: Snapping, constraints, permissions, and business rules should be pluggable rather than embedded in `if` statements.
+* **Incremental computation**: Recompute only what changed during interaction.
+* **Deterministic replay**: Every scheduling operation should be reproducible from logged actions, making debugging and testing straightforward.
+* **Offline-first synchronization**: Local operations are authoritative until synchronized; networking should never block interaction.
+* **Testability**: Every core engine (snap, collision, layout, constraints) should be verifiable with unit tests independent of Flutter.
+
+This architecture scales from a personal calendar with a handful of events to enterprise calendars with thousands of events and collaborative editing, while keeping the interaction smooth, predictable, and resilient. It also aligns well with the offline-first, CRDT-based direction you've been building for Synq.

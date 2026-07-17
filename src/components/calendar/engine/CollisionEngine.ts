@@ -7,15 +7,7 @@ export interface LayoutDetails {
 
 export class CollisionEngine {
   private static getStartAndEnd(item: CalendarItem): { start: Date; end: Date } {
-    const start = item.type === 'event'
-      ? new Date(item.start_date)
-      : new Date(item.start_at || item.due_date!);
-      
-    const end = item.type === 'event'
-      ? new Date(item.end_date)
-      : new Date(item.end_at || new Date(start.getTime() + 30 * 60000));
-
-    return { start, end };
+    return { start: item.start, end: item.end };
   }
 
   /**

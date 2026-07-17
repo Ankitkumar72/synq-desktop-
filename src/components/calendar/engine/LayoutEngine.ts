@@ -1,8 +1,11 @@
 import { CalendarItem, EventRect, DragSessionState } from '../types';
 import { CoordinateMapper } from './CoordinateMapper';
 import { CollisionEngine } from './CollisionEngine';
+import { LayoutCache } from './LayoutCache';
 
 export class LayoutEngine {
+  private cache = new LayoutCache();
+
   constructor(private mapper: CoordinateMapper) {}
 
   /**
@@ -13,6 +16,20 @@ export class LayoutEngine {
     columnWidth: number,
     dragSession: DragSessionState | null = null
   ): EventRect[] {
+    // If items list is not empty, try cache lookup first
+    if (items.length > 0) {
+      const dayDate = new Date(items[0].start);
+      if (dragSession && (dragSession.status === 'dragging' || dragSession.status === 'resizing')) {
+        // Invalidate on active drag sessions to capture live changes
+        this.cache.invalidate(dayDate);
+      } else {
+        const cached = this.cache.get(dayDate);
+        if (cached) {
+          return cached;
+        }
+      }
+    }
+
     const collisionLayouts = CollisionEngine.resolve(items);
     const rects: EventRect[] = [];
 
@@ -37,16 +54,9 @@ export class LayoutEngine {
       }
 
       // Map width and X based on collision layout
-      // Example: 2 events overlapping -> width is 50% for each
       const w = columnWidth / layout.maxCols;
       const x = w * layout.col;
       const height = bottom - top;
-      
-      // Override with drag session preview if this is the dragged event
-      if (dragSession && dragSession.originalEvent?.id === item.id) {
-         // If dragging, we might want to return the preview's coordinates or hide the original.
-         // For now, we just pass the original. The OverlayLayer handles rendering the dragged preview.
-      }
 
       rects.push({
         eventId: item.id,
@@ -57,18 +67,24 @@ export class LayoutEngine {
       });
     }
 
+    // Cache the completed calculation if we aren't dragging
+    if (items.length > 0 && !(dragSession && (dragSession.status === 'dragging' || dragSession.status === 'resizing'))) {
+      const dayDate = new Date(items[0].start);
+      this.cache.set(dayDate, rects);
+    }
+
     return rects;
   }
 
   private getStartAndEnd(item: CalendarItem): { start: Date; end: Date } {
-    const start = item.type === 'event'
-      ? new Date(item.start_date)
-      : new Date(item.start_at || item.due_date!);
-      
-    const end = item.type === 'event'
-      ? new Date(item.end_date)
-      : new Date(item.end_at || new Date(start.getTime() + 30 * 60000));
+    return { start: item.start, end: item.end };
+  }
 
-    return { start, end };
+  invalidateCache(date: Date) {
+    this.cache.invalidate(date);
+  }
+
+  clearCache() {
+    this.cache.clear();
   }
 }

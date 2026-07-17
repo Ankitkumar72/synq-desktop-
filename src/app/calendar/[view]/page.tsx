@@ -12,10 +12,10 @@ import {
 import { Button } from "@/components/ui/button"
 import { QuickCreateModal } from "@/components/layout/quick-create"
 import { AnimatePage } from "@/components/layout/animate-page"
-import { GripVertical } from "lucide-react"
+
 import { cn } from "@/lib/utils"
-import { useEventStore } from "@/shared"
-import { useTaskStore } from "@/shared"
+import { useEventStore, useTaskStore } from "@/shared"
+import { useTimelineStore } from "@/shared/timeline/use-timeline-store"
 import { useHasMounted } from "@/hooks/use-has-mounted"
 import {
   getMonthYearString,
@@ -37,6 +37,7 @@ import { DayView } from "@/components/calendar/day-view"
 import { YearView } from "@/components/calendar/year-view"
 import { ItemDetail } from "@/components/calendar/item-detail"
 import { Task, CalendarEvent } from "@/shared"
+import { CalendarItem } from "@/components/calendar/types"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -56,34 +57,24 @@ export default function CalendarPage() {
   const [selectedDate, setSelectedDate] = useState(new Date())
   const [miniCalendarMonth, setMiniCalendarMonth] = useState(new Date())
 
-  const [syncedCalendars, setSyncedCalendars] = useState<Record<string, boolean>>({
-    google: true,
-    microsoft: false,
-  })
-  const [isSyncedOpen, setIsSyncedOpen] = useState(true)
 
-  const toggleSyncedCalendar = (id: string) => {
-    setSyncedCalendars(prev => ({
-      ...prev,
-      [id]: !prev[id]
-    }))
-  }
 
   const events = useEventStore(s => s.events); const fetchEvents = useEventStore(s => s.fetchEvents)
   const tasks = useTaskStore(s => s.tasks); const fetchTasks = useTaskStore(s => s.fetchTasks)
+  const { items, updateItemTime } = useTimelineStore()
   const hasMounted = useHasMounted()
 
-  const [selectedItem, setSelectedItem] = useState<(Task & { type: 'task' }) | (CalendarEvent & { type: 'event' }) | null>(null)
+  const [selectedItem, setSelectedItem] = useState<CalendarItem | null>(null)
   const [isDetailOpen, setIsDetailOpen] = useState(false)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
-  const [itemToEdit, setItemToEdit] = useState<((Task & { type: 'task' }) | (CalendarEvent & { type: 'event' })) | null>(null)
+  const [itemToEdit, setItemToEdit] = useState<CalendarItem | null>(null)
 
-  const handleItemClick = (item: (Task & { type: 'task' }) | (CalendarEvent & { type: 'event' })) => {
+  const handleItemClick = (item: CalendarItem) => {
     setSelectedItem(item)
     setIsDetailOpen(true)
   }
 
-  const handleEdit = (item: (Task & { type: 'task' }) | (CalendarEvent & { type: 'event' })) => {
+  const handleEdit = (item: CalendarItem) => {
     setIsDetailOpen(false)
     setItemToEdit(item)
     setIsEditModalOpen(true)
@@ -94,13 +85,9 @@ export default function CalendarPage() {
   }
 
   useEffect(() => {
-    if (events.length === 0) {
-      fetchEvents()
-    }
-    if (tasks.length === 0) {
-      fetchTasks()
-    }
-  }, [events.length, tasks.length, fetchEvents, fetchTasks])
+    fetchEvents()
+    fetchTasks()
+  }, [fetchEvents, fetchTasks])
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -203,73 +190,9 @@ export default function CalendarPage() {
 
 
 
-          <div className="px-2 mb-6">
-            <div 
-              className="flex items-center justify-between px-2 mb-3 group cursor-pointer" 
-              onClick={() => setIsSyncedOpen(!isSyncedOpen)}
-            >
-              <span className="text-[14px] font-bold text-stone-300 group-hover:text-white transition-colors">
-                My Calendars
-              </span>
-              <ChevronDown className={cn("w-4 h-4 text-stone-500 transition-transform duration-200", isSyncedOpen ? "" : "-rotate-90")} />
-            </div>
-            
-            {isSyncedOpen && (
-              <div className="space-y-0.5">
-                <button
-                  onClick={() => toggleSyncedCalendar('google')}
-                  className="w-full flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-white/5 transition-colors group"
-                >
-                  <div className={cn(
-                    "w-4 h-4 rounded flex items-center justify-center border transition-all",
-                    syncedCalendars.google 
-                      ? "bg-blue-500 border-blue-500 text-white" 
-                      : "border-stone-600 group-hover:border-stone-400 bg-transparent"
-                  )}>
-                    {syncedCalendars.google && <Check className="w-3 h-3" strokeWidth={3} />}
-                  </div>
-                  <span className="text-[15px] text-stone-400 group-hover:text-white transition-colors">Google Calendar</span>
-                </button>
-                <button
-                  onClick={() => toggleSyncedCalendar('microsoft')}
-                  className="w-full flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-white/5 transition-colors group"
-                >
-                  <div className={cn(
-                    "w-4 h-4 rounded flex items-center justify-center border transition-all",
-                    syncedCalendars.microsoft 
-                      ? "bg-blue-500 border-blue-500 text-white" 
-                      : "border-stone-600 group-hover:border-stone-400 bg-transparent"
-                  )}>
-                    {syncedCalendars.microsoft && <Check className="w-3 h-3" strokeWidth={3} />}
-                  </div>
-                  <span className="text-[15px] text-stone-400 group-hover:text-white transition-colors">Microsoft Calendar</span>
-                </button>
-              </div>
-            )}
-          </div>
 
-          <div className="flex-1 overflow-y-auto px-2 space-y-2 scrollbar-none pb-4 mt-4">
-            <div className="px-2 mb-2">
-              <span className="text-[14px] font-bold text-stone-300">Tasks</span>
-            </div>
-            {tasks.filter(t => t.status !== 'done' && !t.is_deleted).map(task => (
-              <div
-                key={task.id}
-                draggable
-                onDragStart={(e) => {
-                  e.dataTransfer.setData('application/json', JSON.stringify({ ...task, type: 'task' }))
-                  e.dataTransfer.effectAllowed = 'copyMove'
-                }}
-                className="flex items-center gap-2 p-2 rounded-lg hover:bg-white/5 cursor-grab active:cursor-grabbing group transition-colors border border-transparent hover:border-white/10"
-              >
-                <GripVertical className="w-4 h-4 text-stone-600 group-hover:text-stone-400 opacity-0 group-hover:opacity-100 transition-opacity" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-[13px] font-medium text-stone-300 truncate">{task.title}</p>
-                  {task.due_date && <p className="text-[11px] text-stone-500">Due {format(new Date(task.due_date), 'MMM d')}</p>}
-                </div>
-              </div>
-            ))}
-          </div>
+
+
         </aside>
 
         <main className="flex-1 flex flex-col h-full bg-transparent relative min-h-0">
@@ -368,30 +291,37 @@ export default function CalendarPage() {
             {view === 'month' && (
               <MonthView
                 currentMonth={currentDate}
-                events={events}
-                tasks={tasks}
+                items={items}
                 onItemClick={handleItemClick}
                 onSelectDate={(date) => {
                   setSelectedDate(date)
                   setCurrentDate(date)
                   setView('day')
                 }}
+                onItemTimeChange={updateItemTime}
               />
             )}
             {view === 'week' && (
               <WeekView 
                 currentDate={currentDate} 
-                events={events} 
-                tasks={tasks} 
+                items={items} 
                 onItemClick={handleItemClick}
                 onSelectDate={(date) => {
                   setSelectedDate(date)
                   setCurrentDate(date)
                   setView('day')
                 }}
+                onItemTimeChange={updateItemTime}
               />
             )}
-            {view === 'day' && <DayView currentDate={currentDate} events={events} tasks={tasks} onItemClick={handleItemClick} />}
+            {view === 'day' && (
+              <DayView 
+                currentDate={currentDate} 
+                items={items} 
+                onItemClick={handleItemClick} 
+                onItemTimeChange={updateItemTime}
+              />
+            )}
             {view === 'schedule' && <ScheduleView />}
             {view === 'overdue' && <OverdueView />}
             {view === 'tasks' && <TasksView />}
@@ -412,7 +342,7 @@ export default function CalendarPage() {
       <QuickCreateModal
         open={isEditModalOpen}
         onOpenChange={setIsEditModalOpen}
-        editItem={itemToEdit}
+        editItem={itemToEdit ? { ...itemToEdit.originalItem, type: itemToEdit.type } as any : null}
       />
     </AnimatePage>
   )
@@ -548,3 +478,9 @@ function EventsView() {
     </div>
   )
 }
+
+// touch
+
+// touch
+
+// touch

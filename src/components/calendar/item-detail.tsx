@@ -16,15 +16,16 @@ import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { Task, CalendarEvent } from "@/shared"
 import { format, isSameDay } from "date-fns"
+import { CalendarItem } from "./types"
 import { useTaskStore } from "@/shared"
 import { useEventStore } from "@/shared"
 import { useProjectStore } from "@/shared"
 
 interface ItemDetailProps {
-  item: (Task & { type: 'task' }) | (CalendarEvent & { type: 'event' }) | null
+  item: CalendarItem | null
   open: boolean
   onOpenChange: (open: boolean) => void
-  onEdit?: (item: (Task & { type: 'task' }) | (CalendarEvent & { type: 'event' })) => void
+  onEdit?: (item: CalendarItem) => void
 }
 
 export function ItemDetail({ item, open, onOpenChange, onEdit }: ItemDetailProps) {
@@ -37,11 +38,14 @@ export function ItemDetail({ item, open, onOpenChange, onEdit }: ItemDetailProps
   const isTask = item.type === 'task'
   const isEvent = item.type === 'event'
   
-  const startDate = isEvent ? new Date(item.start_date) : new Date(item.start_at || item.due_date!)
-  const endDate = isEvent ? new Date(item.end_date) : (isTask && item.end_at ? new Date(item.end_at) : null)
-  const isCompleted = isTask && item.status === 'done'
+  const startDate = item.start
+  const endDate = item.end
+  const isCompleted = item.isCompleted
   
-  const project = isTask && item.project_id ? projects.find(p => p.id === item.project_id) : null
+  const originalTask = item.originalItem as Task
+  const originalEvent = item.originalItem as CalendarEvent
+
+  const project = isTask && originalTask?.project_id ? projects.find(p => p.id === originalTask.project_id) : null
 
   const handleDelete = () => {
     if (isTask) {
@@ -110,15 +114,15 @@ export function ItemDetail({ item, open, onOpenChange, onEdit }: ItemDetailProps
           {/* Details Rows */}
           <div className="space-y-4 ml-8">
             {/* Recurrence (Mockup for now as per image) */}
-            {isTask && item.recurrence_rule && (
+            {isTask && originalTask.recurrence_rule && (
               <div className="flex items-center gap-4 text-sm text-[#c4c7c5]">
-                <span className="font-medium text-[#e3e3e3]">{item.recurrence_rule}</span>
+                <span className="font-medium text-[#e3e3e3]">{originalTask.recurrence_rule}</span>
               </div>
             )}
 
-            {isCompleted && item.updated_at && (
+            {isCompleted && originalTask.updated_at && (
               <div className="text-sm text-[#c4c7c5]">
-                Completed: {format(new Date(item.updated_at), 'EEEE, MMMM d')}
+                Completed: {format(new Date(originalTask.updated_at), 'EEEE, MMMM d')}
               </div>
             )}
 
@@ -142,10 +146,10 @@ export function ItemDetail({ item, open, onOpenChange, onEdit }: ItemDetailProps
             )}
 
             {/* Location */}
-            {isEvent && item.location && (
+            {isEvent && originalEvent.location && (
               <div className="flex items-center gap-4 text-sm">
                 <MapPin className="w-5 h-5 text-[#c4c7c5]" />
-                <span className="text-[#8ab4f8] font-medium cursor-pointer hover:underline">{item.location}</span>
+                <span className="text-[#8ab4f8] font-medium cursor-pointer hover:underline">{originalEvent.location}</span>
               </div>
             )}
           </div>
@@ -171,3 +175,7 @@ export function ItemDetail({ item, open, onOpenChange, onEdit }: ItemDetailProps
     </Dialog>
   )
 }
+
+// touch
+
+// touch

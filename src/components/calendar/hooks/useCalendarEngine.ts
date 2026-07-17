@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { DragController } from '../engine/DragController';
-import { SnapEngine } from '../engine/SnapEngine';
+import { SchedulingEngine } from '../engine/SchedulingEngine';
 import { CoordinateMapper } from '../engine/CoordinateMapper';
 import { LayoutEngine } from '../engine/LayoutEngine';
 import { DragSessionState } from '../types';
@@ -11,11 +11,11 @@ export function useCalendarEngine(options: { hourHeight?: number; columnWidth?: 
     () => new CoordinateMapper({ hourHeight, columnWidth }), 
     [hourHeight, columnWidth]
   );
-  const snapEngine = useMemo(() => new SnapEngine(15), []);
-  const dragController = useMemo(() => new DragController(snapEngine, mapper), [snapEngine, mapper]);
+  const schedulingEngine = useMemo(() => new SchedulingEngine(mapper, { intervalMinutes: 15 }), [mapper]);
+  const dragController = useMemo(() => new DragController(schedulingEngine, mapper), [schedulingEngine, mapper]);
   const layoutEngine = useMemo(() => new LayoutEngine(mapper), [mapper]);
 
-  return { mapper, snapEngine, dragController, layoutEngine };
+  return { mapper, schedulingEngine, dragController, layoutEngine, snapEngine: schedulingEngine.getSnapPolicy() };
 }
 
 export function useDragSession(dragController: DragController) {

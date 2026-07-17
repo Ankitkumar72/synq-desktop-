@@ -7,7 +7,7 @@ interface OverlayRendererProps {
 }
 
 export function OverlayRenderer({ session }: OverlayRendererProps) {
-  if (session.status === 'idle' || !session.previewEvent || !session.pointer) {
+  if (session.status !== 'dragging' || !session.previewEvent || !session.pointer) {
     return null;
   }
 

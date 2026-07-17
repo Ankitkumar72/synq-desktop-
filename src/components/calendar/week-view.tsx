@@ -1,11 +1,10 @@
 "use client"
 
-import { useMemo, useState, useEffect } from "react"
+import { useMemo, useState, useEffect, useRef } from "react"
 import { 
   CheckSquare,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { Task, CalendarEvent } from "@/shared"
 import { QuickCreateModal } from "@/components/layout/quick-create"
 import { 
   startOfWeek, 
@@ -18,26 +17,17 @@ import { TimeGrid } from "./time-grid"
 import { useTaskStore } from "@/shared"
 import { useCalendarEngine, useDragSession } from "./hooks/useCalendarEngine"
 import { OverlayRenderer } from "./render/OverlayRenderer"
-import { CalendarItem } from "./types"
+import { CalendarItem, ColumnRect } from "./types"
 
 interface WeekViewProps {
   currentDate: Date
-  events: CalendarEvent[]
-  tasks: Task[]
-  onItemClick: (item: (Task & { type: 'task' }) | (CalendarEvent & { type: 'event' })) => void
+  items: CalendarItem[]
+  onItemClick: (item: CalendarItem) => void
   onSelectDate?: (date: Date) => void
+  onItemTimeChange?: (id: string, type: 'task' | 'event', newStart: Date, newEnd: Date) => Promise<void>
 }
 
-const isAllDayEvent = (event: CalendarEvent) => {
-  if (event.is_all_day !== undefined) return event.is_all_day;
-  const start = new Date(event.start_date)
-  const end = new Date(event.end_date)
-  return (end.getTime() - start.getTime()) >= 24 * 60 * 60 * 1000
-}
-
-const getTaskStart = (task: Task) => task.start_at || task.due_date
-
-export function WeekView({ currentDate, events, tasks, onItemClick, onSelectDate }: WeekViewProps) {
+export function WeekView({ currentDate, items, onItemClick, onSelectDate, onItemTimeChange }: WeekViewProps) {
   const weekDays = useMemo(() => {
     const start = startOfWeek(currentDate)
     return eachDayOfInterval({ start, end: addDays(start, 6) })
@@ -46,6 +36,7 @@ export function WeekView({ currentDate, events, tasks, onItemClick, onSelectDate
   const HOUR_HEIGHT = 48
   const { layoutEngine, dragController } = useCalendarEngine({ hourHeight: HOUR_HEIGHT, columnWidth: 100 })
   const dragSession = useDragSession(dragController)
+  const columnRefs = useRef<(HTMLDivElement | null)[]>([])
   const updateTask = useTaskStore(s => s.updateTask)
   
   const [now, setNow] = useState(new Date())
@@ -89,24 +80,15 @@ export function WeekView({ currentDate, events, tasks, onItemClick, onSelectDate
 
 
   const getGridItems = (date: Date) => {
-    // Regular time-bound events that start on this specific day
-    const dayEvents = events.filter(event => 
-      isSameDay(new Date(event.start_date), date) && !event.deleted_at && !isAllDayEvent(event)
-    )
-    const dayTasks = tasks.filter(task => 
-      getTaskStart(task) && isSameDay(new Date(getTaskStart(task)!), date) && !task.deleted_at
+    const dayItems = items.filter(item => 
+      isSameDay(new Date(item.start), date) && !item.originalItem?.deleted_at && !item.allDay
     )
     
-    const items = [
-      ...dayEvents.map(e => ({ ...e, type: 'event' as const })),
-      ...dayTasks.map(t => ({ ...t, type: 'task' as const }))
-    ]
-
-    if (items.length > 0) {
-      console.log(`[WeekView] Items for ${date.toISOString()}:`, items)
+    if (dayItems.length > 0) {
+      console.log(`[WeekView] Items for ${date.toISOString()}:`, dayItems)
     }
 
-    return items
+    return dayItems
   }
 
   return (
@@ -153,7 +135,11 @@ export function WeekView({ currentDate, events, tasks, onItemClick, onSelectDate
         {weekDays.map((day, i) => {
           const isToday = isSameDay(day, new Date())
           return (
-            <div key={i} className="flex-1 relative border-r border-white/[0.08] last:border-r-0">
+            <div 
+              key={i} 
+              ref={el => { columnRefs.current[i] = el }}
+              className="flex-1 relative border-r border-white/[0.08] last:border-r-0"
+            >
               
               {/* Grid content slots */}
               <div className="absolute inset-0 flex flex-col">
@@ -213,12 +199,10 @@ export function WeekView({ currentDate, events, tasks, onItemClick, onSelectDate
                 const item = getGridItems(day).find(i => i.id === rect.eventId) as CalendarItem;
                 if (!item) return null;
                 
-                const start = item.type === 'event'
-                  ? new Date(item.start_date)
-                  : new Date(item.start_at || item.due_date!)
+                const start = new Date(item.start)
                 
-                // Hide if it's the currently dragged original event
-                if (dragSession.status === 'dragging' && dragSession.originalEvent?.id === item.id) {
+                // Hide if it's the currently dragged or resized original event
+                if ((dragSession.status === 'dragging' || dragSession.status === 'resizing') && dragSession.originalEvent?.id === item.id) {
                   return null; // The OverlayRenderer renders the drag preview
                 }
 
@@ -227,54 +211,180 @@ export function WeekView({ currentDate, events, tasks, onItemClick, onSelectDate
                     key={item.id}
                     onClick={() => onItemClick(item as any)}
                     onPointerDown={(e) => {
+                      const getColumns = () => {
+                        return columnRefs.current.map((el, idx) => {
+                          if (!el) return null;
+                          const r = el.getBoundingClientRect();
+                          return {
+                            date: weekDays[idx],
+                            left: r.left,
+                            right: r.right,
+                            top: r.top,
+                            bottom: r.bottom,
+                          };
+                        }).filter(Boolean) as ColumnRect[];
+                      };
+
+                      const cols = getColumns();
                       dragController.beginDrag(item, { x: e.clientX, y: e.clientY })
                       
                       const moveHandler = (moveEvt: PointerEvent) => {
-                        dragController.updateDrag({ x: moveEvt.clientX, y: moveEvt.clientY })
+                        dragController.updateDrag({ x: moveEvt.clientX, y: moveEvt.clientY }, cols, HOUR_HEIGHT)
                       }
-                      const upHandler = () => {
-                        dragController.commitDrag()
+                      const upHandler = async () => {
+                        const committed = dragController.commitDrag()
                         window.removeEventListener('pointermove', moveHandler)
                         window.removeEventListener('pointerup', upHandler)
+                        if (committed && onItemTimeChange) {
+                          await onItemTimeChange(committed.id, committed.type as 'task' | 'event', committed.start, committed.end)
+                        }
                       }
                       
                       window.addEventListener('pointermove', moveHandler)
                       window.addEventListener('pointerup', upHandler)
                     }}
                     className={cn(
-                      "absolute rounded-lg border-l-[3px] p-2.5 overflow-hidden z-10 transition-all hover:z-20 cursor-pointer group/event shadow-lg",
+                      "absolute rounded-xl border-l-[3px] p-2.5 overflow-hidden z-10 transition-all hover:z-20 cursor-pointer group/event shadow-lg hover:shadow-2xl hover:scale-[1.01] duration-150",
                       item.type === 'event' 
-                        ? "bg-[#4285F4]/10 border-[#4285F4] hover:bg-[#4285F4]/20" 
-                        : "bg-[#039BE5]/10 border-[#039BE5] hover:bg-[#039BE5]/20"
+                        ? "bg-[#4285F4]/5 border-[#4285F4] hover:bg-[#4285F4]/10" 
+                        : "bg-[#039BE5]/5 border-[#039BE5] hover:bg-[#039BE5]/10"
                     )}
                     style={{ 
                       top: `${rect.y}px`, 
                       height: `${rect.height}px`,
                       left: `${rect.x}%`,
-                      width: `calc(${rect.width}% - 4px)`, // Leave a little gap
+                      width: `calc(${rect.width}% - 6px)`,
                     }}
                   >
-                    <div className="flex flex-col gap-1.5 h-full">
-                      <div className="flex items-start gap-2">
+                    {/* Top Resize Handle */}
+                    <div 
+                      className="absolute top-0 left-0 right-0 h-1.5 cursor-ns-resize z-30 hover:bg-white/10 transition-colors"
+                      onPointerDown={(e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        
+                        const getColumns = () => {
+                          return columnRefs.current.map((el, idx) => {
+                            if (!el) return null;
+                            const r = el.getBoundingClientRect();
+                            return {
+                              date: weekDays[idx],
+                              left: r.left,
+                              right: r.right,
+                              top: r.top,
+                              bottom: r.bottom,
+                            };
+                          }).filter(Boolean) as ColumnRect[];
+                        };
+
+                        const cols = getColumns();
+                        dragController.beginResize(item, { x: e.clientX, y: e.clientY }, 'top')
+
+                        const moveHandler = (moveEvt: PointerEvent) => {
+                          dragController.updateResize({ x: moveEvt.clientX, y: moveEvt.clientY }, cols, HOUR_HEIGHT)
+                        }
+                        const upHandler = async () => {
+                          const committed = dragController.commitDrag()
+                          window.removeEventListener('pointermove', moveHandler)
+                          window.removeEventListener('pointerup', upHandler)
+                          if (committed && onItemTimeChange) {
+                            await onItemTimeChange(committed.id, committed.type as 'task' | 'event', committed.start, committed.end)
+                          }
+                        }
+
+                        window.addEventListener('pointermove', moveHandler)
+                        window.addEventListener('pointerup', upHandler)
+                      }}
+                    />
+
+                    {/* Bottom Resize Handle */}
+                    <div 
+                      className="absolute bottom-0 left-0 right-0 h-1.5 cursor-ns-resize z-30 hover:bg-white/10 transition-colors"
+                      onPointerDown={(e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+
+                        const getColumns = () => {
+                          return columnRefs.current.map((el, idx) => {
+                            if (!el) return null;
+                            const r = el.getBoundingClientRect();
+                            return {
+                              date: weekDays[idx],
+                              left: r.left,
+                              right: r.right,
+                              top: r.top,
+                              bottom: r.bottom,
+                            };
+                          }).filter(Boolean) as ColumnRect[];
+                        };
+
+                        const cols = getColumns();
+                        dragController.beginResize(item, { x: e.clientX, y: e.clientY }, 'bottom')
+
+                        const moveHandler = (moveEvt: PointerEvent) => {
+                          dragController.updateResize({ x: moveEvt.clientX, y: moveEvt.clientY }, cols, HOUR_HEIGHT)
+                        }
+                        const upHandler = async () => {
+                          const committed = dragController.commitDrag()
+                          window.removeEventListener('pointermove', moveHandler)
+                          window.removeEventListener('pointerup', upHandler)
+                          if (committed && onItemTimeChange) {
+                            await onItemTimeChange(committed.id, committed.type as 'task' | 'event', committed.start, committed.end)
+                          }
+                        }
+
+                        window.addEventListener('pointermove', moveHandler)
+                        window.addEventListener('pointerup', upHandler)
+                      }}
+                    />
+
+                    <div className="flex flex-col gap-1 h-full overflow-hidden">
+                      <div className="flex items-start gap-1.5">
                         {item.type === 'task' && <CheckSquare className="w-3.5 h-3.5 text-[#039BE5] mt-0.5 shrink-0" />}
                         <span className={cn(
-                          "text-[11px] font-bold leading-tight line-clamp-2 uppercase tracking-tight",
+                          "text-[10px] font-bold leading-snug line-clamp-2 uppercase tracking-tight",
                           item.type === 'event' ? "text-[#4285F4]" : "text-[#039BE5]"
                         )}>
                           {item.title}
                         </span>
                       </div>
                       {rect.height >= 40 && (
-                        <div className="flex items-center gap-1 opacity-60">
-                          <span className="text-[9px] font-bold uppercase">
+                        <div className="flex items-center gap-1 opacity-60 text-stone-500 font-bold text-[9px] uppercase tracking-wider mt-0.5">
+                          <span>
                             {format(start, 'h:mm a')}
                           </span>
                         </div>
                       )}
                     </div>
                   </div>
+
                 )
               })}
+              {/* Render drag preview ghost if dragging to this column */}
+              {(dragSession.status === 'dragging' || dragSession.status === 'resizing') && 
+               dragSession.previewEvent && 
+               isSameDay(new Date(dragSession.previewEvent.start), day) && (
+                <div
+                  className={cn(
+                    "absolute rounded-lg border-l-[3px] p-2.5 overflow-hidden z-20 pointer-events-none opacity-40 border-dashed border-2",
+                    dragSession.previewEvent.type === 'event' 
+                      ? "bg-[#4285F4]/20 border-[#4285F4]" 
+                      : "bg-[#039BE5]/20 border-[#039BE5]"
+                  )}
+                  style={{
+                    top: `${((dragSession.previewEvent.start.getHours() * 60 + dragSession.previewEvent.start.getMinutes()) / 60) * HOUR_HEIGHT}px`,
+                    height: `${(Math.max(30, (dragSession.previewEvent.end.getTime() - dragSession.previewEvent.start.getTime()) / 60000) / 60) * HOUR_HEIGHT}px`,
+                    left: '4px',
+                    width: 'calc(100% - 8px)',
+                  }}
+                >
+                  <div className="flex flex-col gap-1.5 h-full justify-center">
+                    <span className="text-[11px] font-bold uppercase tracking-tight opacity-75 truncate">
+                      {dragSession.previewEvent.title}
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
           )
         })}
