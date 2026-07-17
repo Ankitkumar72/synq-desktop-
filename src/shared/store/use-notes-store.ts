@@ -553,14 +553,15 @@ export const useNotesStore = create<NotesState>()(
       fetchNotes: async (includeDeleted = false, prefetchedData?: Note[]) => {
         if (!supabase || get().isLoading) return
 
-        if (get().notes.length === 0) {
-          set({ isLoading: true, error: null })
-        }
-
         const userId = useUserStore.getState().user?.id
         if (!userId) {
           console.warn('[NotesStore] fetchNotes called without authenticated user')
+          set({ isLoading: false })
           return
+        }
+
+        if (get().notes.length === 0) {
+          set({ isLoading: true, error: null })
         }
 
         try {
@@ -573,9 +574,6 @@ export const useNotesStore = create<NotesState>()(
               .from(includeDeleted ? TABLES.WEB_NOTES : TABLES.WEB_NOTES_ACTIVE)
               .select('*')
               .eq(COLUMNS.USER_ID, userId);
-            if (!includeDeleted) {
-              query = query.eq(COLUMNS.IS_DELETED, false);
-            }
 
             const res = await query
               .order('updated_at', { ascending: false })

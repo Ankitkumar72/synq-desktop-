@@ -72,7 +72,7 @@ export interface StoreHealthReport {
 
 const CHECKPOINT_KEY = 'synq_checkpoint';
 const HEARTBEAT_KEY = 'synq_bootstrap_heartbeat';
-const CURRENT_SCHEMA_VERSION = 1;
+const CURRENT_SCHEMA_VERSION = 2;
 const HEARTBEAT_TIMEOUT_MS = 30000; // 30 seconds
 
 // ─── Checkpoint Persistence (Atomic) ─────────────────────────────────────────
@@ -242,7 +242,7 @@ export enum StoreHealthState {
 export function beginBootstrap(): void {
   const checkpoint: Checkpoint = {
     generation: crypto.randomUUID(),
-    cursor: 0,
+    cursor: -1,
     schemaVersion: CURRENT_SCHEMA_VERSION,
     entityCounts: { notes: 0, tasks: 0, events: 0, projects: 0, folders: 0 },
     createdAt: new Date().toISOString(),
@@ -314,8 +314,8 @@ export function runBackgroundHealthCheck(): StoreHealthReport {
 
 export function getValidatedCursor(): number {
   const checkpoint = readCheckpoint();
-  if (!checkpoint) return 0;
-  if (checkpoint.bootstrapStage !== BootstrapStage.READY) return 0;
-  if (checkpoint.schemaVersion !== CURRENT_SCHEMA_VERSION) return 0;
+  if (!checkpoint) return -1;
+  if (checkpoint.bootstrapStage !== BootstrapStage.READY) return -1;
+  if (checkpoint.schemaVersion !== CURRENT_SCHEMA_VERSION) return -1;
   return checkpoint.cursor;
 }

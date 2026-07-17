@@ -79,7 +79,7 @@ export class BootstrapCoordinator {
     try {
       console.log(`[BootstrapCoordinator] Phase 1: Fetching data into shadow prefix '${shadowPrefix}'...`);
       
-      let lastSeqId = 0;
+      let lastSeqId = -1;
       let hasMore = true;
       
       const shadowData = {

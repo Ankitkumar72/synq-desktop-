@@ -1,4 +1,4 @@
-import { supabase } from "@/shared"
+import { COLUMNS, supabase, TABLES } from "@/shared"
 import { useTaskStore } from "@/shared/store/use-task-store"
 import { useProjectStore } from "@/shared/store/use-project-store"
 import { useNotesStore } from "@/shared/store/use-notes-store"
@@ -41,6 +41,7 @@ const POLL_INTERVAL_IDLE = 60_000
 const HEALTH_CHECK_INTERVAL = 60_000
 const MAX_REALTIME_RETRIES = 5
 const RETRY_BASE_DELAY_MS = 2000
+const NOTES_RECONCILE_INTERVAL_MS = 5 * 60_000
 
 export class SyncEngine {
   private static instance: SyncEngine | null = null;
@@ -59,6 +60,7 @@ export class SyncEngine {
   private pollTimer: ReturnType<typeof setInterval> | null = null;
   private healthCheckTimer: ReturnType<typeof setInterval> | null = null;
   private lastPollAt: number = 0;
+  private lastNotesReconcileAt: number = 0;
   
   private realtimeConnected: boolean = false;
   private isSubscribing: boolean = false;
@@ -186,14 +188,18 @@ export class SyncEngine {
         
         const success = await BootstrapCoordinator.getInstance().startFullRebuild();
         if (!success) {
-          this.setState(SyncState.ERROR);
+          console.warn('[SyncEngine] Bootstrap failed. Falling back to individual fetches.');
+          await this.fallbackFetch();
+          this.setState(SyncState.READY);
           return;
         }
       } else if (healthReport.level === StoreTrustLevel.BOOTSTRAPPING_IN_PROGRESS) {
         this.setState(SyncState.RECOVERING);
         const success = await BootstrapCoordinator.getInstance().startFullRebuild();
         if (!success) {
-          this.setState(SyncState.ERROR);
+          console.warn('[SyncEngine] Bootstrap recovery failed. Falling back to individual fetches.');
+          await this.fallbackFetch();
+          this.setState(SyncState.READY);
           return;
         }
       }
@@ -240,6 +246,7 @@ export class SyncEngine {
         }
       }
       
+      await this.reconcileNotesFromView();
       this.setState(SyncState.READY);
     } catch (err) {
       console.error('[SyncEngine] Unexpected error in fetchData:', err);
@@ -247,8 +254,33 @@ export class SyncEngine {
     }
   }
 
-  private async fallbackFetch() {
-    const fetchFns = [
+  private async reconcileNotesFromView() {
+    if (!this.currentUserId) return;
+
+    const now = Date.now();
+    if (now - this.lastNotesReconcileAt < NOTES_RECONCILE_INTERVAL_MS) return;
+    this.lastNotesReconcileAt = now;
+
+    try {
+      const { data, error } = await supabase
+        .from(TABLES.WEB_NOTES_ACTIVE)
+        .select('*')
+        .eq(COLUMNS.USER_ID, this.currentUserId)
+        .order('updated_at', { ascending: false })
+        .limit(1000);
+
+      if (error) {
+        console.warn('[SyncEngine] Notes view reconciliation failed:', serializeSyncError(error));
+        return;
+      }
+
+      await useNotesStore.getState().fetchNotes(false, data || []);
+    } catch (err) {
+      console.warn('[SyncEngine] Unexpected notes reconciliation error:', serializeSyncError(err));
+    }
+  }
+
+  private async fallbackFetch() {    const fetchFns = [
       () => useTaskStore.getState().fetchTasks(),
       () => useNotesStore.getState().fetchNotes(),
       () => useEventStore.getState().fetchEvents(),
