@@ -82,7 +82,23 @@ export class Dispatcher {
     try {
       let error;
       if (mutation.operation_type === 'NOTE_CRDT_UPDATE') {
-        const res = await supabase.rpc('apply_note_crdt_update', mutation.payload);
+        const payload = mutation.payload as any;
+        const res = await supabase.rpc('apply_note_crdt_update', {
+          p_entity_id: payload.noteId,
+          p_user_id: payload.userId,
+          p_client_id: payload.clientId,
+          p_op_id: payload.opId,
+          p_update_data: payload.updateData,
+          p_body: payload.body,
+          p_excerpt: payload.excerpt,
+          p_hlc_timestamp: payload.fieldVersions?.body || null,
+          p_updated_at: payload.updatedAt,
+          p_snapshot: payload.snapshot,
+          p_field_versions: payload.fieldVersions,
+          p_plain_text: payload.plainText,
+          p_content_markdown: payload.contentMarkdown,
+          p_content: payload.content
+        });
         error = res.error;
       } else {
         const res = await supabase.rpc('apply_mutations', {

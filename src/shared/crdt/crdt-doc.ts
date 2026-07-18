@@ -285,6 +285,40 @@ export function setActiveEdit(noteId: string, active: boolean): void {
   }
 }
 
+export function extractTextFromYXml(node: any): string {
+  if (node instanceof Y.XmlText) {
+    return node.toDelta().map((d: any) => d.insert).join('')
+  }
+  if (node instanceof Y.XmlElement || node instanceof Y.XmlFragment) {
+    let text = ''
+    const isBlock = node instanceof Y.XmlElement && 
+      ['paragraph', 'heading', 'blockquote', 'listItem', 'codeBlock'].includes(node.nodeName)
+      
+    let prefix = ''
+    if (node instanceof Y.XmlElement) {
+      if (node.nodeName === 'heading') {
+        const level = (node.getAttribute('level') as number) || 1
+        prefix = '#'.repeat(level) + ' '
+      } else if (node.nodeName === 'listItem') {
+        prefix = '- '
+      } else if (node.nodeName === 'blockquote') {
+        prefix = '> '
+      }
+    }
+
+    for (let i = 0; i < node.length; i++) {
+      const child = node.get(i)
+      text += extractTextFromYXml(child)
+    }
+    
+    if (isBlock && text.trim().length > 0) {
+      return `${prefix}${text}\n\n`
+    }
+    return text
+  }
+  return ''
+}
+
 /**
  * Extract markdown from a Y.Doc's content fragment.
  * Used to generate the `body` field for Flutter compatibility.
@@ -292,25 +326,15 @@ export function setActiveEdit(noteId: string, active: boolean): void {
 export function getMarkdownFromYDoc(noteId: string): string {
   const ydoc = docCache.get(noteId)
   if (!ydoc) return ''
-
-  const editor = new Editor({
-    extensions: getHeadlessExtensions(ydoc)
-  })
-  const text = (editor.storage as any).markdown.getMarkdown()
-  editor.destroy()
-  return text
+  const fragment = ydoc.getXmlFragment('content')
+  return extractTextFromYXml(fragment).trim()
 }
 
 export function getPlainTextFromYDoc(noteId: string): string {
   const ydoc = docCache.get(noteId)
   if (!ydoc) return ''
-
-  const editor = new Editor({
-    extensions: getHeadlessExtensions(ydoc)
-  })
-  const text = editor.getText({ blockSeparator: '\n\n' })
-  editor.destroy()
-  return text
+  const fragment = ydoc.getXmlFragment('content')
+  return extractTextFromYXml(fragment).trim()
 }
 
 /**
