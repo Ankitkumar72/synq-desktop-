@@ -226,7 +226,8 @@ export function validateStore(): StoreHealthReport {
 // These will be removed soon, left here momentarily so imports in sync-engine.ts don't crash
 // while we implement the new BootstrapCoordinator.
 
-export async function executeRecovery(report: StoreHealthReport): Promise<void> {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export async function executeRecovery(_report: StoreHealthReport): Promise<void> {
   console.warn('[StoreHealth] executeRecovery is deprecated. BootstrapCoordinator should handle this.');
 }
 export enum StoreHealthState {

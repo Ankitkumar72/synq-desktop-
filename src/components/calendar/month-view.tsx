@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react"
 import { CheckSquare } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { Task, CalendarEvent } from "@/shared"
+
 import {
   generateCalendarGrid,
   getDayString,
@@ -32,7 +32,7 @@ export function MonthView({
   const [activeDay, setActiveDay] = useState<Date | null>(null)
   const [popoverRect, setPopoverRect] = useState<{ top: number; left: number; width: number } | null>(null)
 
-  const getTaskStart = (task: Task) => task.start_at || task.due_date
+
 
   const daysOfWeek = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"]
 

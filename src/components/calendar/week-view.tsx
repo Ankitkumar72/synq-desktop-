@@ -144,7 +144,7 @@ export function WeekView({ currentDate, items, onItemClick, onSelectDate, onItem
       >
         <CurrentTimeLayer isWeekView hourHeight={HOUR_HEIGHT} currentDate={null} />
         {weekDays.map((day, i) => {
-          const isToday = isSameDay(day, new Date())
+
           return (
             <div 
               key={i} 

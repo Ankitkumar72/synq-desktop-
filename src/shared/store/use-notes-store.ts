@@ -570,7 +570,7 @@ export const useNotesStore = create<NotesState>()(
           let data = prefetchedData;
           if (!data) {
             // Fetch all notes in one query (up to 500)
-            let query = supabase
+            const query = supabase
               .from(includeDeleted ? TABLES.WEB_NOTES : TABLES.WEB_NOTES_ACTIVE)
               .select('*')
               .eq(COLUMNS.USER_ID, userId);

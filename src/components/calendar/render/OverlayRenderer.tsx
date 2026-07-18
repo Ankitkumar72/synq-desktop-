@@ -1,6 +1,6 @@
-import { createPortal } from 'react-dom';
+
 import { DragSessionState } from '../types';
-import { cn } from "@/lib/utils";
+
 
 interface OverlayRendererProps {
   session: DragSessionState;
