@@ -32,6 +32,14 @@ import { getEditorContentValue } from "@/shared"
 import { sendNoteBroadcast, sendNoteMetadataBroadcast } from "@/shared"
 import { hlc, Telemetry } from "@/shared"
 
+export type EditorLifecycleState = 
+  | 'UNINITIALIZED'
+  | 'HYDRATING'
+  | 'READY'
+  | 'DIRTY'
+  | 'SYNCING'
+  | 'ERROR'
+
 import DOMPurify from 'dompurify'
 import Collaboration from '@tiptap/extension-collaboration'
 
@@ -259,7 +267,18 @@ export function NoteEditor({
   const hasPendingLocalChangeRef = useRef(false)
   const pendingUpdatesRef = useRef<Uint8Array[]>([])
   const onChangeRef = useRef(onChange)
-  const [isLoading, setIsLoading] = useState(true)
+  const [lifecycleState, setLifecycleState] = useState<EditorLifecycleState>('UNINITIALIZED')
+  const lifecycleStateRef = useRef<EditorLifecycleState>('UNINITIALIZED')
+  
+  const setLifecycle = useCallback((state: EditorLifecycleState) => {
+    lifecycleStateRef.current = state
+    // To avoid excessive re-renders during rapid DIRTY/SYNCING transitions,
+    // only trigger React state updates for major visual phase changes.
+    if (state === 'UNINITIALIZED' || state === 'HYDRATING' || state === 'READY' || state === 'ERROR') {
+      setLifecycleState(state)
+    }
+  }, [])
+
   const ydoc = useMemo(() => acquireYDoc(id), [id])
   const repairedNotesRef = useRef<Set<string>>(new Set())
   const initGenerationRef = useRef(0)
@@ -288,15 +307,26 @@ export function NoteEditor({
     const userId = useUserStore.getState().user?.id
     if (!userId) return
 
+    // Explicit state machine guard
+    const state = lifecycleStateRef.current
+    if (state === 'UNINITIALIZED' || state === 'HYDRATING' || state === 'ERROR') {
+      if (__DEV__) console.warn(`[NoteEditor] Blocked autosave. Editor state is ${state} for note ${id}`)
+      return
+    }
+
     if (isSavingRef.current) {
       pendingSaveRef.current = true
       return
     }
 
-    if (pendingUpdatesRef.current.length === 0 && !hasPendingLocalChangeRef.current) return
+    if (pendingUpdatesRef.current.length === 0 && !hasPendingLocalChangeRef.current) {
+      if (state === 'SYNCING') setLifecycle('READY')
+      return
+    }
 
     isSavingRef.current = true
     pendingSaveRef.current = false
+    setLifecycle('SYNCING')
     const pendingBatch = pendingUpdatesRef.current.splice(0)
     const now = new Date().toISOString()
     const currentEditor = editorRef.current
@@ -397,8 +427,12 @@ export function NoteEditor({
       if (pendingSaveRef.current) {
         pendingSaveRef.current = false
         setTimeout(() => {
-          void persistNowRef.current(true)
+          void persistNow(true)
         }, 10)
+      } else if (hasPendingLocalChangeRef.current) {
+        setLifecycle('DIRTY')
+      } else {
+        setLifecycle('READY')
       }
     }
 
@@ -436,11 +470,11 @@ export function NoteEditor({
         is_deleted: note.is_deleted,
       })
     }
-  }, [id, updateNoteLocal, ydoc])
+  }, [id, updateNoteLocal, ydoc, setLifecycle])
 
   useEffect(() => {
     const generation = ++initGenerationRef.current
-    setIsLoading(true)
+    setLifecycle('HYDRATING')
 
     const withTimeout = <T,>(promise: Promise<T>, ms: number, errorMessage: string = 'Timeout'): Promise<T> => {
       let timer: NodeJS.Timeout
@@ -592,8 +626,6 @@ export function NoteEditor({
 
         if (generation !== initGenerationRef.current) return
 
-        setIsLoading(false)
-
         try {
           let cursor = getLocalLastSeq(id)
 
@@ -648,7 +680,11 @@ export function NoteEditor({
         loadError = _err instanceof Error ? _err.message : String(_err)
       } finally {
         if (generation === initGenerationRef.current) {
-          setIsLoading(false)
+          if (loadError) {
+            setLifecycle('ERROR')
+          } else {
+            setLifecycle('READY')
+          }
           
           const loadDuration = performance.now() - loadStartTime
           const finalStoreNote = useNotesStore.getState().notes.find(n => n.id === id)
@@ -661,7 +697,7 @@ export function NoteEditor({
           Telemetry.trackNoteLoad(id, {
             content_size: contentSize,
             hydration_duration: loadDuration,
-            editor_ready: true,
+            editor_ready: !loadError,
             provider_synced: true,
             render_complete: true,
             error: loadError,
@@ -671,7 +707,7 @@ export function NoteEditor({
     }
 
     init()
-  }, [id, ydoc, updateNoteLocal])
+  }, [id, ydoc, updateNoteLocal, setLifecycle])
 
   const persistNowRef = useRef(persistNow)
   useEffect(() => {
@@ -689,6 +725,12 @@ export function NoteEditor({
     const handleUpdate = (update: Uint8Array, origin: string | null) => {
 
       if (origin !== 'remote' && origin !== 'mobile-sync') {
+        const state = lifecycleStateRef.current
+        if (state === 'UNINITIALIZED' || state === 'HYDRATING' || state === 'ERROR') {
+          if (__DEV__) console.warn(`[NoteEditor] Ignored local update. Editor state is ${state} for note ${id}`)
+          return
+        }
+        
         pendingUpdatesRef.current.push(new Uint8Array(update))
         hasPendingLocalChangeRef.current = true
         debouncedSave()
@@ -699,7 +741,7 @@ export function NoteEditor({
     return () => {
       ydoc.off('update', handleUpdate)
     }
-  }, [ydoc, debouncedSave])
+  }, [ydoc, debouncedSave, id])
 
   useEffect(() => {
     const persistPending = () => {
@@ -1036,7 +1078,7 @@ export function NoteEditor({
   }, [editor])
 
   useEffect(() => {
-    if (!isLoading && editor && !editor.isDestroyed) {
+    if (lifecycleState === 'READY' && editor && !editor.isDestroyed) {
       let fragmentLength = 0
       let isPlain = true
       let isStructurallyFlat = true
@@ -1163,7 +1205,7 @@ export function NoteEditor({
         }
       }
     }
-  }, [isLoading, editor, ydoc, id])
+  }, [lifecycleState, editor, ydoc, id])
 
   useEffect(() => {
     return () => {
@@ -1240,7 +1282,7 @@ export function NoteEditor({
 
   }, [id, clearActiveNoteActivity, setFocusedNoteId, updateNoteLocal, ydoc])
 
-  if (isLoading) {
+  if (lifecycleState === 'UNINITIALIZED' || lifecycleState === 'HYDRATING') {
     return (
       <div className="flex flex-col h-full w-full pt-4 gap-8">
         <Skeleton className="h-12 w-3/4 bg-white/[0.03]" />
@@ -1251,6 +1293,25 @@ export function NoteEditor({
         </div>
         <div className="flex items-center justify-center pt-20">
           <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+        </div>
+      </div>
+    )
+  }
+
+  if (lifecycleState === 'ERROR') {
+    return (
+      <div className="flex flex-col h-full w-full pt-4 gap-8">
+        <div className="flex flex-col items-center justify-center pt-20 text-center gap-4">
+          <p className="text-sm text-red-400">Failed to load document.</p>
+          <p className="text-xs text-neutral-500 max-w-sm">
+            We couldn&apos;t securely load this note&apos;s contents from the server. To protect against accidental data loss, editing has been disabled.
+          </p>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-4 py-2 text-sm bg-neutral-800 hover:bg-neutral-700 text-neutral-200 rounded-md transition-colors mt-4"
+          >
+            Reload Window
+          </button>
         </div>
       </div>
     )
