@@ -116,5 +116,36 @@ export const Telemetry = {
     } else {
       console.info(`[Telemetry] ${event}`, payload)
     }
+  },
+
+  /**
+   * Tracks note loading and hydration pipeline for Phase 17 debugging.
+   */
+  trackNoteLoad: (
+    noteId: string,
+    metadata: {
+      schema_version?: number;
+      content_size?: number;
+      content_hash?: string;
+      body_hash?: string;
+      hydration_duration?: number;
+      editor_ready?: boolean;
+      provider_synced?: boolean;
+      render_complete?: boolean;
+      error?: string;
+    }
+  ) => {
+    const payload = {
+      event: 'note_load',
+      note_id: noteId,
+      ...metadata,
+      timestamp: new Date().toISOString(),
+    }
+    
+    if (metadata.error) {
+      console.error(`[Telemetry] Note Load Failed: ${noteId}`, payload)
+    } else {
+      console.info(`[Telemetry] Note Load: ${noteId}`, payload)
+    }
   }
 }

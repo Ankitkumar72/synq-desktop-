@@ -219,6 +219,7 @@ interface SaveYDocOptions {
   snapshot?: Uint8Array | null
   content?: unknown
   fieldVersions?: Record<string, string>
+  allowEmptyBody?: boolean
 }
 
 export async function saveYDocToSupabase(noteId: string, userId: string, options: SaveYDocOptions = {}): Promise<void> {
@@ -255,6 +256,7 @@ export async function saveYDocToSupabase(noteId: string, userId: string, options
       contentMarkdown: body,
       plainText,
       fieldVersions: options.fieldVersions,
+      allowEmptyBody: options.allowEmptyBody ?? false,
     }
   );
 }

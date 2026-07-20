@@ -43,6 +43,7 @@ export interface ApplyNoteCrdtUpdateInput {
   plainText?: string | null
   setPlainText?: boolean
   fieldVersions?: Record<string, string>
+  allowEmptyBody?: boolean
 }
 
 export interface ApplyNoteCrdtUpdateResult {
@@ -99,6 +100,7 @@ export async function applyNoteCrdtUpdate(input: ApplyNoteCrdtUpdateInput & { cl
     p_updated_at: input.updatedAt || new Date().toISOString(),
     p_snapshot: toIntArray(input.snapshot),
     p_client_last_sync: clientLastSync,
+    p_allow_empty_body: input.allowEmptyBody ?? false,
   })
 
   if (error) {

@@ -97,7 +97,8 @@ export class Dispatcher {
           p_field_versions: payload.fieldVersions,
           p_plain_text: payload.plainText,
           p_content_markdown: payload.contentMarkdown,
-          p_content: payload.content
+          p_content: payload.content,
+          p_allow_empty_body: payload.allowEmptyBody ?? false
         });
         error = res.error;
       } else {

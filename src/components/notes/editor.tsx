@@ -30,7 +30,7 @@ import { useUserStore } from "@/shared"
 import type { NoteContent } from "@/shared"
 import { getEditorContentValue } from "@/shared"
 import { sendNoteBroadcast, sendNoteMetadataBroadcast } from "@/shared"
-import { hlc } from "@/shared"
+import { hlc, Telemetry } from "@/shared"
 
 import DOMPurify from 'dompurify'
 import Collaboration from '@tiptap/extension-collaboration'
@@ -359,6 +359,7 @@ export function NoteEditor({
         snapshot,
         content: contentVal || undefined,
         fieldVersions,
+        allowEmptyBody: hasHydratedMeaningfulContentRef.current,
       })
       hasPendingLocalChangeRef.current = false
       persistRetryCountRef.current = 0
@@ -452,6 +453,9 @@ export function NoteEditor({
     }
 
     const init = async () => {
+      const loadStartTime = performance.now()
+      let loadError: string | undefined = undefined
+
       try {
 
         try {
@@ -541,7 +545,19 @@ export function NoteEditor({
           const hasMeaningfulCRDT = currentMarkdown.trim().length > 0
 
           const storeNote = useNotesStore.getState().notes.find(n => n.id === id)
-          const hasMeaningfulContent = storeNote?.content && (Array.isArray(storeNote.content) ? storeNote.content.length > 0 : Object.keys(storeNote.content).length > 0)
+          let hasMeaningfulContent = false
+          if (storeNote?.content) {
+            const contentStr = JSON.stringify(storeNote.content)
+            if (contentStr === '{"ops":[{"insert":"\\n"}]}' || contentStr === '{"ops":[]}') {
+              hasMeaningfulContent = false
+            } else if (contentStr === '{"type":"doc","content":[{"type":"paragraph"}]}' || contentStr === '{"type":"doc","content":[]}') {
+              hasMeaningfulContent = false
+            } else if (Array.isArray(storeNote.content)) {
+              hasMeaningfulContent = storeNote.content.length > 0
+            } else {
+              hasMeaningfulContent = Object.keys(storeNote.content).length > 0
+            }
+          }
 
           let flutterIsLastWriter = false
           if (storeNote?.field_versions && typeof storeNote.field_versions === 'object') {
@@ -629,9 +645,27 @@ export function NoteEditor({
         }
       } catch (_err) {
         console.error('[NoteEditor] Fatal error during initialization:', _err)
+        loadError = _err instanceof Error ? _err.message : String(_err)
       } finally {
         if (generation === initGenerationRef.current) {
           setIsLoading(false)
+          
+          const loadDuration = performance.now() - loadStartTime
+          const finalStoreNote = useNotesStore.getState().notes.find(n => n.id === id)
+          
+          let contentSize = 0
+          if (finalStoreNote?.content) {
+            contentSize = JSON.stringify(finalStoreNote.content).length
+          }
+          
+          Telemetry.trackNoteLoad(id, {
+            content_size: contentSize,
+            hydration_duration: loadDuration,
+            editor_ready: true,
+            provider_synced: true,
+            render_complete: true,
+            error: loadError,
+          })
         }
       }
     }
@@ -718,6 +752,7 @@ export function NoteEditor({
               content: contentVal,
               updatedAt: nowStr,
               fieldVersions,
+              allowEmptyBody: hasHydratedMeaningfulContentRef.current,
             }
 
             const serialized = JSON.stringify(stash)
